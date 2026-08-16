@@ -1,0 +1,254 @@
+{
+  "family": "mcp-write",
+  "event": "PreToolUse",
+  "check": "mcpTool",
+  "cases": [
+    {
+      "id": "write-asks-any-server",
+      "mcpToolName": "mcp__anything__createFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-asks-memory-server",
+      "mcpToolName": "mcp__memory__create_entities",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-asks-atlassian-server",
+      "mcpToolName": "mcp__atlassian__createIssue",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-asks-snake-case",
+      "mcpToolName": "mcp__memory__delete_observations",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "atlassian-user-info-no-longer-a-tenant-exception-asks",
+      "mcpToolName": "mcp__atlassian__atlassianUserInfo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "read-prefix-get-allowed",
+      "mcpToolName": "mcp__anything__getFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-list-allowed",
+      "mcpToolName": "mcp__anything__listFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-search-allowed",
+      "mcpToolName": "mcp__anything__searchFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-fetch-allowed",
+      "mcpToolName": "mcp__anything__fetchFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-read-allowed",
+      "mcpToolName": "mcp__anything__readFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-query-allowed",
+      "mcpToolName": "mcp__anything__queryFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-lookup-allowed",
+      "mcpToolName": "mcp__anything__lookupFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-describe-allowed",
+      "mcpToolName": "mcp__anything__describeFoo",
+      "expected": []
+    },
+    {
+      "id": "read-prefix-view-allowed",
+      "mcpToolName": "mcp__anything__viewFoo",
+      "expected": []
+    },
+    {
+      "id": "write-neighbour-of-get-grantFoo-asks",
+      "mcpToolName": "mcp__anything__grantFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-list-loadFoo-asks",
+      "mcpToolName": "mcp__anything__loadFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-search-setFoo-asks",
+      "mcpToolName": "mcp__anything__setFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-fetch-flushFoo-asks",
+      "mcpToolName": "mcp__anything__flushFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-read-renameFoo-asks",
+      "mcpToolName": "mcp__anything__renameFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-query-quitFoo-asks",
+      "mcpToolName": "mcp__anything__quitFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-lookup-lockFoo-asks",
+      "mcpToolName": "mcp__anything__lockFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-describe-deleteFoo-asks",
+      "mcpToolName": "mcp__anything__deleteFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "write-neighbour-of-view-voidFoo-asks",
+      "mcpToolName": "mcp__anything__voidFoo",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-search-and-delete-recognised-on-prefix-not-meaning",
+      "mcpToolName": "mcp__anything__searchAndDelete",
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "recognition is on the operation name's START only; a write-shaped tail after a read-shaped prefix still passes"
+    },
+    {
+      "id": "underscored-server-name-read-allowed",
+      "mcpToolName": "mcp__plugin_claude-mem_mcp-search__query_corpus",
+      "expected": []
+    },
+    {
+      "id": "underscored-server-name-write-asks",
+      "mcpToolName": "mcp__claude_ai_Gmail__createDraft",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "server-identifier-containing-double-underscore-cuts-at-second",
+      "mcpToolName": "mcp__plugin__deploy__getStatus",
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "mcp-write"
+        }
+      ]
+    },
+    {
+      "id": "empty-name-out-of-scope",
+      "mcpToolName": "",
+      "expected": []
+    },
+    {
+      "id": "non-mcp-tool-bash-out-of-scope",
+      "mcpToolName": "Bash",
+      "expected": []
+    },
+    {
+      "id": "non-mcp-tool-read-out-of-scope",
+      "mcpToolName": "Read",
+      "expected": []
+    },
+    {
+      "id": "mcp-shaped-suffix-away-from-start-out-of-scope",
+      "mcpToolName": "proxy_mcp__anything__createFoo",
+      "expected": []
+    },
+    {
+      "id": "no-second-double-underscore-out-of-scope",
+      "mcpToolName": "mcp__server",
+      "expected": []
+    },
+    {
+      "id": "empty-operation-out-of-scope",
+      "mcpToolName": "mcp__server__",
+      "expected": []
+    }
+  ]
+}
