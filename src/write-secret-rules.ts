@@ -8,7 +8,7 @@
 // design — deeper, entropy-based / history-wide detection is a separate
 // GIT-LEVEL net (gitleaks) wired at pre-commit, not here.
 
-import type { Deny } from './types.ts';
+import type { Verdict } from './types.ts';
 
 interface SecretRule {
   regex: RegExp;
@@ -56,14 +56,14 @@ export const SECRET_RULES: readonly SecretRule[] = [
 ];
 
 /**
- * Scans text for an embedded secret value. Returns the first matching rule as a
- * Deny, or null if clean.
+ * Scans text for an embedded secret value. Returns the first matching rule
+ * as a block Verdict, or null if clean.
  */
-export function scanSecrets(text: string, target: string): Deny | null {
+export function scanSecrets(text: string, target: string): Verdict | null {
   if (!text) return null;
   for (const rule of SECRET_RULES) {
     if (rule.regex.test(text)) {
-      return { ruleId: rule.ruleId, reason: rule.reason, target };
+      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target };
     }
   }
   return null;

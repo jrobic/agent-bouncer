@@ -1,11 +1,11 @@
 {
   "family": "mcp-write",
   "event": "PreToolUse",
-  "check": "mcpTool",
   "cases": [
     {
       "id": "write-asks-any-server",
-      "mcpToolName": "mcp__anything__createFoo",
+      "toolName": "mcp__anything__createFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -15,7 +15,8 @@
     },
     {
       "id": "write-asks-memory-server",
-      "mcpToolName": "mcp__memory__create_entities",
+      "toolName": "mcp__memory__create_entities",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -25,7 +26,8 @@
     },
     {
       "id": "write-asks-atlassian-server",
-      "mcpToolName": "mcp__atlassian__createIssue",
+      "toolName": "mcp__atlassian__createIssue",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -35,7 +37,8 @@
     },
     {
       "id": "write-asks-snake-case",
-      "mcpToolName": "mcp__memory__delete_observations",
+      "toolName": "mcp__memory__delete_observations",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -45,7 +48,8 @@
     },
     {
       "id": "atlassian-user-info-no-longer-a-tenant-exception-asks",
-      "mcpToolName": "mcp__atlassian__atlassianUserInfo",
+      "toolName": "mcp__atlassian__atlassianUserInfo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -55,52 +59,62 @@
     },
     {
       "id": "read-prefix-get-allowed",
-      "mcpToolName": "mcp__anything__getFoo",
+      "toolName": "mcp__anything__getFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-list-allowed",
-      "mcpToolName": "mcp__anything__listFoo",
+      "toolName": "mcp__anything__listFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-search-allowed",
-      "mcpToolName": "mcp__anything__searchFoo",
+      "toolName": "mcp__anything__searchFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-fetch-allowed",
-      "mcpToolName": "mcp__anything__fetchFoo",
+      "toolName": "mcp__anything__fetchFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-read-allowed",
-      "mcpToolName": "mcp__anything__readFoo",
+      "toolName": "mcp__anything__readFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-query-allowed",
-      "mcpToolName": "mcp__anything__queryFoo",
+      "toolName": "mcp__anything__queryFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-lookup-allowed",
-      "mcpToolName": "mcp__anything__lookupFoo",
+      "toolName": "mcp__anything__lookupFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-describe-allowed",
-      "mcpToolName": "mcp__anything__describeFoo",
+      "toolName": "mcp__anything__describeFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "read-prefix-view-allowed",
-      "mcpToolName": "mcp__anything__viewFoo",
+      "toolName": "mcp__anything__viewFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "write-neighbour-of-get-grantFoo-asks",
-      "mcpToolName": "mcp__anything__grantFoo",
+      "toolName": "mcp__anything__grantFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -110,7 +124,8 @@
     },
     {
       "id": "write-neighbour-of-list-loadFoo-asks",
-      "mcpToolName": "mcp__anything__loadFoo",
+      "toolName": "mcp__anything__loadFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -120,7 +135,8 @@
     },
     {
       "id": "write-neighbour-of-search-setFoo-asks",
-      "mcpToolName": "mcp__anything__setFoo",
+      "toolName": "mcp__anything__setFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -130,7 +146,8 @@
     },
     {
       "id": "write-neighbour-of-fetch-flushFoo-asks",
-      "mcpToolName": "mcp__anything__flushFoo",
+      "toolName": "mcp__anything__flushFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -140,7 +157,8 @@
     },
     {
       "id": "write-neighbour-of-read-renameFoo-asks",
-      "mcpToolName": "mcp__anything__renameFoo",
+      "toolName": "mcp__anything__renameFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -150,7 +168,8 @@
     },
     {
       "id": "write-neighbour-of-query-quitFoo-asks",
-      "mcpToolName": "mcp__anything__quitFoo",
+      "toolName": "mcp__anything__quitFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -160,7 +179,8 @@
     },
     {
       "id": "write-neighbour-of-lookup-lockFoo-asks",
-      "mcpToolName": "mcp__anything__lockFoo",
+      "toolName": "mcp__anything__lockFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -170,7 +190,8 @@
     },
     {
       "id": "write-neighbour-of-describe-deleteFoo-asks",
-      "mcpToolName": "mcp__anything__deleteFoo",
+      "toolName": "mcp__anything__deleteFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -180,7 +201,8 @@
     },
     {
       "id": "write-neighbour-of-view-voidFoo-asks",
-      "mcpToolName": "mcp__anything__voidFoo",
+      "toolName": "mcp__anything__voidFoo",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -190,19 +212,22 @@
     },
     {
       "id": "known-limit-search-and-delete-recognised-on-prefix-not-meaning",
-      "mcpToolName": "mcp__anything__searchAndDelete",
+      "toolName": "mcp__anything__searchAndDelete",
+      "toolInput": {},
       "expected": [],
       "knownLimit": true,
       "knownLimitReason": "recognition is on the operation name's START only; a write-shaped tail after a read-shaped prefix still passes"
     },
     {
       "id": "underscored-server-name-read-allowed",
-      "mcpToolName": "mcp__plugin_claude-mem_mcp-search__query_corpus",
+      "toolName": "mcp__plugin_claude-mem_mcp-search__query_corpus",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "underscored-server-name-write-asks",
-      "mcpToolName": "mcp__claude_ai_Gmail__createDraft",
+      "toolName": "mcp__claude_ai_Gmail__createDraft",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -212,7 +237,8 @@
     },
     {
       "id": "server-identifier-containing-double-underscore-cuts-at-second",
-      "mcpToolName": "mcp__plugin__deploy__getStatus",
+      "toolName": "mcp__plugin__deploy__getStatus",
+      "toolInput": {},
       "expected": [
         {
           "verdict": "confirm",
@@ -222,32 +248,38 @@
     },
     {
       "id": "empty-name-out-of-scope",
-      "mcpToolName": "",
+      "toolName": "",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "non-mcp-tool-bash-out-of-scope",
-      "mcpToolName": "Bash",
+      "toolName": "Bash",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "non-mcp-tool-read-out-of-scope",
-      "mcpToolName": "Read",
+      "toolName": "Read",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "mcp-shaped-suffix-away-from-start-out-of-scope",
-      "mcpToolName": "proxy_mcp__anything__createFoo",
+      "toolName": "proxy_mcp__anything__createFoo",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "no-second-double-underscore-out-of-scope",
-      "mcpToolName": "mcp__server",
+      "toolName": "mcp__server",
+      "toolInput": {},
       "expected": []
     },
     {
       "id": "empty-operation-out-of-scope",
-      "mcpToolName": "mcp__server__",
+      "toolName": "mcp__server__",
+      "toolInput": {},
       "expected": []
     }
   ]

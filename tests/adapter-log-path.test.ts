@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { configDir, hookLogPath } from '../src/log-path.ts';
+import { configDir, hookLogPath } from '../src/adapter/log-path.ts';
 
 // Workstation delta: per-account log routing. The property under test is
 // "two accounts, two logs" — CLAUDE_CONFIG_DIR is how a second account

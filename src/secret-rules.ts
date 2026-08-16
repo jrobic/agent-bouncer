@@ -8,7 +8,7 @@
 // cat`). Treat this as protection against accidental leaks, not against an
 // adversarial agent.
 
-import type { BashRule, Deny } from './types.ts';
+import type { BashRule, Verdict } from './types.ts';
 import { hasUnsafeGitConfigRemoteUrl } from './command-rules.ts';
 
 export interface PathRule {
@@ -107,11 +107,11 @@ export const PATH_RULES: readonly PathRule[] = [
   },
 ];
 
-export function checkPath(path: string): Deny | null {
+export function checkPath(path: string): Verdict | null {
   if (!path) return null;
   for (const rule of PATH_RULES) {
     if (rule.test(path)) {
-      return { ruleId: rule.id, reason: rule.reason, target: path };
+      return { verdict: 'block', ruleId: rule.id, reason: rule.reason, target: path };
     }
   }
   return null;
@@ -151,17 +151,17 @@ export const SECRET_BASH_RULES: readonly BashRule[] = [
   },
 ];
 
-export function checkSecretBash(cmd: string): Deny | null {
+export function checkSecretBash(cmd: string): Verdict | null {
   if (!cmd) return null;
   for (const rule of SECRET_BASH_RULES) {
     if (rule === GIT_REMOTE_URL_RULE) {
       if (hasUnsafeGitConfigRemoteUrl(cmd)) {
-        return { ruleId: rule.ruleId, reason: rule.reason, target: cmd };
+        return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target: cmd };
       }
       continue;
     }
     if (rule.regex.test(cmd)) {
-      return { ruleId: rule.ruleId, reason: rule.reason, target: cmd };
+      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target: cmd };
     }
   }
   const tokens = cmd.match(BASH_PATH_TOKEN) ?? [];
@@ -170,6 +170,7 @@ export function checkSecretBash(cmd: string): Deny | null {
     const hit = checkPath(normalized);
     if (hit) {
       return {
+        verdict: 'block',
         ruleId: `bash-${hit.ruleId}`,
         reason: `Bash command references sensitive path: ${hit.reason}`,
         target: cmd,
@@ -186,12 +187,12 @@ export function checkSecretBash(cmd: string): Deny | null {
 // reads like a sensitive directory. Needed so extractTargets()'s `urls`
 // bucket (ctx_fetch_and_index) has a matching check function — without it,
 // a URL target is extracted but nothing ever inspects it.
-export function checkUrl(url: string): Deny | null {
+export function checkUrl(url: string): Verdict | null {
   if (!url) return null;
   for (const rule of SECRET_BASH_RULES) {
     if (rule === GIT_REMOTE_URL_RULE) continue;
     if (rule.regex.test(url)) {
-      return { ruleId: rule.ruleId, reason: rule.reason, target: url };
+      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target: url };
     }
   }
   return null;

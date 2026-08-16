@@ -23,7 +23,7 @@
 // Treat this as protection against accidental destruction and the most
 // obvious exfiltration patterns — not against an adversarial caller.
 
-import type { BashRule, Deny } from './types.ts';
+import type { BashRule, Verdict } from './types.ts';
 
 // ─── Tier 1 helper: rm -rf with dangerous target detection ───────────
 
@@ -68,7 +68,7 @@ export function isDangerousRmTarget(target: string): boolean {
   return DANGEROUS_RM_TARGETS.some((re) => re.test(target));
 }
 
-export function checkRmRf(cmd: string): Deny | null {
+export function checkRmRf(cmd: string): Verdict | null {
   // Slice the command at command separators so we evaluate each rm
   // segment independently of surrounding pipes / chains.
   const rmSegments = cmd.match(/\brm\b[^;|&\n]*/g) ?? [];
@@ -80,6 +80,7 @@ export function checkRmRf(cmd: string): Deny | null {
       // cannot override system-path destruction (e.g. /etc/node_modules).
       if (isDangerousRmTarget(target)) {
         return {
+          verdict: 'block',
           ruleId: 'rm-rf-dangerous',
           reason: `rm -rf targeting a dangerous path: ${target}`,
           target: cmd,
@@ -255,7 +256,7 @@ export const SAFE_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
   'merge-base',
   // Pure reads, second batch. NOTE: subcommands with writing variants
   // (worktree, apply, restore) do NOT belong here — they get conditional
-  // forms in gitSubcommandNeedsAsk.
+  // forms in gitSubcommandNeedsConfirm.
   'show-ref',
   'show-branch',
   'name-rev',
@@ -405,7 +406,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-type GitCommand = { sub: string; rest: string[]; forceAsk?: true };
+type GitCommand = { sub: string; rest: string[]; forceConfirm?: true };
 
 export function extractGitSubcommand(segment: string): GitCommand | null {
   const tokens = tokenizeShellSegments(segment)[0] ?? [];
@@ -434,7 +435,7 @@ function extractGitSubcommandFromTokens(
   return {
     sub: tokens[i]!.value,
     rest: tokens.slice(i + 1).map((token) => token.value),
-    ...(prefix.ambiguous ? { forceAsk: true as const } : {}),
+    ...(prefix.ambiguous ? { forceConfirm: true as const } : {}),
   };
 }
 
@@ -496,7 +497,7 @@ function isCommandNamed(token: string | undefined, names: ReadonlySet<string>): 
   return names.has(basename);
 }
 
-export function checkPrivilegeEscalation(cmd: string): Deny | null {
+export function checkPrivilegeEscalation(cmd: string): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const prefix = consumeCommandPrefixes(tokens, PRIVILEGE_BENIGN_PREFIXES);
     const index = prefix.ambiguous
@@ -510,6 +511,7 @@ export function checkPrivilegeEscalation(cmd: string): Deny | null {
       || !isCommandNamed(tokens[index]?.value, PRIVILEGE_ESCALATION_COMMANDS)
     ) continue;
     return {
+      verdict: 'block',
       ruleId: 'sudo',
       reason: PRIVILEGE_ESCALATION_REASON,
       target: cmd,
@@ -540,7 +542,7 @@ export function isGitConfigRead(cmdOrRest: string | readonly string[]): boolean 
     .filter((parsed): parsed is GitCommand => parsed?.sub === 'config');
   return configCommands.length > 0
     && configCommands.every((parsed) =>
-      parsed.forceAsk !== true && GIT_CONFIG_READ_MODES.has(parsed.rest[0] ?? '')
+      parsed.forceConfirm !== true && GIT_CONFIG_READ_MODES.has(parsed.rest[0] ?? '')
     );
 }
 
@@ -560,7 +562,7 @@ export function hasUnsafeGitConfigRemoteUrl(cmd: string): boolean {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (
       parsed?.sub !== 'config'
-      || parsed.forceAsk === true
+      || parsed.forceConfirm === true
       || !isGitConfigRead(parsed.rest)
     ) return true;
   }
@@ -573,7 +575,7 @@ function positionalArgs(rest: readonly string[]): string[] {
   return rest.filter((t) => !t.startsWith('-') && !/[<>]/.test(t));
 }
 
-export function gitSubcommandNeedsAsk(sub: string, rest: readonly string[]): boolean {
+export function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[]): boolean {
   if (SAFE_GIT_SUBCOMMANDS.has(sub)) return false;
 
   // Conditionally-safe: allow the read/additive form, ask on destructive flags.
@@ -666,13 +668,13 @@ export function gitSubcommandNeedsAsk(sub: string, rest: readonly string[]): boo
   return true;
 }
 
-export function checkGit(cmd: string): Deny | null {
+export function checkGit(cmd: string): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
-    if (parsed.forceAsk || gitSubcommandNeedsAsk(parsed.sub, parsed.rest)) {
+    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest)) {
       return {
-        decision: 'ask',
+        verdict: 'confirm',
         ruleId: 'git-protected',
         reason:
           `git ${parsed.sub} can rewrite history, mutate a remote, or discard work — confirm before running`,
@@ -683,7 +685,33 @@ export function checkGit(cmd: string): Deny | null {
   return null;
 }
 
-export function checkBash(cmd: string): Deny | null {
+// Additive, log-only classification: identifies a git command allowed
+// because a NAMED conditional rule decided it (e.g. `pull --ff-only`'s
+// ratified grammar), as opposed to an unconditional SAFE_GIT_SUBCOMMANDS
+// membership where no rule "fired" in any interesting sense. Never affects
+// the permission decision — checkGit already returned null (allow) before a
+// caller has any reason to call this. Exists purely so the adapter's audit
+// log can record which conditional rules "silently earn their keep" and
+// which never fire (spec User Story 10), without checkGit itself growing a
+// third return shape that every existing caller and fixture would have to
+// account for.
+export function classifyGitAllow(cmd: string): Verdict | null {
+  for (const tokens of tokenizeShellSegments(cmd)) {
+    const parsed = extractGitSubcommandFromTokens(tokens);
+    if (!parsed || parsed.forceConfirm) continue;
+    if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest)) continue;
+    if (SAFE_GIT_SUBCOMMANDS.has(parsed.sub)) continue;
+    return {
+      verdict: 'observe',
+      ruleId: `git-conditional-${parsed.sub}`,
+      reason: `git ${parsed.sub} matched its conditional allow grammar (safe form) — logged for audit`,
+      target: cmd,
+    };
+  }
+  return null;
+}
+
+export function checkBash(cmd: string): Verdict | null {
   if (!cmd) return null;
 
   // Special-cased: rm -rf needs allowlist logic before generic regex.
@@ -693,13 +721,13 @@ export function checkBash(cmd: string): Deny | null {
   const privilegeHit = checkPrivilegeEscalation(cmd);
   if (privilegeHit) return privilegeHit;
 
-  // Hard-block (deny) rules take priority over the git "ask" guard.
+  // Hard-block rules take priority over the git "confirm" guard.
   for (const rule of BASH_RULES) {
     if (rule.regex.test(cmd)) {
-      return { ruleId: rule.ruleId, reason: rule.reason, target: cmd };
+      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target: cmd };
     }
   }
 
-  // Protected git operations → interactive prompt ("ask").
+  // Protected git operations → interactive prompt ("confirm").
   return checkGit(cmd);
 }

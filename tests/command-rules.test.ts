@@ -160,7 +160,7 @@ describe('command-rules: git ask + SAFE_GIT', () => {
   test('ruleId git-protected: git push surfaces an ask, not a deny', () => {
     const verdict = checkGit('git push origin main');
     expect(verdict?.ruleId).toBe('git-protected');
-    expect(verdict?.decision).toBe('ask');
+    expect(verdict?.verdict).toBe('confirm');
   });
 
   test('ruleId git-protected: git branch -D (delete) asks', () => {

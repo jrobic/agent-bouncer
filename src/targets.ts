@@ -5,6 +5,12 @@
 // doesn't match what a target reader expects, so a future surface change
 // is visible on stderr instead of silently passing through.
 //
+// `GuardedToolCall` is deliberately narrower than any one harness's hook
+// envelope (no session id, no event name, no protocol fields) — it carries
+// only what target extraction needs: a tool name and its input bag. The
+// full Claude Code envelope (`HookInput`) lives in src/adapter/protocol.ts;
+// an adapter maps its own envelope down to this shape before calling in.
+//
 // Workstation delta folded into the engine convergence: the catalog
 // generation this repository otherwise ports verbatim only ever recognised
 // `Bash`. A sandboxed tool-execution plugin (context-mode) reroutes work
@@ -14,12 +20,9 @@
 // a Bash-only guard never sees them, and every command/path/secret rule is
 // bypassed by the reroute unless the guards also accept these names.
 
-export interface HookInput {
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  session_id?: string;
-  hook_event_name?: string;
-  tool_use_id?: string;
+export interface GuardedToolCall {
+  readonly toolName?: string | undefined;
+  readonly toolInput?: Record<string, unknown> | undefined;
 }
 
 const CTX_TOOL =
@@ -116,9 +119,9 @@ function push(bucket: string[], value: string | null): void {
 // `code` counts as a command whatever `language` says: a Python or JS snippet
 // reads ~/.ssh/id_rsa just as effectively as a shell one, and the guards match
 // on literal strings rather than on shell semantics anyway.
-export function extractTargets(input: HookInput, hookName: string): Targets {
-  const ti = input.tool_input ?? {};
-  const tool = input.tool_name;
+export function extractTargets(call: GuardedToolCall, hookName: string): Targets {
+  const ti = call.toolInput ?? {};
+  const tool = call.toolName;
   const targets: Targets = { commands: [], paths: [], urls: [] };
 
   switch (tool) {

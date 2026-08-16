@@ -1,7 +1,6 @@
 {
   "family": "prompt",
   "event": "UserPromptSubmit",
-  "check": "prompt",
   "cases": [
     {
       "id": "ignore-previous",

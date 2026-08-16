@@ -16,7 +16,7 @@
 // tenant-scoped allowlist (e.g. one extra read prefix for a single MCP
 // server) belongs in a policy overlay, not in the trunk engine.
 
-import type { Deny } from './types.ts';
+import type { Verdict } from './types.ts';
 
 // Read-only operation prefixes, matched on the START of the operation name.
 // ORDERED and exported on purpose: the guards-digest lock freezes this exact
@@ -51,17 +51,17 @@ export const MCP_READ_PREFIXES: readonly string[] = [
 const MCP_TOOL_NAME = /^mcp__.+?__(.+)$/;
 
 /**
- * Decides on an MCP tool name. Returns an `ask` verdict for anything that is
- * not a recognised read, or null when the call is out of scope (non-MCP tool,
- * empty name, no operation to read).
+ * Decides on an MCP tool name. Returns a `confirm` verdict for anything that
+ * is not a recognised read, or null when the call is out of scope (non-MCP
+ * tool, empty name, no operation to read).
  */
-export function checkMcpWrite(toolName: string): Deny | null {
+export function checkMcpWrite(toolName: string): Verdict | null {
   const operation = MCP_TOOL_NAME.exec(toolName)?.[1];
   if (!operation) return null;
   if (MCP_READ_PREFIXES.some((prefix) => operation.startsWith(prefix))) return null;
 
   return {
-    decision: 'ask',
+    verdict: 'confirm',
     ruleId: 'mcp-write',
     reason: 'Non-read MCP tool — every MCP write asks for confirmation, on any connected server',
     target: toolName,

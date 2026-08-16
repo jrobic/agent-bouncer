@@ -1,5 +1,11 @@
 // Per-account audit log routing. Pure path resolution — no file I/O.
 //
+// Claude-Code-specific (moved out of the engine): `CLAUDE_CONFIG_DIR` and
+// the `~/.claude` convention are this harness's own account model. A future
+// adapter for a different harness would resolve its account/config
+// directory its own way — nothing in src/*.ts should assume this
+// convention, only this adapter.
+//
 // Workstation delta folded into the engine convergence: the catalog
 // generation this repository otherwise ports verbatim always wrote its log
 // beside the hook script, one file shared by every account running that

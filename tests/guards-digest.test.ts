@@ -293,7 +293,13 @@ const SECRET_RULES_SOURCE = join(
 // BASH_RULES' close, and the `?? [];` fallback in `checkBash`), so it would
 // silently pick the wrong block the day a table is reordered.
 const BLOCK_START = "export const PATH_RULES: readonly PathRule[] = [";
-const BLOCK_END = "export function checkPath(path: string): Deny | null {";
+// Updated for the abstract-verdict refactor (ticket 05): checkPath's return
+// type changed from `Deny | null` to `Verdict | null`. This bound is a
+// SIGNATURE marker only — it does not sit inside the frozen PATH_RULES
+// block above, and the rule TABLE itself (14 entries, unchanged regexes and
+// reasons) is untouched, so the digest content below did not need
+// recomputation, only this string literal.
+const BLOCK_END = "export function checkPath(path: string): Verdict | null {";
 
 // ENV_WHITELIST is referenced BY NAME inside the `dotenv` predicate but
 // DEFINED above the block (line 22). A digest bounded to the block alone
@@ -493,7 +499,7 @@ describe("guards-digest: tamper lock — PATH_RULES, the predicate-shaped guard"
 // see any of them:
 //   • SAFE_GIT_SUBCOMMANDS — a Set of 31 auto-approved verbs (silent).
 //   • GIT_BENIGN_PREFIXES  — a Set of 7 tokens tolerated in front of `git`.
-//   • gitSubcommandNeedsAsk — a chain of 15 `if (sub === …)` blocks covering
+//   • gitSubcommandNeedsConfirm — a chain of 15 `if (sub === …)` blocks covering
 //     16 subcommands, deciding on the ARGUMENTS rather than on the verb.
 //
 // Two holes were measured on the suite as it stood before this lock, and
@@ -758,7 +764,13 @@ const COMMAND_RULES_SOURCE = join(
   "command-rules.ts",
 );
 
-const CHAIN_START = "export function gitSubcommandNeedsAsk";
+// Renamed from gitSubcommandNeedsAsk (ticket 05: the core speaks
+// block/confirm/flag/observe now, not deny/ask, and the function name is
+// no longer allowed to say otherwise). Only this bound string and the
+// frozen signature line below changed — the chain's BODY (the 15
+// `if (sub === …)` blocks and everything they decide) is byte-identical,
+// so nothing else in this file needed recomputation.
+const CHAIN_START = "export function gitSubcommandNeedsConfirm";
 const CHAIN_END = "export function checkGit";
 
 function gitChainSignificantLines(): string[] {
@@ -842,7 +854,7 @@ describe("guards-digest: tamper lock — the conditional chain, scraped from its
     const lines = gitChainSignificantLines();
     expect(lines.length).toBeGreaterThan(0);
     expect(lines[0]).toBe(
-      "export function gitSubcommandNeedsAsk(sub: string, rest: readonly string[]): boolean {",
+      "export function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[]): boolean {",
     );
   });
 

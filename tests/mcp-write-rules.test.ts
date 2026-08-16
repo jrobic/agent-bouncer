@@ -86,7 +86,7 @@ function uncoveredWriteNeighbourPrefixes(): string[] {
         && operation.startsWith(initial)
         && !operation.startsWith(prefix)
         && verdict?.ruleId === 'mcp-write'
-        && verdict.decision === 'ask';
+        && verdict.verdict === 'confirm';
     });
   });
 }
@@ -122,7 +122,7 @@ describe('mcp-write-rules: an MCP write asks, on any server', () => {
   test('mcp__anything__createFoo asks, with ruleId mcp-write and decision ask', () => {
     const verdict = checkMcpWrite('mcp__anything__createFoo');
     expect(verdict?.ruleId).toBe('mcp-write');
-    expect(verdict?.decision).toBe('ask');
+    expect(verdict?.verdict).toBe('confirm');
     expect(verdict?.target).toBe('mcp__anything__createFoo');
   });
 
@@ -132,7 +132,7 @@ describe('mcp-write-rules: an MCP write asks, on any server', () => {
   });
 
   test('a snake_case write is caught like a camelCase one', () => {
-    expect(checkMcpWrite('mcp__memory__delete_observations')?.decision).toBe('ask');
+    expect(checkMcpWrite('mcp__memory__delete_observations')?.verdict).toBe('confirm');
   });
 
   test("atlassianUserInfo, allowed by the workstation's tenant allowlist, now asks", () => {
