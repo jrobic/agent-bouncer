@@ -55,14 +55,14 @@ describe('command-rules: BASH_RULES', () => {
     expect(deny?.ruleId).toBe('mkfs');
   });
 
-  test('ruleId device-redirect: shell redirection to /dev/sda is denied', () => {
+  test('ruleId device-redirect-shell: shell redirection to /dev/sda is denied', () => {
     const deny = checkBash('echo test > /dev/sda');
-    expect(deny?.ruleId).toBe('device-redirect');
+    expect(deny?.ruleId).toBe('device-redirect-shell');
   });
 
-  test('ruleId device-redirect: tee to /dev/sda is denied', () => {
+  test('ruleId device-redirect-tee: tee to /dev/sda is denied', () => {
     const deny = checkBash('echo test | tee /dev/sda');
-    expect(deny?.ruleId).toBe('device-redirect');
+    expect(deny?.ruleId).toBe('device-redirect-tee');
   });
 
   test('ruleId chmod-root: recursive chmod on / is denied', () => {
@@ -115,14 +115,14 @@ describe('command-rules: BASH_RULES', () => {
     expect(deny?.ruleId).toBe('setuid');
   });
 
-  test('ruleId etc-write: redirect into /etc/passwd is denied', () => {
+  test('ruleId etc-write-shell: redirect into /etc/passwd is denied', () => {
     const deny = checkBash('echo x > /etc/passwd');
-    expect(deny?.ruleId).toBe('etc-write');
+    expect(deny?.ruleId).toBe('etc-write-shell');
   });
 
-  test('ruleId etc-write: tee into /etc/passwd is denied', () => {
+  test('ruleId etc-write-tee: tee into /etc/passwd is denied', () => {
     const deny = checkBash('echo x | tee /etc/passwd');
-    expect(deny?.ruleId).toBe('etc-write');
+    expect(deny?.ruleId).toBe('etc-write-tee');
   });
 
   test('ruleId kill-init: kill -9 1 is denied', () => {

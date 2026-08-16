@@ -1,6 +1,11 @@
-// Write-secret guard rules: high-signal secret token shapes embedded in
-// text about to be written (a file, an MCP payload). Pure — no Bun/Node
-// APIs, no harness protocol shapes.
+// Write-secret guard: high-signal secret token shapes embedded in text
+// about to be written (a file, an MCP payload). Pure — no Bun/Node APIs,
+// no harness protocol shapes. The rule table itself is policy data
+// (policy/baseline.toml, `[[rules.write_secret]]`); this module owns only
+// the scanning algorithm, parameterized over whichever table is loaded
+// (createScanSecrets) — `scanSecrets` is that algorithm bound to the
+// embedded baseline, for callers that don't need overlay/override
+// awareness (most tests, all 214 fixtures).
 //
 // ─── Posture (defense in depth, not a vault) ─────────────────────────
 // REGEX-only and fast (a PreToolUse gate must be cheap): it catches
@@ -8,63 +13,25 @@
 // design — deeper, entropy-based / history-wide detection is a separate
 // GIT-LEVEL net (gitleaks) wired at pre-commit, not here.
 
+import { BASELINE } from './policy/baseline.ts';
+import { compileRules, firstMatch } from './policy/match.ts';
+import type { RegexRule } from './policy/schema.ts';
 import type { Verdict } from './types.ts';
 
-interface SecretRule {
-  regex: RegExp;
-  ruleId: string;
-  reason: string;
-}
-
-// High-signal token shapes only — distinctive enough that a match is almost
-// always a real credential. Trade-off: a realistic-SHAPED placeholder (e.g. a
-// doc token of the right form) can still trip a rule; we favour blocking. The
-// entropy-based catch-all is deliberately left to gitleaks (pre-commit).
-export const SECRET_RULES: readonly SecretRule[] = [
-  {
-    regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/,
-    ruleId: 'private-key',
-    reason: 'PEM/OpenSSH private key block',
-  },
-  { regex: /\bAKIA[0-9A-Z]{16}\b/, ruleId: 'aws-access-key-id', reason: 'AWS access key id' },
-  {
-    regex: /\bghp_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{22,}\b/,
-    ruleId: 'github-pat',
-    reason: 'GitHub personal access token',
-  },
-  {
-    regex: /\bgh[ousr]_[A-Za-z0-9]{36}\b/,
-    ruleId: 'github-token',
-    reason: 'GitHub OAuth/app/refresh token',
-  },
-  {
-    regex: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/,
-    ruleId: 'slack-token',
-    reason: 'Slack token',
-  },
-  { regex: /\bAIza[0-9A-Za-z_-]{35}\b/, ruleId: 'google-api-key', reason: 'Google API key' },
-  {
-    regex: /\b(?:sk|rk)_live_[A-Za-z0-9]{24,}\b/,
-    ruleId: 'stripe-secret-key',
-    reason: 'Stripe live secret key',
-  },
-  {
-    regex: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
-    ruleId: 'jwt',
-    reason: 'JSON Web Token (possible embedded credential)',
-  },
-];
+export type ScanSecrets = (text: string, target: string) => Verdict | null;
 
 /**
- * Scans text for an embedded secret value. Returns the first matching rule
- * as a block Verdict, or null if clean.
+ * Builds a scanSecrets() bound to the given rule table (baseline, or a
+ * merged baseline+overlay+override set from src/policy/load.ts).
  */
-export function scanSecrets(text: string, target: string): Verdict | null {
-  if (!text) return null;
-  for (const rule of SECRET_RULES) {
-    if (rule.regex.test(text)) {
-      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target };
-    }
-  }
-  return null;
+export function createScanSecrets(rules: readonly RegexRule[]): ScanSecrets {
+  const compiled = compileRules(rules);
+  return (text, target) => {
+    if (!text) return null;
+    const hit = firstMatch(compiled, text, 'block');
+    return hit ? { ...hit, target } : null;
+  };
 }
+
+/** Scans text for an embedded secret value, using the embedded baseline. */
+export const scanSecrets: ScanSecrets = createScanSecrets(BASELINE.rules.write_secret);

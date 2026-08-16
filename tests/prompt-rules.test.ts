@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { PROMPT_RULES, scanPrompt } from '../src/prompt-rules.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
+import { scanPrompt } from '../src/prompt-rules.ts';
 
 describe('prompt-rules: PROMPT_RULES', () => {
   test("ruleId ignore-previous: 'ignore all previous instructions' is flagged", () => {
@@ -41,10 +42,10 @@ describe('prompt-rules: PROMPT_RULES', () => {
     expect(scanPrompt('hello, can you help me refactor this function?')).toEqual([]);
   });
 
-  test('every PROMPT_RULES entry has a distinct ruleId with a working regex', () => {
-    // Regression guard: catches accidental duplicate/typo'd ruleIds and
+  test('every rules.prompt entry has a distinct id with a working regex', () => {
+    // Regression guard: catches accidental duplicate/typo'd ids and
     // regexes that can never match (e.g. broken escaping) introduced later.
-    const ids = PROMPT_RULES.map((r) => r.ruleId);
+    const ids = BASELINE.rules.prompt.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 

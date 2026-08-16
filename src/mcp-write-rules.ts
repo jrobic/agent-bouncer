@@ -1,6 +1,9 @@
-// MCP-write guard rules: which MCP tool calls are reads (pass silently)
-// versus everything else (asks for confirmation). Pure — no Bun/Node APIs,
-// no harness protocol shapes.
+// MCP-write guard: which MCP tool calls are reads (pass silently) versus
+// everything else (asks for confirmation). Pure — no Bun/Node APIs, no
+// harness protocol shapes. The read-prefix allowlist is policy data
+// (policy/baseline.toml, `rules.mcp_write.read_prefixes`); this module
+// owns only the operation-name parsing (there is no regex TABLE here to
+// load generically — a single allowlist and a fixed parsing rule).
 //
 // ─── Posture (default-ask, and fail-open by construction) ────────────────
 // Every MCP tool call whose operation is not recognised as a READ asks for
@@ -16,23 +19,8 @@
 // tenant-scoped allowlist (e.g. one extra read prefix for a single MCP
 // server) belongs in a policy overlay, not in the trunk engine.
 
+import { BASELINE } from './policy/baseline.ts';
 import type { Verdict } from './types.ts';
-
-// Read-only operation prefixes, matched on the START of the operation name.
-// ORDERED and exported on purpose: the guards-digest lock freezes this exact
-// sequence, so a rename, a reordering or a prefix shortened to its initial
-// fails that lock.
-export const MCP_READ_PREFIXES: readonly string[] = [
-  'get',
-  'list',
-  'search',
-  'fetch',
-  'read',
-  'query',
-  'lookup',
-  'describe',
-  'view',
-];
 
 // NON-GREEDY on purpose: the operation is everything after the SECOND `__`,
 // not after the last one. Greedy would cut `mcp__plugin__deploy__getStatus`
@@ -50,20 +38,36 @@ export const MCP_READ_PREFIXES: readonly string[] = [
 // wiring widens.
 const MCP_TOOL_NAME = /^mcp__.+?__(.+)$/;
 
-/**
- * Decides on an MCP tool name. Returns a `confirm` verdict for anything that
- * is not a recognised read, or null when the call is out of scope (non-MCP
- * tool, empty name, no operation to read).
- */
-export function checkMcpWrite(toolName: string): Verdict | null {
-  const operation = MCP_TOOL_NAME.exec(toolName)?.[1];
-  if (!operation) return null;
-  if (MCP_READ_PREFIXES.some((prefix) => operation.startsWith(prefix))) return null;
+export type CheckMcpWrite = (toolName: string) => Verdict | null;
 
-  return {
-    verdict: 'confirm',
-    ruleId: 'mcp-write',
-    reason: 'Non-read MCP tool — every MCP write asks for confirmation, on any connected server',
-    target: toolName,
+/**
+ * Builds a checkMcpWrite() bound to the given read-prefix allowlist
+ * (baseline, or a merged baseline+overlay set).
+ */
+export function createCheckMcpWrite(readPrefixes: readonly string[]): CheckMcpWrite {
+  return (toolName) => {
+    const operation = MCP_TOOL_NAME.exec(toolName)?.[1];
+    if (!operation) return null;
+    if (readPrefixes.some((prefix) => operation.startsWith(prefix))) return null;
+
+    return {
+      verdict: 'confirm',
+      ruleId: 'mcp-write',
+      reason: 'Non-read MCP tool — every MCP write asks for confirmation, on any connected server',
+      target: toolName,
+    };
   };
 }
+
+/**
+ * Decides on an MCP tool name. Returns a `confirm` verdict for anything
+ * that is not a recognised read, or null when the call is out of scope
+ * (non-MCP tool, empty name, no operation to read). Uses the embedded
+ * baseline's read-prefix allowlist.
+ */
+export const checkMcpWrite: CheckMcpWrite = createCheckMcpWrite(BASELINE.rules.mcp_write.read_prefixes);
+
+// Exported for the tests/completeness locks that inspect the allowlist
+// directly (coverage diffing, digest freezing) — the array itself, not a
+// derived count, so a rename/reorder/narrowing is visible at its own index.
+export const MCP_READ_PREFIXES: readonly string[] = BASELINE.rules.mcp_write.read_prefixes;

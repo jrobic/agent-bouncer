@@ -4,14 +4,25 @@
 // Grep/Glob/MultiEdit field names, `mcp__*` scoping) — the reason it lives
 // in the adapter and not in src/*.ts: ticket 03 deliberately stopped at
 // target extraction and left this per-tool dispatch unbuilt.
+//
+// createDispatcher(policy) builds a dispatcher bound to a SPECIFIC policy
+// (baseline, or a merged baseline+overlay+override set from
+// src/policy/load.ts) — this is what makes the compiled binary actually
+// respect an account's overlay: run.ts loads the current policy once per
+// invocation and dispatches through the checkers built from it, never
+// through a module-level baseline-only binding. `inspectPreToolUse` etc.
+// exported below are the baseline-bound convenience form, for callers that
+// don't need overlay awareness (the fixture set, most tests).
 
-import { checkBash, classifyGitAllow } from '../command-rules.ts';
-import { checkMcpWrite } from '../mcp-write-rules.ts';
-import { scanPrompt } from '../prompt-rules.ts';
-import { checkPath, checkSecretBash, checkUrl } from '../secret-rules.ts';
+import { createCommandChecker } from '../command-rules.ts';
+import { createCheckMcpWrite } from '../mcp-write-rules.ts';
+import { BASELINE } from '../policy/baseline.ts';
+import type { RulesPolicy } from '../policy/schema.ts';
+import { createScanPrompt } from '../prompt-rules.ts';
+import { createSecretChecker } from '../secret-rules.ts';
 import { extractTargets, type GuardedToolCall, isGuardedToolName, readStringField } from '../targets.ts';
 import type { Family, Verdict, VerdictKind } from '../types.ts';
-import { scanSecrets } from '../write-secret-rules.ts';
+import { createScanSecrets } from '../write-secret-rules.ts';
 import { HOOK_NAME } from './constants.ts';
 import { canonicalizePath } from './paths.ts';
 import type { HookInput } from './protocol.ts';
@@ -21,21 +32,16 @@ export interface FamilyVerdict {
   readonly verdict: Verdict;
 }
 
+export interface Dispatcher {
+  readonly inspectPreToolUse: (input: HookInput) => Promise<FamilyVerdict | null>;
+  readonly classifyObserve: (input: HookInput) => FamilyVerdict | null;
+  readonly inspectUserPromptSubmit: (input: HookInput) => readonly Verdict[];
+}
+
 // extractTargets speaks the engine's narrower GuardedToolCall, not the full
 // CC envelope — this is the one place that maps down between them.
 function toGuardedCall(input: HookInput): GuardedToolCall {
   return { toolName: input.tool_name, toolInput: input.tool_input };
-}
-
-// Bash and the context-mode sandbox tools carry commands, paths, and urls
-// under one shape — the command family only ever judges commands.
-function inspectCommandFamily(input: HookInput): FamilyVerdict | null {
-  const { commands } = extractTargets(toGuardedCall(input), HOOK_NAME);
-  for (const cmd of commands) {
-    const verdict = checkBash(cmd);
-    if (verdict) return { family: 'command', verdict };
-  }
-  return null;
 }
 
 // The secret family covers three surfaces: commands/paths/urls reachable
@@ -50,60 +56,6 @@ const NATIVE_FILE_PATH_FIELD: Readonly<Record<string, string>> = {
   Write: 'file_path',
   NotebookEdit: 'notebook_path',
 };
-
-// Canonicalizes then checks a single path, wrapped as a `secret` family hit
-// — the one pattern every native-file-tool branch below needs, so it is
-// named once instead of repeated at each of Read/Edit/MultiEdit/Write/
-// NotebookEdit, Grep, Glob (twice), and the guarded-tool paths loop.
-async function secretPathHit(path: string): Promise<FamilyVerdict | null> {
-  const verdict = checkPath(await canonicalizePath(path));
-  return verdict ? { family: 'secret', verdict } : null;
-}
-
-async function inspectSecretFamily(input: HookInput): Promise<FamilyVerdict | null> {
-  const tool = input.tool_name;
-
-  if (tool !== undefined && tool in NATIVE_FILE_PATH_FIELD) {
-    const ti = input.tool_input ?? {};
-    const path = readStringField(ti, NATIVE_FILE_PATH_FIELD[tool]!, HOOK_NAME);
-    return path === null ? null : secretPathHit(path);
-  }
-
-  if (tool === 'Grep') {
-    const path = readStringField(input.tool_input ?? {}, 'path', HOOK_NAME);
-    return path === null ? null : secretPathHit(path);
-  }
-
-  if (tool === 'Glob') {
-    const ti = input.tool_input ?? {};
-    const pattern = readStringField(ti, 'pattern', HOOK_NAME);
-    const rawPath = readStringField(ti, 'path', HOOK_NAME);
-    const patternHit = pattern !== null ? checkPath(pattern) : null;
-    if (patternHit) return { family: 'secret', verdict: patternHit };
-    return rawPath !== null ? secretPathHit(rawPath) : null;
-  }
-
-  if (isGuardedToolName(tool)) {
-    const { commands, paths, urls } = extractTargets(toGuardedCall(input), HOOK_NAME);
-    for (const cmd of commands) {
-      const verdict = checkSecretBash(cmd);
-      if (verdict) return { family: 'secret', verdict };
-    }
-    for (const path of paths) {
-      // Sequential on purpose: the first denial ends the inspection, and a
-      // guarded tool call rarely names more than a couple of paths.
-      // oxlint-disable-next-line no-await-in-loop
-      const hit = await secretPathHit(path);
-      if (hit) return hit;
-    }
-    for (const url of urls) {
-      const verdict = checkUrl(url);
-      if (verdict) return { family: 'secret', verdict };
-    }
-  }
-
-  return null;
-}
 
 // Text about to be written, per tool — mirrors the workstation
 // guard-write-secret dispatch (Write.content, Edit.new_string,
@@ -126,27 +78,6 @@ function writeSecretText(tool: string | undefined, ti: Record<string, unknown>):
       .join('\n');
   }
   return null;
-}
-
-function inspectWriteSecretFamily(input: HookInput): FamilyVerdict | null {
-  const ti = input.tool_input ?? {};
-  const text = writeSecretText(input.tool_name, ti);
-  if (text === null) return null;
-  const target = readStringField(ti, 'file_path', HOOK_NAME) ?? `(${input.tool_name})`;
-  const verdict = scanSecrets(text, target);
-  return verdict ? { family: 'write-secret', verdict } : null;
-}
-
-// Every `mcp__*` tool NOT already claimed by the context-mode sandbox
-// (command/secret family above) is a generic MCP call. Order matters: this
-// must run after the context-mode check, or `ctx_execute` (itself
-// `mcp__plugin_context-mode_context-mode__ctx_execute`) would be judged as
-// a generic MCP write instead of routing to its own command/secret family.
-function inspectMcpWriteFamily(input: HookInput): FamilyVerdict | null {
-  const tool = input.tool_name;
-  if (tool === undefined || !tool.startsWith('mcp__') || isGuardedToolName(tool)) return null;
-  const verdict = checkMcpWrite(tool);
-  return verdict ? { family: 'mcp-write', verdict } : null;
 }
 
 // Severity ordering across families — NOT first-match-wins. A single tool
@@ -189,40 +120,146 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
   );
 }
 
-// PreToolUse: every applicable family is evaluated (a tool call may match
-// more than one), and the strictest verdict wins. See strictestOf() above.
-export async function inspectPreToolUse(input: HookInput): Promise<FamilyVerdict | null> {
-  const hits: FamilyVerdict[] = [];
+/**
+ * Builds a full dispatcher — {inspectPreToolUse, classifyObserve,
+ * inspectUserPromptSubmit} — bound to the given policy (baseline, or a
+ * merged baseline+overlay+override set from src/policy/load.ts). This is
+ * what the adapter's run.ts uses for real, per-invocation, overlay-aware
+ * dispatch.
+ */
+export function createDispatcher(policy: RulesPolicy): Dispatcher {
+  const command = createCommandChecker(policy.command);
+  const secret = createSecretChecker(policy.secret, policy.command.git.config_read_modes);
+  const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write.read_prefixes);
+  const scanSecretsBound = createScanSecrets(policy.write_secret);
+  const scanPromptBound = createScanPrompt(policy.prompt);
 
-  const commandHit = inspectCommandFamily(input);
-  if (commandHit) hits.push(commandHit);
-
-  const secretHit = await inspectSecretFamily(input);
-  if (secretHit) hits.push(secretHit);
-
-  const writeSecretHit = inspectWriteSecretFamily(input);
-  if (writeSecretHit) hits.push(writeSecretHit);
-
-  const mcpWriteHit = inspectMcpWriteFamily(input);
-  if (mcpWriteHit) hits.push(mcpWriteHit);
-
-  return strictestOf(hits);
-}
-
-// Called only when inspectPreToolUse found nothing to block/confirm on a
-// command-shaped call — classifies whether the allow is worth an audit log
-// entry (a named conditional git rule fired) versus fully silent
-// (SAFE_GIT_SUBCOMMANDS, or not git at all). Never changes the permission
-// outcome, which inspectPreToolUse already settled.
-export function classifyObserve(input: HookInput): FamilyVerdict | null {
-  const { commands } = extractTargets(toGuardedCall(input), HOOK_NAME);
-  for (const cmd of commands) {
-    const verdict = classifyGitAllow(cmd);
-    if (verdict) return { family: 'command', verdict };
+  function inspectCommandFamily(input: HookInput): FamilyVerdict | null {
+    const { commands } = extractTargets(toGuardedCall(input), HOOK_NAME);
+    for (const cmd of commands) {
+      const verdict = command.checkBash(cmd);
+      if (verdict) return { family: 'command', verdict };
+    }
+    return null;
   }
-  return null;
+
+  async function secretPathHit(path: string): Promise<FamilyVerdict | null> {
+    const verdict = secret.checkPath(await canonicalizePath(path));
+    return verdict ? { family: 'secret', verdict } : null;
+  }
+
+  async function inspectSecretFamily(input: HookInput): Promise<FamilyVerdict | null> {
+    const tool = input.tool_name;
+
+    if (tool !== undefined && tool in NATIVE_FILE_PATH_FIELD) {
+      const ti = input.tool_input ?? {};
+      const path = readStringField(ti, NATIVE_FILE_PATH_FIELD[tool]!, HOOK_NAME);
+      return path === null ? null : secretPathHit(path);
+    }
+
+    if (tool === 'Grep') {
+      const path = readStringField(input.tool_input ?? {}, 'path', HOOK_NAME);
+      return path === null ? null : secretPathHit(path);
+    }
+
+    if (tool === 'Glob') {
+      const ti = input.tool_input ?? {};
+      const pattern = readStringField(ti, 'pattern', HOOK_NAME);
+      const rawPath = readStringField(ti, 'path', HOOK_NAME);
+      const patternHit = pattern !== null ? secret.checkPath(pattern) : null;
+      if (patternHit) return { family: 'secret', verdict: patternHit };
+      return rawPath !== null ? secretPathHit(rawPath) : null;
+    }
+
+    if (isGuardedToolName(tool)) {
+      const { commands, paths, urls } = extractTargets(toGuardedCall(input), HOOK_NAME);
+      for (const cmd of commands) {
+        const verdict = secret.checkSecretBash(cmd);
+        if (verdict) return { family: 'secret', verdict };
+      }
+      for (const path of paths) {
+        // Sequential on purpose: the first denial ends the inspection, and
+        // a guarded tool call rarely names more than a couple of paths.
+        // oxlint-disable-next-line no-await-in-loop
+        const hit = await secretPathHit(path);
+        if (hit) return hit;
+      }
+      for (const url of urls) {
+        const verdict = secret.checkUrl(url);
+        if (verdict) return { family: 'secret', verdict };
+      }
+    }
+
+    return null;
+  }
+
+  function inspectWriteSecretFamily(input: HookInput): FamilyVerdict | null {
+    const ti = input.tool_input ?? {};
+    const text = writeSecretText(input.tool_name, ti);
+    if (text === null) return null;
+    const target = readStringField(ti, 'file_path', HOOK_NAME) ?? `(${input.tool_name})`;
+    const verdict = scanSecretsBound(text, target);
+    return verdict ? { family: 'write-secret', verdict } : null;
+  }
+
+  // Every `mcp__*` tool NOT already claimed by the context-mode sandbox
+  // (command/secret family above) is a generic MCP call. Order matters:
+  // this must run after the context-mode check, or `ctx_execute` (itself
+  // `mcp__plugin_context-mode_context-mode__ctx_execute`) would be judged
+  // as a generic MCP write instead of routing to its own command/secret
+  // family.
+  function inspectMcpWriteFamily(input: HookInput): FamilyVerdict | null {
+    const tool = input.tool_name;
+    if (tool === undefined || !tool.startsWith('mcp__') || isGuardedToolName(tool)) return null;
+    const verdict = checkMcpWriteBound(tool);
+    return verdict ? { family: 'mcp-write', verdict } : null;
+  }
+
+  async function inspectPreToolUse(input: HookInput): Promise<FamilyVerdict | null> {
+    const hits: FamilyVerdict[] = [];
+
+    const commandHit = inspectCommandFamily(input);
+    if (commandHit) hits.push(commandHit);
+
+    const secretHit = await inspectSecretFamily(input);
+    if (secretHit) hits.push(secretHit);
+
+    const writeSecretHit = inspectWriteSecretFamily(input);
+    if (writeSecretHit) hits.push(writeSecretHit);
+
+    const mcpWriteHit = inspectMcpWriteFamily(input);
+    if (mcpWriteHit) hits.push(mcpWriteHit);
+
+    return strictestOf(hits);
+  }
+
+  // Called only when inspectPreToolUse found nothing to block/confirm on a
+  // command-shaped call — classifies whether the allow is worth an audit
+  // log entry (a named conditional git rule fired) versus fully silent
+  // (safe_subcommands, or not git at all). Never changes the permission
+  // outcome, which inspectPreToolUse already settled.
+  function classifyObserve(input: HookInput): FamilyVerdict | null {
+    const { commands } = extractTargets(toGuardedCall(input), HOOK_NAME);
+    for (const cmd of commands) {
+      const verdict = command.classifyGitAllow(cmd);
+      if (verdict) return { family: 'command', verdict };
+    }
+    return null;
+  }
+
+  function inspectUserPromptSubmit(input: HookInput): readonly Verdict[] {
+    return scanPromptBound(input.prompt ?? '');
+  }
+
+  return { inspectPreToolUse, classifyObserve, inspectUserPromptSubmit };
 }
 
-export function inspectUserPromptSubmit(input: HookInput): readonly Verdict[] {
-  return scanPrompt(input.prompt ?? '');
-}
+const BASELINE_DISPATCHER = createDispatcher(BASELINE.rules);
+
+/** Uses the embedded baseline (no overlay awareness) — for callers that
+ * don't need it: the fixture set, most tests. */
+export const inspectPreToolUse = BASELINE_DISPATCHER.inspectPreToolUse;
+/** Uses the embedded baseline. */
+export const classifyObserve = BASELINE_DISPATCHER.classifyObserve;
+/** Uses the embedded baseline. */
+export const inspectUserPromptSubmit = BASELINE_DISPATCHER.inspectUserPromptSubmit;

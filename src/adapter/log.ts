@@ -7,6 +7,7 @@
 
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { LoadResult } from '../policy/load.ts';
 import type { Family, Verdict } from '../types.ts';
 import { HOOK_NAME } from './constants.ts';
 import { hookLogPath } from './log-path.ts';
@@ -32,36 +33,85 @@ async function rotateIfNeeded(logFile: string): Promise<void> {
   }
 }
 
-// Every verdict this adapter reaches gets logged — block/confirm/observe
-// from PreToolUse, flag from UserPromptSubmit — including `observe` entries
-// produced only for audit (never surfaced to the model). `input` is the raw
-// hook envelope, kept for session_id/tool_name context in the log line.
-export async function logVerdict(
-  family: Family,
-  input: HookInput,
-  verdict: Verdict,
-): Promise<void> {
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Story 19: the first entry written to a NEW or freshly-ROTATED log file is
+// a header record naming every override/relaxation active in the policy
+// that produced the entry about to follow it — so a client seat's log is
+// self-documenting about how far its effective policy diverges from the
+// vetted baseline, without having to separately run `rules list` at the
+// same moment. Skipped entirely when nothing is active (nothing to
+// announce) and when the caller has no LoadResult in scope (a direct
+// logVerdict call outside a real policy-loaded run — the header is
+// best-effort, not a hard requirement of the JSONL shape).
+async function ensureAuditHeader(logFile: string, loaded: LoadResult | undefined): Promise<void> {
+  if (loaded === undefined) return;
+  if (loaded.activeOverrides.length === 0 && loaded.activeRelaxations.length === 0) return;
+  if (await fileExists(logFile)) return;
+
+  const header = {
+    timestamp: new Date().toISOString(),
+    kind: 'audit-header',
+    overrides: loaded.activeOverrides.map((o) => ({ id: o.rule, action: o.action, reason: o.reason })),
+    relaxations: loaded.activeRelaxations.map((r) => ({ id: `${r.list}:${r.value}`, action: 'relax', reason: r.reason })),
+  };
+  await appendFile(logFile, `${JSON.stringify(header)}\n`, { mode: 0o600 });
+}
+
+async function appendLogEntry(entry: Record<string, unknown>, loaded?: LoadResult): Promise<void> {
   const logFile = hookLogPath(HOOK_NAME);
-  const entry = `${
-    JSON.stringify({
-      timestamp: new Date().toISOString(),
-      session_id: input.session_id ?? null,
-      tool_name: input.tool_name ?? null,
-      family,
-      verdict: verdict.verdict,
-      rule_id: verdict.ruleId,
-      target: truncateTarget(verdict.target),
-    })
-  }\n`;
+  const line = `${JSON.stringify({ timestamp: new Date().toISOString(), ...entry })}\n`;
 
   try {
     // The log lives under the config dir, not beside a script — a fresh
     // account has no `logs/hooks/` directory yet.
     await mkdir(dirname(logFile), { recursive: true, mode: 0o700 });
     await rotateIfNeeded(logFile);
-    await appendFile(logFile, entry, { mode: 0o600 });
+    await ensureAuditHeader(logFile, loaded);
+    await appendFile(logFile, line, { mode: 0o600 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[${HOOK_NAME}] log write failed: ${msg}`);
+  }
+}
+
+// Every verdict this adapter reaches gets logged — block/confirm/observe
+// from PreToolUse, flag from UserPromptSubmit — including `observe` entries
+// produced only for audit (never surfaced to the model). `input` is the raw
+// hook envelope, kept for session_id/tool_name context in the log line.
+// `loaded`, when given, is the policy load this verdict came from — passed
+// through so a fresh/rotated file gets its Story 19 audit header.
+export async function logVerdict(
+  family: Family,
+  input: HookInput,
+  verdict: Verdict,
+  loaded?: LoadResult,
+): Promise<void> {
+  await appendLogEntry({
+    session_id: input.session_id ?? null,
+    tool_name: input.tool_name ?? null,
+    family,
+    verdict: verdict.verdict,
+    rule_id: verdict.ruleId,
+    target: truncateTarget(verdict.target),
+  }, loaded);
+}
+
+// The "loud warning" AC2 requires: a rejected overlay (invalid TOML, a
+// lint-failing rule or override, a wrong-shaped table) must be visible
+// somewhere other than a verdict nobody asked for. This writes one entry
+// per warning to the SAME audit log, kind-tagged so `rules list`/a future
+// `doctor` can find it without parsing free-text `verdict` fields.
+export async function logPolicyWarnings(warnings: readonly string[], loaded?: LoadResult): Promise<void> {
+  for (const message of warnings) {
+    // oxlint-disable-next-line no-await-in-loop
+    await appendLogEntry({ kind: 'policy-warning', message }, loaded);
   }
 }

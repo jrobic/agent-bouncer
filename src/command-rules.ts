@@ -1,8 +1,18 @@
-// Command-guard rules: the destructive/exfiltration/escalation pattern
-// table plus the git policy (structural tokenizer, ratified conditional
-// grammars). Pure — no Bun/Node APIs, no harness protocol shapes — so any
-// adapter (Claude Code today, any future harness) can call checkBash()
-// with nothing but a command string.
+// Command-guard: the destructive/exfiltration/escalation pattern table
+// plus the git policy (structural tokenizer, ratified conditional
+// grammars). Pure — no Bun/Node APIs, no harness protocol shapes. The
+// regex table and every git-conditional list are policy data
+// (policy/baseline.toml, `rules.command.*`); this module owns the
+// tokenizer and the algorithms that interpret that data, parameterized via
+// createCommandChecker() — `checkBash`/`checkGit`/`classifyGitAllow` are
+// that algorithm bound to the embedded baseline.
+//
+// Two git subcommands stay engine code under their own named functions
+// (checkGitCheckoutNeedsConfirm / checkGitRestoreNeedsConfirm) rather than
+// TOML: `checkout`'s pathspec detection and `restore`'s staged-only form
+// both need real structural parsing (arbitrary positional counts, ref vs.
+// pathspec shape) that none of the three declarative forms — ask_flags,
+// safe_first_arg, safe_grammar — can express as data.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
 // The Bash matcher operates on the literal command STRING. Anything that
@@ -23,39 +33,10 @@
 // Treat this as protection against accidental destruction and the most
 // obvious exfiltration patterns — not against an adversarial caller.
 
-import type { BashRule, Verdict } from './types.ts';
-
-// ─── Tier 1 helper: rm -rf with dangerous target detection ───────────
-
-// Dangerous absolute or special-form targets that destroy the system or
-// the user's whole tree when paired with rm -rf.
-export const DANGEROUS_RM_TARGETS: readonly RegExp[] = [
-  /^\/$/, // /
-  /^\/\*$/, // /*
-  /^~\/?$/, // ~ or ~/
-  /^~\/\*$/, // ~/*
-  /^\$\{?HOME\}?\/?$/, // $HOME or ${HOME}/
-  /^\$\{?HOME\}?\/\*$/, // $HOME/*
-  /^\.\.\/?$/, // .. or ../
-  /^\.\.\/\*$/, // ../*
-  /^\*$/, // *
-  /^\.\/?$/, // . or ./
-  /^\/(etc|usr|var|bin|sbin|lib|sys|proc|boot|root|home|opt|srv|System|Library|Applications)(\/.*)?$/,
-];
-
-// Whitelist exposed for documentation and external introspection. NOTE:
-// the runtime check (checkRmRf) deliberately ignores this list when the
-// target is in DANGEROUS_RM_TARGETS — dangerous always wins. The list
-// describes "common, safe rm -rf intents"; non-dangerous targets are
-// already implicitly allowed because no rule fires.
-export const RM_ALLOWED_TARGETS: readonly RegExp[] = [
-  /(^|\/)node_modules(\/[^\s]*)?$/,
-  /(^|\/)dist(\/[^\s]*)?$/,
-  /(^|\/)\.next(\/[^\s]*)?$/,
-  /(^|\/)\.turbo(\/[^\s]*)?$/,
-  /(^|\/)coverage(\/[^\s]*)?$/,
-  /(^|\/)\.cache(\/[^\s]*)?$/,
-];
+import { BASELINE } from './policy/baseline.ts';
+import { compileRules, firstMatch } from './policy/match.ts';
+import type { AskFlagsRule, CommandGitPolicy, CommandPolicy, SafeFirstArgRule, SafeGrammarRule } from './policy/schema.ts';
+import type { Verdict } from './types.ts';
 
 export function hasRmRf(segment: string): boolean {
   // Both -r/-R/--recursive AND -f/-F/--force must appear in the segment.
@@ -64,11 +45,11 @@ export function hasRmRf(segment: string): boolean {
   return hasR && hasF;
 }
 
-export function isDangerousRmTarget(target: string): boolean {
-  return DANGEROUS_RM_TARGETS.some((re) => re.test(target));
+function isDangerousRmTarget(target: string, dangerousTargets: readonly RegExp[]): boolean {
+  return dangerousTargets.some((re) => re.test(target));
 }
 
-export function checkRmRf(cmd: string): Verdict | null {
+function checkRmRfWith(cmd: string, dangerousTargets: readonly RegExp[]): Verdict | null {
   // Slice the command at command separators so we evaluate each rm
   // segment independently of surrounding pipes / chains.
   const rmSegments = cmd.match(/\brm\b[^;|&\n]*/g) ?? [];
@@ -76,9 +57,10 @@ export function checkRmRf(cmd: string): Verdict | null {
     if (!hasRmRf(seg)) continue;
     const tokens = seg.split(/\s+/).slice(1).filter((t) => t && !t.startsWith('-'));
     for (const target of tokens) {
-      // Dangerous always wins; the allowlist is informative only and
-      // cannot override system-path destruction (e.g. /etc/node_modules).
-      if (isDangerousRmTarget(target)) {
+      // Dangerous always wins; the RM_ALLOWED_TARGETS documented in
+      // policy/baseline.toml is informative only and cannot override
+      // system-path destruction (e.g. /etc/node_modules).
+      if (isDangerousRmTarget(target, dangerousTargets)) {
         return {
           verdict: 'block',
           ruleId: 'rm-rf-dangerous',
@@ -97,6 +79,11 @@ export type WrapperOptionPolicy = {
   readonly acceptsAssignments?: true;
 };
 
+// Tokenizer grammar, not security policy — how far a wrapper's OWN options
+// extend before the wrapped command begins. Stays engine code: these are
+// parsing rules for the structural tokenizer below, not a table of
+// verdicts, and none of the three declarative git-conditional forms model
+// "how many tokens does this prefix consume".
 export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolicy>> = {
   rtk: { flags: new Set(), optionsWithArg: new Set() },
   proxy: { flags: new Set(), optionsWithArg: new Set() },
@@ -112,163 +99,8 @@ export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolic
   builtin: { flags: new Set(), optionsWithArg: new Set() },
 };
 
-export const PRIVILEGE_ESCALATION_COMMANDS: ReadonlySet<string> = new Set([
-  'sudo',
-  'doas',
-  'pkexec',
-  'runas',
-  'please',
-]);
-
 const PRIVILEGE_ESCALATION_REASON =
   'Privilege escalation tool (sudo/doas/pkexec/runas/please) — confirm manually outside the agent session';
-
-// ─── Tier 1, 2, 3 — pattern rules ────────────────────────────────────
-
-export const BASH_RULES: readonly BashRule[] = [
-  // Tier 1 — destruction
-  {
-    regex: /\bdd\s+[^|;&\n]*\bof=\/dev\//,
-    ruleId: 'dd-device-write',
-    reason: 'dd writing to a block device (/dev/...) — likely disk wipe',
-  },
-  {
-    regex: /\bmkfs(\.\w+)?\b/,
-    ruleId: 'mkfs',
-    reason: 'mkfs reformats a filesystem — irreversible',
-  },
-  {
-    regex: />\s*\/dev\/(sda|sdb|disk|nvme|hd|md|loop)\w*/,
-    ruleId: 'device-redirect',
-    reason: 'Shell redirection writing to a block device (potential disk corruption)',
-  },
-  {
-    regex: /\btee\s+(?:-a\s+|--append\s+)?\/dev\/(sda|sdb|disk|nvme|hd|md|loop)\w*/,
-    ruleId: 'device-redirect',
-    reason: 'tee writing to a block device (potential disk corruption)',
-  },
-  {
-    regex: /\bchmod\s+-R\s+0?[0-7]{1,4}\s+\/(?:\s|$)/,
-    ruleId: 'chmod-root',
-    reason: 'Recursive chmod on / — likely to break the system',
-  },
-  {
-    regex: /\bchown\s+-R\s+\S+\s+\/(?:\s|$)/,
-    ruleId: 'chown-root',
-    reason: 'Recursive chown on / — likely to break the system',
-  },
-
-  // Tier 2 — exfiltration
-  {
-    // -d / --data / --data-binary / --data-raw / --data-urlencode use `@<path>`.
-    // -F / --form uses `field=@<path>`.
-    // -T / --upload-file take a bare path argument.
-    regex:
-      /\bcurl\b[^|;&\n]*?\s(?:(?:-d|--data|--data-binary|--data-raw|--data-urlencode)\s+@\S+|(?:-F|--form)\s+\S*=@|(?:-T|--upload-file)\s+\S+)/,
-    ruleId: 'curl-file-upload',
-    reason: 'curl uploading a local file (potential exfiltration)',
-  },
-  {
-    regex: /\bwget\b[^|;&\n]*--post-(?:file|data)=/,
-    ruleId: 'wget-post-file',
-    reason: 'wget posting a local file or data (potential exfiltration)',
-  },
-  {
-    regex: /\bn(?:c|cat)\b[^|;&\n]*<\s*[^\s<]/,
-    ruleId: 'nc-file-redirect',
-    reason: 'netcat reading a file via stdin redirection (exfiltration)',
-  },
-
-  // Tier 3 — escalation / shell pollution
-  {
-    regex: /\bchmod\s+(?:[ugoa]*\+s|[0-7]?[2-7][0-7]{2,3})\b/,
-    ruleId: 'setuid',
-    reason: 'chmod setting setuid/setgid bit',
-  },
-  {
-    regex: /(?:>|>>)\s*\/etc\/(sudoers|passwd|shadow|hosts|ssh\/sshd_config)\b/,
-    ruleId: 'etc-write',
-    reason: 'Writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_config)',
-  },
-  {
-    regex: /\btee\s+(?:-a\s+|--append\s+)?\/etc\/(sudoers|passwd|shadow|hosts|ssh\/sshd_config)\b/,
-    ruleId: 'etc-write',
-    reason: 'tee writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_config)',
-  },
-  {
-    regex: /\bkill(?:all)?\s+(?:-(?:9|KILL)\s+)?(?:-?-?\s*)?(?:1|init)\b/,
-    ruleId: 'kill-init',
-    reason: 'Killing PID 1 / init — system halt',
-  },
-  {
-    regex: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
-    ruleId: 'fork-bomb',
-    reason: 'Fork bomb pattern detected',
-  },
-  {
-    regex: /(?:curl|wget)\b[^|;&\n]*\|\s*(?:sh|bash|zsh|ksh|fish|sudo)\b/,
-    ruleId: 'download-exec',
-    reason: 'Piping curl/wget output directly to a shell (download-and-execute)',
-  },
-  {
-    // Matches both `eval $(curl ...)` and `eval `curl ...`` (backticks).
-    regex: /\beval\s+["']?(?:\$\(|`)\s*(?:curl|wget)\b/,
-    ruleId: 'eval-download',
-    reason: 'eval of curl/wget output (download-and-execute)',
-  },
-  {
-    regex: /\b(?:bash|sh|zsh|ksh)\s+<\s*\(\s*(?:curl|wget)\b/,
-    ruleId: 'process-substitution-download',
-    reason: 'Process substitution feeding curl/wget output to a shell (download-and-execute)',
-  },
-];
-
-// ─── Git guard: ASK before history-rewriting / remote / destructive ops ──
-//
-// Maintainable by inversion: a small SAFE_GIT allowlist is auto-approved;
-// every OTHER subcommand surfaces an interactive prompt ("ask"). New or
-// unknown git subcommands therefore default to "ask" without editing this
-// file — the open-ended dangerous set never has to be enumerated.
-
-// Subcommands safe with any flags (read-only, or local-additive).
-export const SAFE_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set([
-  'status',
-  'diff',
-  'log',
-  'show',
-  'blame',
-  'shortlog',
-  'describe',
-  'rev-parse',
-  'ls-files',
-  'cat-file',
-  'grep',
-  'add',
-  'commit',
-  'fetch',
-  // Pure reads (network reads included) — high false-positive volume in
-  // real transcripts before they were allowlisted.
-  'ls-remote',
-  'for-each-ref',
-  'ls-tree',
-  'check-ignore',
-  'rev-list',
-  'merge-base',
-  // Pure reads, second batch. NOTE: subcommands with writing variants
-  // (worktree, apply, restore) do NOT belong here — they get conditional
-  // forms in gitSubcommandNeedsConfirm.
-  'show-ref',
-  'show-branch',
-  'name-rev',
-  'count-objects',
-  'var',
-  'range-diff',
-  'cherry',
-  'whatchanged',
-  'diff-tree',
-  'diff-index',
-  'fsck',
-]);
 
 // Tokens that may legitimately precede `git` at command position.
 export const GIT_BENIGN_PREFIXES: ReadonlySet<string> = new Set([
@@ -497,18 +329,18 @@ function isCommandNamed(token: string | undefined, names: ReadonlySet<string>): 
   return names.has(basename);
 }
 
-export function checkPrivilegeEscalation(cmd: string): Verdict | null {
+function checkPrivilegeEscalationWith(cmd: string, privilegeCommands: ReadonlySet<string>): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const prefix = consumeCommandPrefixes(tokens, PRIVILEGE_BENIGN_PREFIXES);
     const index = prefix.ambiguous
       ? tokens.findIndex((token, tokenIndex) =>
         tokenIndex >= prefix.index
-        && isCommandNamed(token.value, PRIVILEGE_ESCALATION_COMMANDS)
+        && isCommandNamed(token.value, privilegeCommands)
       )
       : prefix.index;
     if (
       index === -1
-      || !isCommandNamed(tokens[index]?.value, PRIVILEGE_ESCALATION_COMMANDS)
+      || !isCommandNamed(tokens[index]?.value, privilegeCommands)
     ) continue;
     return {
       verdict: 'block',
@@ -520,20 +352,9 @@ export function checkPrivilegeEscalation(cmd: string): Verdict | null {
   return null;
 }
 
-const GIT_CONFIG_READ_MODES: ReadonlySet<string> = new Set([
-  '--get',
-  '--get-all',
-  '--get-regexp',
-  '--get-urlmatch',
-  '--list',
-  '-l',
-  'get',
-  'list',
-]);
-
-export function isGitConfigRead(cmdOrRest: string | readonly string[]): boolean {
+export function isGitConfigRead(cmdOrRest: string | readonly string[], configReadModes: readonly string[]): boolean {
   if (typeof cmdOrRest !== 'string') {
-    return GIT_CONFIG_READ_MODES.has(cmdOrRest[0] ?? '');
+    return configReadModes.includes(cmdOrRest[0] ?? '');
   }
 
   const segments = tokenizeShellSegments(cmdOrRest);
@@ -542,13 +363,13 @@ export function isGitConfigRead(cmdOrRest: string | readonly string[]): boolean 
     .filter((parsed): parsed is GitCommand => parsed?.sub === 'config');
   return configCommands.length > 0
     && configCommands.every((parsed) =>
-      parsed.forceConfirm !== true && GIT_CONFIG_READ_MODES.has(parsed.rest[0] ?? '')
+      parsed.forceConfirm !== true && configReadModes.includes(parsed.rest[0] ?? '')
     );
 }
 
 const GIT_REMOTE_URL_KEY = /^remote\.[^\s]+\.url$/;
 
-export function hasUnsafeGitConfigRemoteUrl(cmd: string): boolean {
+export function hasUnsafeGitConfigRemoteUrl(cmd: string, configReadModes: readonly string[]): boolean {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const gitIndex = tokens.findIndex((token) =>
       token.value === 'git' || token.value.endsWith('/git')
@@ -563,7 +384,7 @@ export function hasUnsafeGitConfigRemoteUrl(cmd: string): boolean {
     if (
       parsed?.sub !== 'config'
       || parsed.forceConfirm === true
-      || !isGitConfigRead(parsed.rest)
+      || !isGitConfigRead(parsed.rest, configReadModes)
     ) return true;
   }
   return false;
@@ -575,104 +396,80 @@ function positionalArgs(rest: readonly string[]): string[] {
   return rest.filter((t) => !t.startsWith('-') && !/[<>]/.test(t));
 }
 
-export function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[]): boolean {
-  if (SAFE_GIT_SUBCOMMANDS.has(sub)) return false;
+// The two subcommands the declarative vocabulary cannot express — see the
+// module header. Both keep exactly the original engine logic; only the
+// name changed (they were inline branches of gitSubcommandNeedsConfirm).
 
-  // Conditionally-safe: allow the read/additive form, ask on destructive flags.
-  if (sub === 'branch') {
-    return rest.some((t) => /^(-d|-D|--delete|-m|-M|--move|-f|--force)$/.test(t));
+function checkGitCheckoutNeedsConfirm(rest: readonly string[]): boolean {
+  // Branch switching and branch creation are safe (git refuses to clobber
+  // a dirty tree); the PATHSPEC form overwrites local edits and asks.
+  if (rest.some((t) => t === '--' || /^(-f|--force|-B|--ours|--theirs|-p|--patch)$/.test(t))) {
+    return true;
   }
-  if (sub === 'tag') {
-    return rest.some((t) => /^(-d|--delete)$/.test(t));
-  }
-  if (sub === 'stash') {
-    return rest.length > 0 && /^(drop|clear)$/.test(rest[0]!);
-  }
-  if (sub === 'reflog') {
-    // Fail closed: only the documented read forms are silent. New reflog
-    // subcommands must be reviewed before joining this allowlist.
-    return rest.length > 0 && !/^(show|list|exists)$/.test(rest[0]!);
-  }
-  if (sub === 'submodule') {
-    return rest.length > 0 && !/^(status|summary)$/.test(rest[0]!);
-  }
-  if (sub === 'remote') {
-    return rest.length > 0 && !/^(-v|--verbose|show|get-url)$/.test(rest[0]!);
-  }
-  if (sub === 'config') {
-    // Reads only; positional reads (`config core.hooksPath`) still ask
-    // because they are token-identical to `config key value` writes.
-    return !isGitConfigRead(rest);
-  }
-  if (sub === 'bundle') {
-    return !/^(verify|list-heads)$/.test(rest[0] ?? '');
-  }
-  if (sub === 'symbolic-ref') {
-    if (rest.some((t) => /^(-d|--delete)$/.test(t))) return true;
-    // One positional (`symbolic-ref [-q|--short] HEAD`) reads the ref;
-    // two (`symbolic-ref HEAD refs/heads/x`) rewrites it.
-    return positionalArgs(rest).length > 1;
-  }
-  if (sub === 'checkout') {
-    // Branch switching and branch creation are safe (git refuses to clobber
-    // a dirty tree); the PATHSPEC form overwrites local edits and asks.
-    if (rest.some((t) => t === '--' || /^(-f|--force|-B|--ours|--theirs|-p|--patch)$/.test(t))) {
+  const positionals = positionalArgs(rest);
+  // Explicit pathspec shapes: `.`, `..`, `./x`, globs.
+  if (positionals.some((t) => /^\.{1,2}(\/|$)/.test(t) || /[*?[]/.test(t))) return true;
+  // Without a create flag, two positionals mean `checkout <ref> <file>`.
+  const creates = rest.some((t) => /^(-b|-t|--track|--detach|--orphan)$/.test(t));
+  return !creates && positionals.length > 1;
+}
+
+function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
+  // Only the ratified index-only form is silent. A preceding option can
+  // consume `--staged`, and any additional option needs explicit review.
+  return !(
+    rest.length === 2
+    && rest[0] === '--staged'
+    && !rest[1]?.startsWith('-')
+  );
+}
+
+// The interpreter for the three declarative git-conditional forms (see
+// policy/schema.ts). `checkout` and `restore` fall through to the two
+// named engine functions above; every other subcommand not in
+// `safe_subcommands` and not covered by any declarative entry is the
+// catch-all — push, rebase, reset, clean, bisect, cherry-pick, revert, gc,
+// rm, filter-branch/filter-repo, … — and always needs confirmation.
+function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: CommandGitPolicy): boolean {
+  if (git.safe_subcommands.includes(sub)) return false;
+
+  const askFlags = git.ask_flags.find((e: AskFlagsRule) => e.sub === sub);
+  if (askFlags) {
+    if (rest.some((t) => askFlags.flags.includes(t))) return true;
+    if (askFlags.max_positionals !== undefined && positionalArgs(rest).length > askFlags.max_positionals) {
       return true;
     }
-    const positionals = positionalArgs(rest);
-    // Explicit pathspec shapes: `.`, `..`, `./x`, globs.
-    if (positionals.some((t) => /^\.{1,2}(\/|$)/.test(t) || /[*?[]/.test(t))) return true;
-    // Without a create flag, two positionals mean `checkout <ref> <file>`.
-    const creates = rest.some((t) => /^(-b|-t|--track|--detach|--orphan)$/.test(t));
-    return !creates && positionals.length > 1;
-  }
-  if (sub === 'switch') {
-    // Takes only branch names (never pathspecs) — safe unless forced.
-    return rest.some((t) => /^(-C|--force-create|-f|--force|--discard-changes)$/.test(t));
-  }
-  if (sub === 'pull' || sub === 'merge') {
-    // Only the two ratified grammars are silent. In particular,
-    // `-m --ff-only` consumes the apparent marker as a message.
-    const expectedLength = sub.startsWith('p') ? 1 : 2;
-    return !(
-      rest.length === expectedLength
-      && rest[0] === '--ff-only'
-      && (expectedLength === 1 || !rest[1]?.startsWith('-'))
-    );
-  }
-  if (sub === 'worktree') {
-    // `worktree list` reads; add/remove/prune/move/lock mutate the tree.
-    return !/^list$/.test(rest[0] ?? '');
-  }
-  if (sub === 'apply') {
-    // Only the ratified `--check [patch]` grammar is silent. Other options
-    // may consume a marker-looking token or turn a reporting mode into apply.
-    return !(
-      rest[0] === '--check'
-      && rest.length <= 2
-      && (rest.length === 1 || !rest[1]?.startsWith('-'))
-    );
-  }
-  if (sub === 'restore') {
-    // Only the ratified index-only form is silent. A preceding option can
-    // consume `--staged`, and any additional option needs explicit review.
-    return !(
-      rest.length === 2
-      && rest[0] === '--staged'
-      && !rest[1]?.startsWith('-')
-    );
+    return false;
   }
 
-  // Everything else (push, rebase, reset, clean, bisect, cherry-pick,
-  // revert, gc, rm, filter-branch/filter-repo, …) requires confirmation.
+  const safeFirstArg = git.safe_first_arg.find((e: SafeFirstArgRule) => e.sub === sub);
+  if (safeFirstArg) {
+    if (rest.length === 0) return !safeFirstArg.safe_when_absent;
+    const inList = safeFirstArg.values.includes(rest[0]!);
+    const safe = safeFirstArg.invert ? !inList : inList;
+    return !safe;
+  }
+
+  const safeGrammar = git.safe_grammar.find((e: SafeGrammarRule) => e.sub === sub);
+  if (safeGrammar) {
+    const matches = safeGrammar.sequences.some((seq) => {
+      if (seq.length !== rest.length) return false;
+      return seq.every((tok, i) => tok === '*' ? !rest[i]!.startsWith('-') : tok === rest[i]);
+    });
+    return !matches;
+  }
+
+  if (sub === 'checkout') return checkGitCheckoutNeedsConfirm(rest);
+  if (sub === 'restore') return checkGitRestoreNeedsConfirm(rest);
+
   return true;
 }
 
-export function checkGit(cmd: string): Verdict | null {
+function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
-    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest)) {
+    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) {
       return {
         verdict: 'confirm',
         ruleId: 'git-protected',
@@ -687,7 +484,7 @@ export function checkGit(cmd: string): Verdict | null {
 
 // Additive, log-only classification: identifies a git command allowed
 // because a NAMED conditional rule decided it (e.g. `pull --ff-only`'s
-// ratified grammar), as opposed to an unconditional SAFE_GIT_SUBCOMMANDS
+// ratified grammar), as opposed to an unconditional safe_subcommands
 // membership where no rule "fired" in any interesting sense. Never affects
 // the permission decision — checkGit already returned null (allow) before a
 // caller has any reason to call this. Exists purely so the adapter's audit
@@ -695,12 +492,12 @@ export function checkGit(cmd: string): Verdict | null {
 // which never fire (spec User Story 10), without checkGit itself growing a
 // third return shape that every existing caller and fixture would have to
 // account for.
-export function classifyGitAllow(cmd: string): Verdict | null {
+function classifyGitAllowWith(cmd: string, git: CommandGitPolicy): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd)) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed || parsed.forceConfirm) continue;
-    if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest)) continue;
-    if (SAFE_GIT_SUBCOMMANDS.has(parsed.sub)) continue;
+    if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) continue;
+    if (git.safe_subcommands.includes(parsed.sub)) continue;
     return {
       verdict: 'observe',
       ruleId: `git-conditional-${parsed.sub}`,
@@ -711,23 +508,67 @@ export function classifyGitAllow(cmd: string): Verdict | null {
   return null;
 }
 
-export function checkBash(cmd: string): Verdict | null {
-  if (!cmd) return null;
-
-  // Special-cased: rm -rf needs allowlist logic before generic regex.
-  const rmHit = checkRmRf(cmd);
-  if (rmHit) return rmHit;
-
-  const privilegeHit = checkPrivilegeEscalation(cmd);
-  if (privilegeHit) return privilegeHit;
-
-  // Hard-block rules take priority over the git "confirm" guard.
-  for (const rule of BASH_RULES) {
-    if (rule.regex.test(cmd)) {
-      return { verdict: 'block', ruleId: rule.ruleId, reason: rule.reason, target: cmd };
-    }
-  }
-
-  // Protected git operations → interactive prompt ("confirm").
-  return checkGit(cmd);
+export interface CommandChecker {
+  readonly checkBash: (cmd: string) => Verdict | null;
+  readonly checkGit: (cmd: string) => Verdict | null;
+  readonly classifyGitAllow: (cmd: string) => Verdict | null;
 }
+
+/**
+ * Builds {checkBash, checkGit, classifyGitAllow} bound to the given policy
+ * (baseline, or a merged baseline+overlay+override set from
+ * src/policy/load.ts).
+ */
+export function createCommandChecker(policy: CommandPolicy): CommandChecker {
+  const compiledBash = compileRules(policy.bash);
+  const dangerousTargets = policy.rm_rf.dangerous_targets.map((pattern) => new RegExp(pattern));
+  const privilegeCommands = new Set(policy.privilege_escalation.commands);
+  const git = policy.git;
+
+  const checkGit = (cmd: string): Verdict | null => checkGitWith(cmd, git);
+  const classifyGitAllow = (cmd: string): Verdict | null => classifyGitAllowWith(cmd, git);
+
+  const checkBash = (cmd: string): Verdict | null => {
+    if (!cmd) return null;
+
+    // Special-cased: rm -rf needs allowlist logic before generic regex.
+    const rmHit = checkRmRfWith(cmd, dangerousTargets);
+    if (rmHit) return rmHit;
+
+    const privilegeHit = checkPrivilegeEscalationWith(cmd, privilegeCommands);
+    if (privilegeHit) return privilegeHit;
+
+    // Hard-block rules take priority over the git "confirm" guard.
+    const hit = firstMatch(compiledBash, cmd, 'block');
+    if (hit) return hit;
+
+    // Protected git operations → interactive prompt ("confirm").
+    return checkGit(cmd);
+  };
+
+  return { checkBash, checkGit, classifyGitAllow };
+}
+
+const BASELINE_CHECKER = createCommandChecker(BASELINE.rules.command);
+
+/** Uses the embedded baseline's command policy. */
+export const checkBash = BASELINE_CHECKER.checkBash;
+/** Uses the embedded baseline's git conditional policy. */
+export const checkGit = BASELINE_CHECKER.checkGit;
+/** Uses the embedded baseline's git conditional policy. */
+export const classifyGitAllow = BASELINE_CHECKER.classifyGitAllow;
+
+// Backward-compatible standalone exports (tests exercise checkRmRf directly).
+export function checkRmRf(cmd: string): Verdict | null {
+  return checkRmRfWith(cmd, BASELINE.rules.command.rm_rf.dangerous_targets.map((p) => new RegExp(p)));
+}
+export function checkPrivilegeEscalation(cmd: string): Verdict | null {
+  return checkPrivilegeEscalationWith(cmd, new Set(BASELINE.rules.command.privilege_escalation.commands));
+}
+
+/** The embedded baseline's unconditionally-safe git subcommands. */
+export const SAFE_GIT_SUBCOMMANDS: ReadonlySet<string> = new Set(BASELINE.rules.command.git.safe_subcommands);
+/** The embedded baseline's privilege-escalation tool names. */
+export const PRIVILEGE_ESCALATION_COMMANDS: ReadonlySet<string> = new Set(
+  BASELINE.rules.command.privilege_escalation.commands,
+);

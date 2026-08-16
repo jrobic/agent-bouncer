@@ -113,7 +113,7 @@
       "expected": [
         {
           "verdict": "block",
-          "ruleId": "device-redirect"
+          "ruleId": "device-redirect-shell"
         }
       ]
     },
@@ -126,7 +126,7 @@
       "expected": [
         {
           "verdict": "block",
-          "ruleId": "device-redirect"
+          "ruleId": "device-redirect-tee"
         }
       ]
     },
@@ -269,7 +269,7 @@
       "expected": [
         {
           "verdict": "block",
-          "ruleId": "etc-write"
+          "ruleId": "etc-write-shell"
         }
       ]
     },
@@ -282,7 +282,7 @@
       "expected": [
         {
           "verdict": "block",
-          "ruleId": "etc-write"
+          "ruleId": "etc-write-tee"
         }
       ]
     },

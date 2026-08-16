@@ -170,24 +170,24 @@ describe('secret-rules: PATH_RULES', () => {
 });
 
 describe('secret-rules: BASH_RULES (secret)', () => {
-  test('ruleId bash-git-leak: git config credential.* is denied', () => {
-    expect(checkSecretBash('git config credential.helper store')?.ruleId).toBe('bash-git-leak');
+  test('ruleId bash-git-leak-credential: git config credential.* is denied', () => {
+    expect(checkSecretBash('git config credential.helper store')?.ruleId).toBe('bash-git-leak-credential');
   });
 
   // bash-git-leak is split in two entries. credential and user.signingkey
   // are auth mechanisms — they stay blocked unconditionally, reads
   // included; remote.*.url carries the read exception, because reading a
   // remote URL is the same read-only class as `git remote get-url`.
-  test('ruleId bash-git-leak: git config --get credential.helper stays denied (read included)', () => {
-    expect(checkSecretBash('git config --get credential.helper')?.ruleId).toBe('bash-git-leak');
+  test('ruleId bash-git-leak-credential: git config --get credential.helper stays denied (read included)', () => {
+    expect(checkSecretBash('git config --get credential.helper')?.ruleId).toBe('bash-git-leak-credential');
   });
 
-  test('ruleId bash-git-leak: git config user.signingkey ABC is denied', () => {
-    expect(checkSecretBash('git config user.signingkey ABC')?.ruleId).toBe('bash-git-leak');
+  test('ruleId bash-git-leak-credential: git config user.signingkey ABC is denied', () => {
+    expect(checkSecretBash('git config user.signingkey ABC')?.ruleId).toBe('bash-git-leak-credential');
   });
 
-  test('ruleId bash-git-leak: git config --get user.signingkey stays denied (read included)', () => {
-    expect(checkSecretBash('git config --get user.signingkey')?.ruleId).toBe('bash-git-leak');
+  test('ruleId bash-git-leak-credential: git config --get user.signingkey stays denied (read included)', () => {
+    expect(checkSecretBash('git config --get user.signingkey')?.ruleId).toBe('bash-git-leak-credential');
   });
 
   // Discriminating write vector, deliberately WITHOUT credentials in the URL:
@@ -195,25 +195,25 @@ describe('secret-rules: BASH_RULES (secret)', () => {
   // rule comes second, the assertion below would stay green even if the
   // remote.*.url entry disappeared entirely — the first match wins, so rule
   // order decides the reported ruleId.
-  test('ruleId bash-git-leak: writing a remote url is denied (no credentials in the URL)', () => {
+  test('ruleId bash-git-leak-remote-url: writing a remote url is denied (no credentials in the URL)', () => {
     expect(checkSecretBash('git config remote.origin.url https://host/x.git')?.ruleId).toBe(
-      'bash-git-leak',
+      'bash-git-leak-remote-url',
     );
   });
 
-  test('ruleId bash-git-leak: a quoted remote-url key stays an effective write', () => {
+  test('ruleId bash-git-leak-remote-url: a quoted remote-url key stays an effective write', () => {
     expect(
       checkSecretBash('git config "remote.origin.url" https://host/x.git')?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
     expect(
       checkSecretBash("git config 'remote.origin.url' https://host/x.git")?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
-  test('ruleId bash-git-leak: a continued remote-url key stays an effective write', () => {
+  test('ruleId bash-git-leak-remote-url: a continued remote-url key stays an effective write', () => {
     expect(
       checkSecretBash('git config remote.origin.\\\nurl https://host/x.git')?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
   test('benign: reading a remote url with --get passes', () => {
@@ -246,34 +246,34 @@ describe('secret-rules: BASH_RULES (secret)', () => {
     ).toBeNull();
   });
 
-  test('ruleId bash-git-leak: a compound read cannot hide a later remote-url write', () => {
+  test('ruleId bash-git-leak-remote-url: a compound read cannot hide a later remote-url write', () => {
     expect(
       checkSecretBash(
         'git config --get remote.origin.url && git config remote.origin.url https://host/x.git',
       )?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
-  test('ruleId bash-git-leak: the ratified wrapped write is denied in its own segment', () => {
+  test('ruleId bash-git-leak-remote-url: the ratified wrapped write is denied in its own segment', () => {
     expect(
       checkSecretBash(
         'git config --get user.name; command -- git config remote.origin.url https://host/x.git',
       )?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
-  test('ruleId bash-git-leak: a read in one segment cannot exempt an unrecognised remote-url write segment', () => {
+  test('ruleId bash-git-leak-remote-url: a read in one segment cannot exempt an unrecognised remote-url write segment', () => {
     expect(
       checkSecretBash(
         'git config --get user.name; ! git config remote.origin.url https://host/x.git',
       )?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
-  test('ruleId bash-git-leak: a shell comment cannot turn a remote-url write into --get', () => {
+  test('ruleId bash-git-leak-remote-url: a shell comment cannot turn a remote-url write into --get', () => {
     expect(
       checkSecretBash('git config remote.origin.url https://host/x.git # --get')?.ruleId,
-    ).toBe('bash-git-leak');
+    ).toBe('bash-git-leak-remote-url');
   });
 
   // `git remote -v` is read-only and auto-approved by command-guard; the

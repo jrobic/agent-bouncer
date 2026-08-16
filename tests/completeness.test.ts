@@ -3,10 +3,8 @@ import { join } from 'node:path';
 
 import { describe, expect, test } from 'bun:test';
 
-import { BASH_RULES as COMMAND_BASH_RULES } from '../src/command-rules.ts';
-import { PROMPT_RULES } from '../src/prompt-rules.ts';
-import { SECRET_BASH_RULES, PATH_RULES } from '../src/secret-rules.ts';
-import { SECRET_RULES } from '../src/write-secret-rules.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
+import type { RegexRule } from '../src/policy/schema.ts';
 
 // The exhaustiveness lock: for each table, the SET of ruleIds carrying a
 // behavioural case must EQUAL the set of effective ruleIds. A rule added
@@ -68,6 +66,8 @@ function expectRuleIdsToMatch(
   });
 }
 
+const ids = (rules: readonly RegexRule[]) => rules.map((r) => r.id);
+
 describe('completeness: every effective rule carries a behavioural case', () => {
   test('command rules', () => {
     // Three ids are decided in code rather than by a table row:
@@ -76,7 +76,7 @@ describe('completeness: every effective rule carries a behavioural case', () => 
     expectRuleIdsToMatch(
       'command',
       [
-        ...COMMAND_BASH_RULES.map((r) => r.ruleId),
+        ...ids(BASELINE.rules.command.bash),
         'rm-rf-dangerous',
         'sudo',
         'git-protected',
@@ -86,14 +86,14 @@ describe('completeness: every effective rule carries a behavioural case', () => 
   });
 
   test('secret rules', () => {
-    // PATH_RULES carry their bare id here (exercised as path rules
+    // secret.path rules carry their bare id here (exercised as path rules
     // directly), not the `bash-` prefix they get when reached through a
     // bash command.
     expectRuleIdsToMatch(
       'secret',
       [
-        ...SECRET_BASH_RULES.map((r) => r.ruleId),
-        ...PATH_RULES.map((r) => r.id),
+        ...ids(BASELINE.rules.secret.bash),
+        ...ids(BASELINE.rules.secret.path),
       ],
       coveredRuleIds('secret-rules.test.ts'),
     );
@@ -102,15 +102,18 @@ describe('completeness: every effective rule carries a behavioural case', () => 
   test('write-secret rules', () => {
     expectRuleIdsToMatch(
       'write-secret',
-      SECRET_RULES.map((r) => r.ruleId),
+      ids(BASELINE.rules.write_secret),
       coveredRuleIds('write-secret-rules.test.ts'),
     );
   });
 
   test('prompt rules', () => {
+    // base64-blob is a plain 7th entry of rules.prompt now (ticket 06 — it
+    // used to be a module constant evaluated apart from the table), so no
+    // extra id needs to be added on this side.
     expectRuleIdsToMatch(
       'prompt',
-      [...PROMPT_RULES.map((r) => r.ruleId), 'base64-blob'],
+      ids(BASELINE.rules.prompt),
       coveredRuleIds('prompt-rules.test.ts'),
     );
   });

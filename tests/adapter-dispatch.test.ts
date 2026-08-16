@@ -19,10 +19,10 @@ function hit(family: FamilyVerdict['family'], verdictKind: FamilyVerdict['verdic
 
 describe('strictestOf: severity ordering', () => {
   test('block beats confirm regardless of which family found it first', () => {
-    const hits = [hit('command', 'confirm', 'git-protected'), hit('secret', 'block', 'bash-git-leak')];
-    expect(strictestOf(hits)?.verdict.ruleId).toBe('bash-git-leak');
+    const hits = [hit('command', 'confirm', 'git-protected'), hit('secret', 'block', 'bash-git-leak-credential')];
+    expect(strictestOf(hits)?.verdict.ruleId).toBe('bash-git-leak-credential');
     // Order-independence: the same two hits, reversed, must agree.
-    expect(strictestOf([...hits].reverse())?.verdict.ruleId).toBe('bash-git-leak');
+    expect(strictestOf([...hits].reverse())?.verdict.ruleId).toBe('bash-git-leak-credential');
   });
 
   test('confirm beats observe', () => {
