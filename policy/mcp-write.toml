@@ -2,6 +2,9 @@
 # a call whose operation name starts with one of these prefixes is a
 # silent read). See docs/reference/policy.md.
 
+# Debatable (ticket 13): a prefix match, not a full-name match — an MCP
+# tool named e.g. "getUpdates" (mutating despite the "get" prefix) would
+# be silently treated as a read by any consumer, not just this one.
 [rules.mcp_write]
 read_prefixes = [
     "get",

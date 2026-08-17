@@ -23,36 +23,47 @@ import secretData from '../../policy/secret.toml';
 import writeSecretData from '../../policy/write-secret.toml';
 import type { RawPolicyFile, RulesPolicy } from './schema.ts';
 
-// One typed interface per family file, each `Pick`-ing only the ONE key
-// under `rules` that family owns. Cast at the import boundary (where each
-// data value's shape genuinely IS that one family, TOML's untyped `unknown`
-// import notwithstanding) instead of at the end of the spread — the spread
-// below is then structurally a complete RulesPolicy on its own (one Pick
-// per key, no more no less), so dropping a family from the spread becomes
-// a real tsc error (a missing property) instead of a silently-accepted
-// `as RulesPolicy` cast papering over the gap.
-interface CommandFamilyFile {
-  readonly rules: Pick<RulesPolicy, 'command'>;
-}
-interface SecretFamilyFile {
-  readonly rules: Pick<RulesPolicy, 'secret'>;
-}
-interface McpWriteFamilyFile {
-  readonly rules: Pick<RulesPolicy, 'mcp_write'>;
-}
-interface WriteSecretFamilyFile {
-  readonly rules: Pick<RulesPolicy, 'write_secret'>;
-}
-interface PromptFamilyFile {
-  readonly rules: Pick<RulesPolicy, 'prompt'>;
+// assertExactlyOneFamily is the runtime check for each family file's
+// [rules] table: a stray extra key (a family file accidentally nesting a
+// second family's table under its own) or the WRONG key entirely would
+// otherwise spread silently into mergedRules, either shadowing or being
+// shadowed by the real owner depending on spread order. Every family file
+// must contribute EXACTLY its one expected key under `[rules]`, checked
+// at BUILD/import time (this runs at module load, before BASELINE is
+// ever read), or the whole process fails loudly and immediately — the
+// baseline has no "fall back" path the way a bad overlay does, so this
+// failure mode must be as early and as loud as possible.
+//
+// A family silently MISSING from the spread below is caught separately,
+// by something even cheaper than this function: `mergedRules` is
+// explicitly typed `RulesPolicy`, so TypeScript's object-literal
+// target-type checking already rejects a spread that omits a required
+// key, no runtime check needed for that half.
+export function assertExactlyOneFamily<K extends keyof RulesPolicy>(
+  data: unknown,
+  expectedKey: K,
+  filename: string,
+): { readonly rules: Pick<RulesPolicy, K> } {
+  const rules = data !== null && typeof data === 'object' ? (data as Record<string, unknown>).rules : undefined;
+  if (rules === null || typeof rules !== 'object') {
+    throw new Error(`baseline family file ${filename} has no [rules] table`);
+  }
+  const keys = Object.keys(rules);
+  if (keys.length !== 1 || keys[0] !== expectedKey) {
+    throw new Error(
+      `baseline family file ${filename} must contribute exactly the "${expectedKey}" key under [rules] `
+        + `— found: ${keys.length > 0 ? keys.join(', ') : '(none)'}`,
+    );
+  }
+  return { rules: rules as Pick<RulesPolicy, K> };
 }
 
 const mergedRules: RulesPolicy = {
-  ...(commandData as unknown as CommandFamilyFile).rules,
-  ...(secretData as unknown as SecretFamilyFile).rules,
-  ...(mcpWriteData as unknown as McpWriteFamilyFile).rules,
-  ...(writeSecretData as unknown as WriteSecretFamilyFile).rules,
-  ...(promptData as unknown as PromptFamilyFile).rules,
+  ...assertExactlyOneFamily(commandData, 'command', 'policy/command.toml').rules,
+  ...assertExactlyOneFamily(secretData, 'secret', 'policy/secret.toml').rules,
+  ...assertExactlyOneFamily(mcpWriteData, 'mcp_write', 'policy/mcp-write.toml').rules,
+  ...assertExactlyOneFamily(writeSecretData, 'write_secret', 'policy/write-secret.toml').rules,
+  ...assertExactlyOneFamily(promptData, 'prompt', 'policy/prompt.toml').rules,
 };
 
 // `config_read_modes` is the single source of truth for "this is a git

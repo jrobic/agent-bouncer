@@ -22,6 +22,7 @@ import {
   lintAskFlagsShape,
   lintEffectiveDialect,
   lintGitConditionalRelaxation,
+  lintOneRule,
   lintOverrides,
   lintRegexSource,
   lintRelaxEntries,
@@ -247,13 +248,12 @@ function lintMergedDialect(merged: MergedPolicy): string[] {
   const issues: string[] = [];
   for (const t of allTagged(merged)) {
     const prefix = t.sourceFile !== undefined ? `${t.sourceFile}: ` : '';
-    for (const issue of lintRegexSource(t.rule.regex, t.rule.flags)) {
-      issues.push(`${prefix}${t.family} rule ${JSON.stringify(t.rule.id)}: ${issue.message}`);
-    }
-    if (t.rule.except !== undefined) {
-      for (const issue of lintRegexSource(t.rule.except, t.rule.flags)) {
-        issues.push(`${prefix}${t.family} rule ${JSON.stringify(t.rule.id)} (except): ${issue.message}`);
-      }
+    // lintOneRule covers regex/except dialect AND the row's own `verdict`
+    // field (schema.ts's RegexRule) — an overlay row's verdict is
+    // validated here exactly like a baseline row's, not just at the
+    // single-file lintRegexDialect layer.
+    for (const issue of lintOneRule(t.family, t.rule)) {
+      issues.push(`${prefix}${issue.message}`);
     }
   }
   for (const target of merged.command.rm_rf.dangerous_targets) {
@@ -455,6 +455,21 @@ function declarativeTableConflicts(
   return crossFileConflicts(entries, (e) => e.sub, (e) => e.sub).map((c) => ({ ...c, table }));
 }
 
+// Narrows a raw (not-yet-shape-validated) regex-table entry to its `id`,
+// when it has a string one — used only to DETECT a cross-file id
+// collision early (Phase 2, before merge); the authoritative "id/regex/
+// reason must all be strings" shape check still lives in
+// mergeRegexFamily (Phase 3), which independently rejects a
+// non-string-id entry regardless of this function's leniency here.
+function withStringId(entries: readonly FileTagged<unknown>[]): FileTagged<{ readonly id: string }>[] {
+  const out: FileTagged<{ readonly id: string }>[] = [];
+  for (const { filename, raw } of entries) {
+    const id = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>).id : undefined;
+    if (typeof id === 'string') out.push({ filename, raw: { id } });
+  }
+  return out;
+}
+
 interface ParsedFile {
   readonly filename: string;
   readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown };
@@ -626,6 +641,25 @@ export function loadPolicyFromOverlayFiles(files: readonly OverlayFile[]): LoadR
       throw new PolicyRejected(
         declarativeConflicts
           .map((c) => `conflicting command.git.${c.table} entries for sub ${JSON.stringify(c.label)} in ${c.files.join(' and ')}`)
+          .join('; '),
+      );
+    }
+    // Carried from ticket 12's review, decided in ticket 13: the SAME
+    // regex-rule id defined by two DIFFERENT overlay files is ambiguous
+    // the same way an override/relax/sub conflict is — ids resolve
+    // GLOBALLY (resolvableRuleIds has no per-family scoping, and
+    // applyOverrides matches by id alone across every regex table), so a
+    // duplicate is checked across all five regex families combined, not
+    // per-table.
+    const idConflicts = crossFileConflicts(
+      withStringId([...rawCommandBash, ...rawSecretPath, ...rawSecretBash, ...rawWriteSecret, ...rawPrompt]),
+      (e) => e.id,
+      (e) => e.id,
+    );
+    if (idConflicts.length > 0) {
+      throw new PolicyRejected(
+        idConflicts
+          .map((c) => `conflicting regex rule id ${JSON.stringify(c.label)} in ${c.files.join(' and ')}`)
           .join('; '),
       );
     }

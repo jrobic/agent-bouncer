@@ -102,48 +102,22 @@ describe('secret-rules: PATH_RULES', () => {
     expect(checkPath('/home/user/.gitconfig')?.ruleId).toBe('gitconfig');
   });
 
-  test('ruleId hook-log: guard-command.log is blocked', () => {
-    expect(checkPath('/proj/hooks/guard-command.log')?.ruleId).toBe('hook-log');
-  });
+  // hook-log moved OUT of the baseline by ticket 13 (baseline universality
+  // triage) — predecessor-tool/personal-migration artifact, not a
+  // universal hazard. Its behavioral cases, including the "documented
+  // gap: rotated .log.1 is not blocked" case and the workstation-naming
+  // negative discriminator, moved with it to tests/personal-policy.test.ts,
+  // exercised against examples/personal-overlay.toml instead of BASELINE
+  // directly.
 
-  test("ruleId hook-log: guard-mcp-write.log is blocked (fifth guard's log)", () => {
-    expect(checkPath('/proj/hooks/guard-mcp-write.log')?.ruleId).toBe('hook-log');
-  });
-
-  test('documented gap: rotated guard-mcp-write.log.1 is not blocked', () => {
-    // Rotation is not covered because hook-log ends at `.log$`. Locked as a
-    // visible gap so a future extension must update this assertion consciously.
-    expect(checkPath('/proj/hooks/guard-mcp-write.log.1')).toBeNull();
-  });
-
-  test('ruleId hook-log: guard-secret.log is blocked, as a guard', () => {
-    expect(checkPath('/proj/hooks/guard-secret.log')?.ruleId).toBe('hook-log');
-  });
-
-  test.each([
-    'guard-write-secret',
-    'transcript-backup',
-  ])('ruleId hook-log: %s.log is blocked', (stem) => {
-    expect(checkPath(`/proj/hooks/${stem}.log`)?.ruleId).toBe('hook-log');
-  });
-
-  // Negative discriminator: the workstation's naming scheme. The workstation
-  // writes command-guard.log and secret-guard.log — no engine guard writes
-  // either — plus transcript-backup.log, which coincides with a branch name
-  // and so is not a discriminator. Without both tests below, nothing stops
-  // someone widening the alternation to either workstation name on its own.
-  test('benign: secret-guard.log (workstation naming scheme) is not blocked', () => {
-    expect(checkPath('/proj/hooks/secret-guard.log')).toBeNull();
-  });
-
-  test('benign: command-guard.log (workstation naming scheme) is not blocked', () => {
-    expect(checkPath('/proj/hooks/command-guard.log')).toBeNull();
-  });
-
-  test('ruleId transcript-backup: .claude/transcripts/ is blocked', () => {
-    expect(checkPath('/home/user/.claude/transcripts/foo.json')?.ruleId).toBe(
-      'transcript-backup',
-    );
+  test('ruleId transcript-backup: .claude/transcripts/ is confirmed, not blocked outright', () => {
+    // Review round 2's arbitration: stays in the baseline (protects by
+    // default) but at verdict "confirm" rather than "block" — a
+    // legitimate read isn't stopped outright, just asked about. See the
+    // `verdict = "confirm"` row in policy/secret.toml.
+    const hit = checkPath('/home/user/.claude/transcripts/foo.json');
+    expect(hit?.ruleId).toBe('transcript-backup');
+    expect(hit?.verdict).toBe('confirm');
   });
 
   test('ruleId secret-dir: secrets/ directory is blocked', () => {

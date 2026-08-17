@@ -21,10 +21,18 @@ export interface RegexRule {
   // the structural git parser instead of its own regex; see
   // hasUnsafeGitConfigRemoteUrl). Replaces the old object-identity branch.
   readonly special?: string;
-  // Deliberately NOT here: `verdict_override`. This type IS the loaded
-  // data (baseline or overlay row) — a raw TOML row never carries it. The
-  // synthesized, post-`[[override]]` form lives on CompiledRule
-  // (src/policy/match.ts), the compiled/effective layer, not here.
+  // A per-row static override of the family's default verdict (e.g.
+  // secret.path rows default to "block"; a row that should only confirm
+  // sets `verdict = "confirm"` here, in the TOML, as ordinary data — lint
+  // validates it against {block, confirm, observe}). Distinct from
+  // `verdict_override`: THIS field is the loaded data itself, visible in
+  // the file, present on a raw baseline or overlay row exactly as
+  // written. `verdict_override` is never here — it is the synthesized,
+  // post-`[[override]]` form that lives on CompiledRule
+  // (src/policy/match.ts), the compiled/effective layer, and wins over
+  // this field when both are present (an override is a live, explicit
+  // decision; this is a row's own static default).
+  readonly verdict?: 'block' | 'confirm' | 'observe';
 }
 
 export interface AskFlagsRule {

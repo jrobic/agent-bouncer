@@ -227,10 +227,9 @@ describe('guards-digest: tamper lock — the four tabular guards', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// secret.path (formerly PATH_RULES). Fourteen entries, each `{id, regex,
-// reason, except?}` — a plain data row now, not a `test: (p) => …`
-// predicate closure, so it digests exactly like the four regex tables
-// above instead of needing a source-text scrape.
+// secret.path. Each row is `{id, regex, reason, except?, verdict?}` — a
+// plain data row, so it digests exactly like the four regex tables above
+// instead of needing a source-text scrape.
 //
 // Two mutations were measured to escape the ENTIRE suite before this lock
 // existed (on the pre-TOML source) — the suite stayed green end to end
@@ -238,13 +237,21 @@ describe('guards-digest: tamper lock — the four tabular guards', () => {
 // and removing the END ANCHOR from hook-log's pattern (without `$`, the
 // rule would block reading the hooks' SOURCES, not only their logs — a
 // silent widening that no assertion contradicted). Both mutations still
-// redden THIS digest today, on the TOML-sourced data.
+// redden THIS digest today, on the TOML-sourced data. `verdict` is in the
+// projection too, so a row silently losing its non-default verdict (or
+// gaining a stray one) reddens here as well.
 // ─────────────────────────────────────────────────────────────────────────
 
 function pathRuleDigest(
-  rules: readonly { readonly id: string; readonly regex: string; readonly flags?: string; readonly except?: string }[],
+  rules: readonly {
+    readonly id: string;
+    readonly regex: string;
+    readonly flags?: string;
+    readonly except?: string;
+    readonly verdict?: string;
+  }[],
 ): string[] {
-  return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ""} except=${r.except ?? ""}`);
+  return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ""} except=${r.except ?? ""} verdict=${r.verdict ?? ""}`);
 }
 
 // DERIVED by running the projection above against policy/secret.toml and
@@ -252,26 +259,27 @@ function pathRuleDigest(
 // ENV_WHITELIST (dotenv) and node_modules (npmrc) exceptions that used to
 // be separate module-level regexes; they are policy data now too, one
 // field on the row they qualify, which is what let this lock stop needing
-// a second "declared outside the block" append step.
+// a second "declared outside the block" append step. `transcript-backup`
+// is the one row with a non-default `verdict` ("confirm" — review round
+// 2's arbitration; see policy/secret.toml).
 const EXPECTED_PATH_DIGEST: readonly string[] = [
-  '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$',
-  '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except=',
-  '2 ssh-key (^|/)id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$ flags= except=',
-  '3 aws-creds (^|/)\\.aws/(credentials|config)$ flags= except=',
-  '4 netrc-pgpass (^|/)\\.(netrc|pgpass)$ flags= except=',
-  '5 cloud-sa (service-account|firebase-adminsdk|gcp-key)[^/]*\\.json$ flags=i except=',
-  '6 tfstate \\.tfstate(\\.backup)?$|\\.terraform\\.tfstate\\.lock\\.info$ flags= except=',
-  '7 npmrc (^|/)\\.npmrc$ flags= except=/node_modules/',
-  '8 gitconfig (^|/)\\.gitconfig$ flags= except=',
-  '9 hook-log (^|/)(?:guard-command|guard-secret|guard-write-secret|guard-mcp-write|transcript-backup)\\.log$ flags= except=',
-  '10 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except=',
-  '11 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except=',
-  '12 ssh-dir (^|/)\\.ssh(/|$) flags= except=',
-  '13 gnupg-dir (^|/)\\.gnupg(/|$) flags= except=',
+  '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
+  '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
+  '2 ssh-key (^|/)id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$ flags= except= verdict=',
+  '3 aws-creds (^|/)\\.aws/(credentials|config)$ flags= except= verdict=',
+  '4 netrc-pgpass (^|/)\\.(netrc|pgpass)$ flags= except= verdict=',
+  '5 cloud-sa (service-account|firebase-adminsdk|gcp-key)[^/]*\\.json$ flags=i except= verdict=',
+  '6 tfstate \\.tfstate(\\.backup)?$|\\.terraform\\.tfstate\\.lock\\.info$ flags= except= verdict=',
+  '7 npmrc (^|/)\\.npmrc$ flags= except=/node_modules/ verdict=',
+  '8 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
+  '9 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
+  '10 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
+  '11 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
+  '12 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the fourteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (14 entries + except fields)', () => {
+describe('guards-digest: tamper lock — secret.path, the thirteen-entry path guard', () => {
+  test('secret.path matches the frozen ordered digest (13 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });
@@ -366,11 +374,17 @@ describe('guards-digest: tamper lock — the git guard\'s two membership sets', 
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// The 16-subcommand conditional matrix — UNCHANGED from before ticket 06.
-// It is a pure BEHAVIOURAL lock (calls checkGit with real commands), so it
-// does not care whether the decision underneath comes from a TS if-chain or
-// from TOML data — it keeps testing the OBSERVABLE property regardless of
-// mechanism, which is exactly why it survives the repointing untouched.
+// The 14-subcommand conditional matrix — UNCHANGED from before ticket 06,
+// other than ticket 13 removing `pull`/`merge` (16 → 14): both moved out
+// of the baseline entirely (their `--ff-only` safe form was a personal git
+// habit, not a hazard) and now ask UNCONDITIONALLY, with no reading-safe
+// form left to pair into this matrix's {reading, mutating} shape — see
+// tests/command-rules.test.ts's dedicated "always ask in the trunk
+// baseline" block instead. It is a pure BEHAVIOURAL lock (calls checkGit
+// with real commands), so it does not care whether the decision underneath
+// comes from a TS if-chain or from TOML data — it keeps testing the
+// OBSERVABLE property regardless of mechanism, which is exactly why it
+// survives the repointing untouched.
 // ─────────────────────────────────────────────────────────────────────────
 
 interface GitConditionalCase {
@@ -395,14 +409,12 @@ const GIT_CONDITIONAL_MATRIX: readonly GitConditionalCase[] = [
   { sub: 'symbolic-ref', reading: 'git symbolic-ref HEAD', mutating: 'git symbolic-ref -d HEAD' },
   { sub: 'checkout', reading: 'git checkout main', mutating: 'git checkout -f' },
   { sub: 'switch', reading: 'git switch feat', mutating: 'git switch --discard-changes' },
-  { sub: 'pull', reading: 'git pull --ff-only', mutating: 'git pull' },
-  { sub: 'merge', reading: 'git merge --ff-only feat', mutating: 'git merge feat' },
   { sub: 'worktree', reading: 'git worktree list', mutating: 'git worktree remove w' },
   { sub: 'apply', reading: 'git apply --check p.diff', mutating: 'git apply p.diff' },
   { sub: 'restore', reading: 'git restore --staged f.ts', mutating: 'git restore f.ts' },
 ];
 
-describe('guards-digest: tamper lock — the 16 conditional git subcommands', () => {
+describe('guards-digest: tamper lock — the 14 conditional git subcommands', () => {
   for (const { sub, reading, mutating } of GIT_CONDITIONAL_MATRIX) {
     test(`git ${sub}: the reading form stays silent (${reading})`, () => {
       expect(checkGit(reading)).toBeNull();
@@ -439,7 +451,7 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 
 // ─────────────────────────────────────────────────────────────────────────
 // REPLACES the old "conditional chain, scraped from its source" lock: there
-// is no more TS if-chain to scrape for 14 of the 16 subcommands — they are
+// is no more TS if-chain to scrape for 12 of the 14 subcommands — they are
 // policy/command.toml data (ask_flags / safe_first_arg / safe_grammar),
 // digested directly, the same discipline as every other table in this file.
 // `checkout` and `restore` are the two that stay engine code (pathspec
@@ -447,7 +459,9 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 // forms can express as data); their behaviour is already covered by the
 // matrix above, so this section's own job is narrower: prove the
 // declarative tables plus those two names together account for EXACTLY
-// the 16 subcommands, with no gap and no double-coverage.
+// the 14 subcommands, with no gap and no double-coverage. (16 → 14,
+// ticket 13: `pull`/`merge` moved out of safe_grammar entirely, see that
+// section's own note.)
 // ─────────────────────────────────────────────────────────────────────────
 
 function askFlagsDigest(rules: readonly AskFlagsRule[]): string[] {
@@ -485,10 +499,12 @@ const EXPECTED_SAFE_FIRST_ARG_DIGEST: readonly string[] = [
   '6 worktree values=[list] invert=false safe_when_absent=false',
 ];
 
+// Ticket 13: `pull`/`merge` removed (fast-forward-only was a personal git
+// habit, not a hazard — see policy/command.toml's own comment at the old
+// location; the personal overlay restores both, see
+// tests/personal-policy.test.ts). `apply` is now the sole entry.
 const EXPECTED_SAFE_GRAMMAR_DIGEST: readonly string[] = [
-  '0 pull sequences=[["--ff-only"]]',
-  '1 merge sequences=[["--ff-only","*"]]',
-  '2 apply sequences=[["--check"],["--check","*"]]',
+  '0 apply sequences=[["--check"],["--check","*"]]',
 ];
 
 describe('guards-digest: tamper lock — the three declarative git-conditional forms', () => {
@@ -502,7 +518,7 @@ describe('guards-digest: tamper lock — the three declarative git-conditional f
     expect(safeFirstArgDigest(git.safe_first_arg)).toEqual([...EXPECTED_SAFE_FIRST_ARG_DIGEST]);
   });
 
-  test('safe_grammar matches the frozen ordered digest (3 entries)', () => {
+  test('safe_grammar matches the frozen ordered digest (1 entry)', () => {
     expect(safeGrammarDigest(git.safe_grammar)).toEqual([...EXPECTED_SAFE_GRAMMAR_DIGEST]);
   });
 
@@ -511,7 +527,7 @@ describe('guards-digest: tamper lock — the three declarative git-conditional f
   // out of BOTH the declarative tables and the engine escapes without
   // reddening anything. Comparing SETS (not counts) names which subcommand
   // moved, not just that the total changed.
-  test('the declarative tables plus checkout/restore cover exactly the 16-subcommand matrix', () => {
+  test('the declarative tables plus checkout/restore cover exactly the 14-subcommand matrix', () => {
     const declared = [
       ...git.ask_flags.map((r) => r.sub),
       ...git.safe_first_arg.map((r) => r.sub),

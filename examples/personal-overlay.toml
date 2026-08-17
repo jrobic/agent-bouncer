@@ -1,0 +1,34 @@
+# Example personal policy overlay (ticket 13: baseline universality
+# triage). What it is: the rules ticket 13 moved OUT of the embedded
+# baseline because they encode one author's workflow/machine history, not
+# a hazard every bouncer consumer should inherit — see policy/secret.toml
+# and policy/command.toml, git blame/log at the rules' old positions, for
+# the "why this moved" reasoning.
+#
+# How to install: never automatic. Copy this file into
+# <configDir>/bouncer/policy.d/ (ticket 12's overlay directory — see
+# docs/reference/policy.md), e.g.:
+#
+#   cp examples/personal-overlay.toml "$(bouncer_config_dir)/bouncer/policy.d/10-personal.toml"
+#
+# then `bouncer rules lint` to confirm it loads cleanly. Edit freely once
+# copied — this file in the repo is the tracked, zero-secrets CANONICAL
+# example (also used by tests/personal-policy.test.ts), not a live
+# account's actual overlay.
+
+[[rules.secret.path]]
+id = "hook-log"
+regex = "(^|/)(?:guard-command|guard-secret|guard-write-secret|guard-mcp-write|transcript-backup)\\.log$"
+reason = "hook audit log blocked (would leak history of denied tool calls)"
+
+[[rules.command.git.safe_grammar]]
+sub = "pull"
+sequences = [
+    ["--ff-only"],
+  ]
+
+[[rules.command.git.safe_grammar]]
+sub = "merge"
+sequences = [
+    ["--ff-only", "*"],
+  ]

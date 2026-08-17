@@ -40,8 +40,12 @@ function ruleMatches(rule: CompiledRule, input: string, specials: SpecialHandler
 }
 
 function toVerdict(rule: CompiledRule, input: string, defaultVerdict: VerdictKind): Verdict {
+  // Priority: a live [[override]] relax (verdict_override, synthesized,
+  // never on a raw row) beats the row's own static `verdict` field
+  // (schema.ts's RegexRule, ordinary loaded data), which beats the
+  // family's plain default.
   return {
-    verdict: rule.verdict_override ?? defaultVerdict,
+    verdict: rule.verdict_override ?? rule.verdict ?? defaultVerdict,
     ruleId: rule.id,
     reason: rule.reason,
     target: input,

@@ -80,7 +80,15 @@ function allRegexRules(rules: RawPolicyFile['rules']): readonly [family: string,
   ];
 }
 
-function lintOneRule(family: string, rule: RegexRule): LintIssue[] {
+// The three verdict kinds a row's own `verdict` field (schema.ts's
+// RegexRule) or an [[override]] action="relax" can name. Declared once,
+// here, ahead of both call sites (lintOneRule below, lintOverrides
+// further down) — a raw TOML row and an override entry answer the exact
+// same question ("which of these three?"), so there is exactly one place
+// the three strings are typed.
+const VALID_VERDICTS = new Set(['block', 'confirm', 'observe']);
+
+export function lintOneRule(family: string, rule: RegexRule): LintIssue[] {
   const issues: LintIssue[] = [];
   for (const issue of lintRegexSource(rule.regex, rule.flags)) {
     issues.push({ message: `${family} rule ${JSON.stringify(rule.id)}: ${issue.message}` });
@@ -89,6 +97,12 @@ function lintOneRule(family: string, rule: RegexRule): LintIssue[] {
     for (const issue of lintRegexSource(rule.except, rule.flags)) {
       issues.push({ message: `${family} rule ${JSON.stringify(rule.id)} (except): ${issue.message}` });
     }
+  }
+  if (rule.verdict !== undefined && !VALID_VERDICTS.has(rule.verdict)) {
+    issues.push({
+      message: `${family} rule ${JSON.stringify(rule.id)}: verdict ${JSON.stringify(rule.verdict)} `
+        + `is not one of block/confirm/observe`,
+    });
   }
   return issues;
 }
@@ -135,7 +149,6 @@ export function resolvableRuleIds(rules: RawPolicyFile['rules']): ReadonlySet<st
 }
 
 const VALID_ACTIONS = new Set(['disable', 'replace', 'relax']);
-const VALID_VERDICTS = new Set(['block', 'confirm', 'observe']);
 
 export function lintOverrides(
   overrides: readonly FileTagged<OverrideEntry>[],

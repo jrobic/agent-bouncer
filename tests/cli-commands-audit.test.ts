@@ -131,11 +131,11 @@ describe('runAudit: report mode', () => {
   test('an observe entry marks its conditional rule as fired (its own section), not dead', async () => {
     const dir = await freshAccountDir();
     await writeLog(dir, [
-      verdictLine({ verdict: 'observe', rule_id: 'git-conditional-pull', target: 'git pull --ff-only' }),
+      verdictLine({ verdict: 'observe', rule_id: 'git-conditional-apply', target: 'git apply --check p.diff' }),
     ]);
     const { text } = await runAudit({ days: 30, suggest: false });
-    expect(sectionOf(text, 'Dead conditional rules')).not.toContain('git-conditional-pull');
-    expect(sectionOf(text, 'Conditional rules that fired')).toContain('git-conditional-pull');
+    expect(sectionOf(text, 'Dead conditional rules')).not.toContain('git-conditional-apply');
+    expect(sectionOf(text, 'Conditional rules that fired')).toContain('git-conditional-apply');
     expect(text).toContain('git-conditional-branch'); // still dead, never fired
   });
 

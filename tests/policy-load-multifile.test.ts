@@ -340,6 +340,141 @@ describe('loadPolicyFromOverlayFiles: cross-file [[override]]/[[relax]] conflict
   });
 });
 
+describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket 13, carried from 12)', () => {
+  test('the SAME regex rule id defined in two DIFFERENT overlay files is rejected, naming both files', () => {
+    const files = [
+      file(
+        'policy.d/10-a.toml',
+        `
+        [[rules.command.bash]]
+        id = "custom-block"
+        regex = "from-file-a"
+        reason = "file A's version"
+        `,
+      ),
+      file(
+        'policy.d/20-b.toml',
+        `
+        [[rules.command.bash]]
+        id = "custom-block"
+        regex = "from-file-b"
+        reason = "file B's version"
+        `,
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('custom-block');
+    expect(result.warnings.join(' ')).toContain('policy.d/10-a.toml');
+    expect(result.warnings.join(' ')).toContain('policy.d/20-b.toml');
+  });
+
+  test('the SAME id reused across two DIFFERENT regex families (not just the same table) is also rejected', () => {
+    // ids are resolved GLOBALLY (resolvableRuleIds has no family scoping,
+    // and applyOverrides matches by id alone across every table) — a
+    // duplicate is ambiguous regardless of which two tables it spans.
+    const files = [
+      file(
+        'policy.d/10-a.toml',
+        `
+        [[rules.command.bash]]
+        id = "shared-id"
+        regex = "in-command-bash"
+        reason = "file A"
+        `,
+      ),
+      file(
+        'policy.d/20-b.toml',
+        `
+        [[rules.prompt]]
+        id = "shared-id"
+        regex = "in-prompt"
+        reason = "file B"
+        `,
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('shared-id');
+  });
+
+  test('the SAME id defined TWICE within one file is unaffected (existing single-file semantics)', () => {
+    const files = [
+      file(
+        'policy.toml',
+        `
+        [[rules.command.bash]]
+        id = "repeated-in-one-file"
+        regex = "first"
+        reason = "first entry"
+
+        [[rules.command.bash]]
+        id = "repeated-in-one-file"
+        regex = "second"
+        reason = "second entry"
+        `,
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.warnings).toEqual([]);
+    expect(result.overlayApplied).toBe(true);
+  });
+
+  test('an [[override]] targeting an id duplicated WITHIN one file strikes BOTH entries (batch semantics, documented)', () => {
+    // Not a bug: [[override]] resolves by id alone, across every entry
+    // that carries it (src/policy/load.ts's applyOverrides) — it never
+    // resolves to "exactly one" row. docs/reference/policy.md's
+    // Cross-file conflicts section states this explicitly.
+    const files = [
+      file(
+        'policy.toml',
+        `
+        [[rules.command.bash]]
+        id = "repeated-in-one-file"
+        regex = "first-pattern"
+        reason = "first entry"
+
+        [[rules.command.bash]]
+        id = "repeated-in-one-file"
+        regex = "second-pattern"
+        reason = "second entry"
+
+        [[override]]
+        rule = "repeated-in-one-file"
+        action = "disable"
+        reason = "test: proving one override strikes both entries sharing this id"
+        `,
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.warnings).toEqual([]);
+    expect(result.overlayApplied).toBe(true);
+    const survivors = result.effectiveRules.filter((r) => r.rule.id === 'repeated-in-one-file');
+    expect(survivors).toHaveLength(0);
+  });
+
+  test('an overlay id colliding with a BASELINE id is not this check\'s concern (different, pre-existing behavior)', () => {
+    // Baseline vs overlay id collisions are not what this check targets —
+    // only overlay-vs-overlay, cross-FILE collisions. An overlay id that
+    // happens to match a baseline id resolves an override to both by
+    // design (unaffected here).
+    const files = [
+      file(
+        'policy.d/10-a.toml',
+        `
+        [[rules.command.bash]]
+        id = "mkfs"
+        regex = "another-mkfs-shape"
+        reason = "widening, not a conflict with a second overlay FILE"
+        `,
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.warnings).toEqual([]);
+    expect(result.overlayApplied).toBe(true);
+  });
+});
+
 describe('loadPolicyFromOverlayFiles: provenance names the source file', () => {
   test('an overlay-added rule\'s effectiveRules entry carries its sourceFile', () => {
     const files = [

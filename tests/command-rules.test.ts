@@ -263,10 +263,6 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
       expect(checkGit('git symbolic-ref HEAD')).toBeNull();
     });
 
-    test('git pull --ff-only', () => {
-      expect(checkGit('git pull --ff-only')).toBeNull();
-    });
-
     test('git apply --check p.diff', () => {
       expect(checkGit('git apply --check p.diff')).toBeNull();
     });
@@ -289,10 +285,6 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
 
     test('git restore --staged f.ts', () => {
       expect(checkGit('git restore --staged f.ts')).toBeNull();
-    });
-
-    test('git merge --ff-only feat', () => {
-      expect(checkGit('git merge --ff-only feat')).toBeNull();
     });
   });
 
@@ -327,14 +319,6 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
       expect(checkGit('git symbolic-ref -d HEAD')?.ruleId).toBe('git-protected');
     });
 
-    test('git pull (no --ff-only)', () => {
-      expect(checkGit('git pull')?.ruleId).toBe('git-protected');
-    });
-
-    test('git merge feat (no --ff-only)', () => {
-      expect(checkGit('git merge feat')?.ruleId).toBe('git-protected');
-    });
-
     test('git apply p.diff', () => {
       expect(checkGit('git apply p.diff')?.ruleId).toBe('git-protected');
     });
@@ -357,6 +341,34 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
     test('git restore f.ts', () => {
       expect(checkGit('git restore f.ts')?.ruleId).toBe('git-protected');
     });
+  });
+});
+
+// Ticket 13 (baseline universality triage): `pull`/`merge` `--ff-only`
+// safe-grammar entries moved out of the baseline — a fast-forward-only/
+// linear-history discipline is a personal git habit, not an objective
+// hazard. Neither sub is governed by ANY declarative table nor
+// safe_subcommands anymore, so both fall through to the ungoverned
+// catch-all (gitSubcommandNeedsConfirm's final `return true`) and ask
+// UNCONDITIONALLY now — the --ff-only flag makes no difference. The
+// example overlay (examples/personal-overlay.toml) restores the old
+// baseline behavior; see tests/personal-policy.test.ts for that half of
+// the story.
+describe('command-rules: git pull/git merge always ask in the trunk baseline (ticket 13)', () => {
+  test('git pull --ff-only asks (no longer ratified — moved to the personal overlay)', () => {
+    expect(checkGit('git pull --ff-only')?.ruleId).toBe('git-protected');
+  });
+
+  test('git pull (no --ff-only) asks', () => {
+    expect(checkGit('git pull')?.ruleId).toBe('git-protected');
+  });
+
+  test('git merge --ff-only feat asks (no longer ratified — moved to the personal overlay)', () => {
+    expect(checkGit('git merge --ff-only feat')?.ruleId).toBe('git-protected');
+  });
+
+  test('git merge feat (no --ff-only) asks', () => {
+    expect(checkGit('git merge feat')?.ruleId).toBe('git-protected');
   });
 });
 
@@ -609,10 +621,15 @@ describe('command-rules: shell line continuations are removed before tokenizatio
   });
 });
 
+// git pull/merge dropped from this test (ticket 13): both now ask
+// unconditionally regardless of any --ff-only marker (see the dedicated
+// "always ask in the trunk baseline" describe block above), so a case
+// proving "the shell comment didn't leak the marker through" would be
+// vacuously true for them — they'd ask even if comment-stripping were
+// broken. apply/restore keep real conditional safe forms in the trunk
+// and still meaningfully exercise this mechanic.
 describe('command-rules: shell comments cannot inject read-only mode markers', () => {
   test.each([
-    'git pull # --ff-only',
-    'git merge feat # --ff-only',
     'git apply p.diff # --check',
     'git restore f.ts # --staged',
   ])('%s still asks because the shell executes only the part before #', (cmd) => {
@@ -624,15 +641,15 @@ describe('command-rules: shell comments cannot inject read-only mode markers', (
   });
 });
 
+// git pull/merge -m cases and the pull/merge `--` positional cases both
+// dropped from this file (ticket 13): with pull/merge asking
+// unconditionally in the trunk now, "the marker got consumed as a
+// message/positional instead of recognised as the mode flag" is no
+// longer distinguishable from "it asks regardless" — see
+// tests/personal-policy.test.ts for the equivalent coverage against the
+// personal overlay, where pull/merge still have a real conditional safe
+// form to defend.
 describe('command-rules: read-only mode markers are positional', () => {
-  test('git merge -m --ff-only feat asks because -m consumes the marker as its message', () => {
-    expect(checkGit('git merge -m --ff-only feat')?.ruleId).toBe('git-protected');
-  });
-
-  test('git pull -m --ff-only asks because -m consumes the marker as its message', () => {
-    expect(checkGit('git pull -m --ff-only')?.ruleId).toBe('git-protected');
-  });
-
   test('git apply --directory --check p.diff asks because --directory consumes the marker', () => {
     expect(checkGit('git apply --directory --check p.diff')?.ruleId).toBe('git-protected');
   });
@@ -642,8 +659,6 @@ describe('command-rules: read-only mode markers are positional', () => {
   });
 
   test.each([
-    'git pull origin -- --ff-only',
-    'git merge feat -- --ff-only',
     'git apply p.diff -- --check',
     'git restore f.ts -- --staged',
   ])('%s asks when the marker is a positional after --', (cmd) => {

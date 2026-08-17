@@ -221,7 +221,7 @@ describe('clusterEntries', () => {
 describe('conditionalRuleIdsOf / findDeadConditionalRules', () => {
   test('enumerates every git-conditional-<sub> id the baseline policy can produce', () => {
     const ids = conditionalRuleIdsOf(BASELINE_POLICY.command.git);
-    expect(ids).toContain('git-conditional-pull');
+    expect(ids).toContain('git-conditional-apply');
     expect(ids).toContain('git-conditional-branch');
     expect(ids).toContain('git-conditional-checkout');
     expect(ids).toContain('git-conditional-restore');
@@ -231,9 +231,9 @@ describe('conditionalRuleIdsOf / findDeadConditionalRules', () => {
   });
 
   test('a rule id present in the fired set is not reported dead', () => {
-    const fired = new Set(['git-conditional-pull']);
+    const fired = new Set(['git-conditional-apply']);
     const dead = findDeadConditionalRules(BASELINE_POLICY, fired);
-    expect(dead).not.toContain('git-conditional-pull');
+    expect(dead).not.toContain('git-conditional-apply');
     expect(dead).toContain('git-conditional-branch');
   });
 
@@ -287,29 +287,29 @@ describe('renderReport', () => {
 
   test('only block/confirm clusters count as friction — observe clusters are excluded from that section', () => {
     const clusters = clusterEntries([
-      entry({ ruleId: 'git-conditional-pull', verdict: 'observe', target: 'git pull --ff-only' }),
+      entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' }),
     ]);
     const report = renderReport(clusters, [], { days: 30 });
-    expect(sectionOf(report, 'Frequent friction')).not.toContain('git-conditional-pull');
+    expect(sectionOf(report, 'Frequent friction')).not.toContain('git-conditional-apply');
   });
 
   test('Story 10: a conditional rule that fired is surfaced in its OWN section, not just absent from friction/dead', () => {
     const clusters = clusterEntries([
-      entry({ ruleId: 'git-conditional-pull', verdict: 'observe', target: 'git pull --ff-only' }),
-      entry({ ruleId: 'git-conditional-pull', verdict: 'observe', target: 'git pull --ff-only' }),
+      entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' }),
+      entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' }),
     ]);
-    const deadIds = findDeadConditionalRules(BASELINE_POLICY, new Set(['git-conditional-pull']));
+    const deadIds = findDeadConditionalRules(BASELINE_POLICY, new Set(['git-conditional-apply']));
     const report = renderReport(clusters, deadIds, { days: 30 });
 
     const fired = sectionOf(report, 'Conditional rules that fired');
-    expect(fired).toContain('git-conditional-pull');
+    expect(fired).toContain('git-conditional-apply');
     expect(fired).toContain('2x');
 
     // The section is placed between friction and dead rules, and the same
     // id must not ALSO appear as dead (it fired) or as friction (it's an
     // observe, not a block/confirm).
-    expect(sectionOf(report, 'Dead conditional rules')).not.toContain('git-conditional-pull');
-    expect(sectionOf(report, 'Frequent friction')).not.toContain('git-conditional-pull');
+    expect(sectionOf(report, 'Dead conditional rules')).not.toContain('git-conditional-apply');
+    expect(sectionOf(report, 'Frequent friction')).not.toContain('git-conditional-apply');
     const friction = report.indexOf('## Frequent friction');
     const firedHeading = report.indexOf('## Conditional rules that fired');
     const dead = report.indexOf('## Dead conditional rules');

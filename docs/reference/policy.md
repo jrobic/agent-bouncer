@@ -33,7 +33,7 @@ The effective policy `bouncer` actually runs on is baseline merged with
 every overlay file in that order, per-table (see § Merge order below),
 plus `[[override]]` and `[[relax]]` applied on top.
 
-## The rule row: `{id, regex, reason, flags?, except?, special?}`
+## The rule row: `{id, regex, reason, flags?, except?, special?, verdict?}`
 
 Every entry in the five regex tables below shares this shape:
 
@@ -45,6 +45,7 @@ Every entry in the five regex tables below shares this shape:
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
 | `except` | string | no | A second regex; if it ALSO matches, the rule does not fire (e.g. `.env.example`/`.env.test` excepted from the `.env` block). |
 | `special` | string | no | An engine-recognized marker for logic no regex alone expresses. Today only `"git_remote_url"`, on the `secret.bash` entry that also needs the structural git parser to distinguish a config read from a write. |
+| `verdict` | `"block"` \| `"confirm"` \| `"observe"` | no | A per-row static override of the family's default verdict (e.g. every `secret.path` row defaults to `"block"`; `transcript-backup` sets `verdict = "confirm"`). Lint-validated against the same three kinds `[[override]]`'s `action = "relax"` can name. A live `[[override]]` relax still wins over this field when both apply — this is the row's own static default, not the loudest word on the subject. |
 
 ## The five regex tables
 
@@ -121,17 +122,19 @@ reason = "example only — this duplicates the baseline row verbatim"
 
 **`safe_grammar`** — safe only if the arguments match one exact token
 sequence (`"*"` matches any single non-flag token). Written on its own
-line, `sequences = [ ["--ff-only"] ]` needs a space after the first
+line, `sequences = [ ["--check"] ]` needs a space after the first
 `[` — Bun's TOML parser misreads a bare leading `[[` as an
 array-of-tables header even mid-value (see `policy/command.toml`'s own
-`pull`/`merge`/`apply` entries, which avoid it by putting the outer
-bracket on its own line). Baseline's own `pull` row; same substitution
-note as `ask_flags` above:
+`apply` entry, which avoids it by putting the outer bracket on its own
+line — same for `pull`/`merge` in `examples/personal-overlay.toml`,
+ticket 13's tracked example of a `safe_grammar` entry living in a
+personal overlay instead of the baseline). Baseline's own `apply` row;
+same substitution note as `ask_flags` above:
 
 ```toml
 [[rules.command.git.safe_grammar]]
-sub = "pull"
-sequences = [ ["--ff-only"] ]
+sub = "apply"
+sequences = [ ["--check"], ["--check", "*"] ]
 reason = "example only — this duplicates the baseline row verbatim"
 ```
 
@@ -273,6 +276,9 @@ to reject outright, rather than silently letting file order decide:
   files.
 - Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
   `sub`, in two different files.
+- Two regex-table rows (any of the five families) sharing the same `id`,
+  in two different files — ids resolve GLOBALLY, not per-family, so this
+  is checked across all five tables combined, not per-table.
 
 ```
 $ bouncer rules lint
@@ -283,7 +289,14 @@ lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
 Multiple entries for the same target WITHIN one file are unaffected —
 that's existing, single-file behavior (sequential override chaining,
 e.g. `replace` then `relax` on the same rule; first-entry-wins table
-lookup), unchanged by this rule.
+lookup), unchanged by this rule. This includes two regex-table rows
+sharing the same `id` inside ONE file: not a lint error (id uniqueness is
+only checked cross-file, per the table above, and per the rule row's own
+`id` field note), and — because `[[override]]` matches by id alone,
+across every entry that carries it — an override targeting that id
+applies to BOTH rows, in the same file or not. Stated as the batch
+semantics it is, not a bug: `[[override]]` never resolves to "exactly
+one" row, only to "every row currently carrying this id".
 
 ## Provenance: which file a rule came from
 

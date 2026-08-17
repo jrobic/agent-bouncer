@@ -106,14 +106,14 @@ describe('logVerdict: rotation', () => {
 });
 
 describe('run(): conditional-rule allows are logged with their rule id (AC4)', () => {
-  test('a ratified git grammar (pull --ff-only) is silent on stdout but logged as observe', async () => {
+  test('a ratified git grammar (apply --check) is silent on stdout but logged as observe', async () => {
     const accountDir = await freshAccountDir();
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
-      tool_input: { command: 'git pull --ff-only' },
+      tool_input: { command: 'git apply --check p.diff' },
     });
     const { stdout } = await run(envelope);
     expect(stdout).toBeNull(); // the tool call proceeds silently — nothing to the model
@@ -121,7 +121,7 @@ describe('run(): conditional-rule allows are logged with their rule id (AC4)', (
     const content = await readFile(logPathFor(accountDir), 'utf-8');
     const entry = JSON.parse(content.trim());
     expect(entry.verdict).toBe('observe');
-    expect(entry.rule_id).toBe('git-conditional-pull');
+    expect(entry.rule_id).toBe('git-conditional-apply');
   });
 
   test('an unconditionally safe command (git status) is not logged at all', async () => {

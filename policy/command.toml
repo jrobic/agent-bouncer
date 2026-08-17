@@ -44,6 +44,9 @@ id = "chown-root"
 regex = "\\bchown\\s+-R\\s+\\S+\\s+\\/(?:\\s|$)"
 reason = "Recursive chown on / — likely to break the system"
 
+# Debatable (ticket 13): fires on ANY curl file upload, including a
+# legitimate one (e.g. posting a build artifact to an internal API) —
+# some consumers may want to narrow this to known-untrusted destinations.
 [[rules.command.bash]]
 id = "curl-file-upload"
 regex = "\\bcurl\\b[^|;&\\n]*?\\s(?:(?:-d|--data|--data-binary|--data-raw|--data-urlencode)\\s+@\\S+|(?:-F|--form)\\s+\\S*=@|(?:-T|--upload-file)\\s+\\S+)"
@@ -261,6 +264,9 @@ sub = "config"
 values = []
 safe_when_absent = false
 
+# Debatable (ticket 13): `bundle create` packages arbitrary repo history
+# into one portable file, a secondary exfil-adjacent surface — gated
+# defensively for how rarely it appears in an agentic session.
 [[rules.command.git.safe_first_arg]]
 sub = "bundle"
 values = [
@@ -269,24 +275,14 @@ values = [
   ]
 safe_when_absent = false
 
+# Debatable (ticket 13): `worktree remove` can discard an inactive
+# worktree's uncommitted changes — narrow, but real.
 [[rules.command.git.safe_first_arg]]
 sub = "worktree"
 values = [
     "list",
   ]
 safe_when_absent = false
-
-[[rules.command.git.safe_grammar]]
-sub = "pull"
-sequences = [
-    ["--ff-only"],
-  ]
-
-[[rules.command.git.safe_grammar]]
-sub = "merge"
-sequences = [
-    ["--ff-only", "*"],
-  ]
 
 [[rules.command.git.safe_grammar]]
 sub = "apply"
