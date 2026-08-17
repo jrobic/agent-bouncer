@@ -1,15 +1,18 @@
 #!/usr/bin/env bun
 // bouncer — single guard binary. `run` speaks the Claude Code hook
 // protocol end to end (stdin JSON, verdict on stdout, silent exit on
-// allow). `check`, `rules lint`, and `rules list` are the policy-tooling
-// subcommands (ticket 06) — dry-run, validate, and inspect the effective
-// policy without a live session. `audit`/`doctor` are later tickets
-// (10/07), not stubbed here — an unimplemented subcommand name fails
-// loudly rather than silently doing nothing.
+// allow) — this is also how SessionStart reaches `doctor`'s wiring/policy/
+// log check (ticket 07): no separate subcommand for the hook path, the
+// same `run` envelope dispatch routes SessionStart to it. `check`,
+// `rules lint`, `rules list`, and `doctor` are the policy/diagnostic
+// tooling subcommands — dry-run, validate, and inspect without a live
+// session. `audit` is a later ticket (10), not stubbed here — an
+// unimplemented subcommand name fails loudly rather than silently doing
+// nothing.
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunResult } from './adapter/run.ts';
-import { runCheck, runRulesLint, runRulesList } from './cli-commands.ts';
+import { parseDoctorArgs, runCheck, runDoctor, runRulesLint, runRulesList } from './cli-commands.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
 // contract as a malformed envelope: an unreadable stdin (a broken pipe, a
@@ -70,7 +73,18 @@ async function main(): Promise<void> {
     usageError(sub, 'lint | list');
   }
 
-  usageError(command, 'run | check | rules');
+  if (command === 'doctor') {
+    const parsed = parseDoctorArgs(rest);
+    if (parsed.error !== undefined) {
+      console.error(`${HOOK_NAME}: ${parsed.error}`);
+      process.exit(1);
+    }
+    const { text, ok } = await runDoctor(parsed.settingsPath);
+    console.log(text);
+    process.exit(ok ? 0 : 1);
+  }
+
+  usageError(command, 'run | check | rules | doctor');
 }
 
 if (import.meta.main) {

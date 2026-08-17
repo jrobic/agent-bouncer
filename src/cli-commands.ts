@@ -1,9 +1,10 @@
-// The non-`run` CLI subcommands: `check`, `rules lint`, `rules list`. Each
-// returns the text to print plus whether it counts as a success (for the
-// exit code) — kept separate from process.exit/console.log so these are
-// unit-testable without spawning a subprocess.
+// The non-`run` CLI subcommands: `check`, `rules lint`, `rules list`,
+// `doctor`. Each returns the text to print plus whether it counts as a
+// success (for the exit code) — kept separate from process.exit/
+// console.log so these are unit-testable without spawning a subprocess.
 
 import { createDispatcher } from './adapter/dispatch.ts';
+import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
 import { loadCurrentPolicy, overlayPath } from './adapter/policy.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 
@@ -96,4 +97,44 @@ export async function runRulesList(): Promise<CommandResult> {
     ...loaded.effectiveRules.map(ruleLine),
   ];
   return { text: lines.join('\n'), ok: true };
+}
+
+export interface ParsedDoctorArgs {
+  readonly settingsPath?: string;
+  readonly error?: string;
+}
+
+/**
+ * Pure parsing for `bouncer doctor [--settings <path>]`'s argv tail — kept
+ * out of cli.ts (the I/O layer) so the one rule that actually needs a test,
+ * "what counts as a missing value", is unit-testable without spawning a
+ * subprocess. `--settings` as the LAST token, or immediately followed by
+ * another flag (`--settings --other-flag`), is a missing-argument error —
+ * the next flag must never be silently swallowed as if it were the path.
+ */
+export function parseDoctorArgs(rest: readonly string[]): ParsedDoctorArgs {
+  const flagIndex = rest.indexOf('--settings');
+  if (flagIndex === -1) return {};
+  const value = rest[flagIndex + 1];
+  if (value === undefined || value.startsWith('--')) {
+    return { error: '--settings requires a path argument' };
+  }
+  return { settingsPath: value };
+}
+
+/**
+ * `bouncer doctor [--settings <path>]` — the manual, always-verbose form
+ * of the wiring/policy/log/override checklist (ticket 07). `--settings`
+ * defaults to `<configDir>/settings.json` (the account's own settings
+ * file, same root as the policy overlay and the audit log) but accepts an
+ * override so a scratch settings.json can be checked without touching a
+ * live config — the same override this ticket's demo and ACs exercise.
+ * Non-zero exit on any failing check (unlike `run`, which must always
+ * exit 0 for the hook protocol) — `ok` is exactly what cli.ts maps to
+ * `process.exit(ok ? 0 : 1)`.
+ */
+export async function runDoctor(settingsPath?: string): Promise<CommandResult> {
+  const loaded = await loadCurrentPolicy();
+  const report = await runDoctorChecks(settingsPath ?? defaultSettingsPath(), loaded);
+  return { text: formatDoctorChecklist(report), ok: report.ok };
 }

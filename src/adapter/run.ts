@@ -29,7 +29,8 @@ import type { Family } from '../types.ts';
 import { degradeToClaudeCode } from './degradation.ts';
 import type { Dispatcher, FamilyVerdict } from './dispatch.ts';
 import { createDispatcher } from './dispatch.ts';
-import { buildContextOutput, buildPreToolUseOutput } from './envelopes.ts';
+import { buildSessionStartContext, defaultSettingsPath, type DoctorReport, runDoctorChecks } from './doctor.ts';
+import { buildContextOutput, buildPreToolUseOutput, buildSessionStartOutput } from './envelopes.ts';
 import { logPolicyWarnings, logVerdict } from './log.ts';
 import { loadCurrentPolicy } from './policy.ts';
 import type { HookInput } from './protocol.ts';
@@ -84,12 +85,46 @@ async function runUserPromptSubmit(
   return { stdout: buildContextOutput(hits) };
 }
 
+// doctor's own event — deliberately NOT routed through dispatchByEvent
+// below: it never needs a Dispatcher (no tool call to judge, no family to
+// evaluate), only the policy already loaded for this invocation and the
+// settings.json wiring check (src/adapter/doctor.ts). `checkFn` defaults to
+// the real runDoctorChecks and exists only as a test seam (see
+// tests/adapter-run-sessionstart.test.ts's throwing-check case) — run()
+// itself always calls this with the default. Wrapped in its own try/catch
+// for the same "the hook never crashes" reason as dispatch itself — a
+// diagnostic failing to diagnose must not read as a crashed hook (Claude
+// Code's cue for "no hook ran at all") — and, unlike the pre-review
+// version, the catch LOGS before falling silent: a silent catch here would
+// itself be an unannounced loss of the doctor signal, the exact failure
+// class this ticket exists to catch.
+export async function runSessionStart(
+  loaded: LoadResult,
+  checkFn: (settingsPath: string, loaded: LoadResult) => Promise<DoctorReport> = runDoctorChecks,
+): Promise<RunResult> {
+  try {
+    const report = await checkFn(defaultSettingsPath(), loaded);
+    return { stdout: buildSessionStartOutput(buildSessionStartContext(report)) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    try {
+      await logPolicyWarnings([`doctor checks failed: ${message}`], loaded);
+    } catch {
+      // Logging must never be what crashes the hook either.
+    }
+    return SILENT;
+  }
+}
+
 // Explicit whitelist, not "UserPromptSubmit or else PreToolUse": a
 // PostToolUse envelope, a future event this binary doesn't know about yet,
 // or a typo'd/missing hook_event_name must never fall through to the
 // PreToolUse dispatch by default — that would judge a tool call this
 // process was never asked to judge. Fail open, same contract as a
-// malformed envelope.
+// malformed envelope. SessionStart is deliberately absent from this
+// switch too — run() routes it to runSessionStart() upstream, before this
+// function is ever called, so this table alone no longer lists every event
+// the binary understands; see run()'s own body for the full dispatch.
 async function dispatchByEvent(
   input: HookInput,
   dispatcher: Dispatcher,
@@ -116,6 +151,10 @@ export async function run(rawStdin: string): Promise<RunResult> {
   const loaded = await loadCurrentPolicy();
   if (loaded.warnings.length > 0) {
     await logPolicyWarnings(loaded.warnings, loaded);
+  }
+
+  if (input.hook_event_name === 'SessionStart') {
+    return runSessionStart(loaded);
   }
 
   try {
