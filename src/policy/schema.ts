@@ -120,6 +120,18 @@ export type RelaxableList =
   | 'command.git.config_read_modes'
   | 'mcp_write.read_prefixes';
 
+// The runtime companion to the type above — a string-literal union has no
+// values to iterate or check membership against at runtime, so any caller
+// that needs to validate "is this string a member of RelaxableList"
+// (src/policy/lint.ts's overlay validation, src/adapter/audit.ts's
+// suggestion levers and their own drift test) reads from here instead of
+// re-declaring the three strings a second time.
+export const RELAXABLE_LISTS: readonly RelaxableList[] = [
+  'command.git.safe_subcommands',
+  'command.git.config_read_modes',
+  'mcp_write.read_prefixes',
+];
+
 export interface RelaxationEntry {
   readonly list: RelaxableList;
   readonly value: string;

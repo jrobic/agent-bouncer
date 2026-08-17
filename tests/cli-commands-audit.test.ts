@@ -1,0 +1,247 @@
+// `bouncer audit` / `audit --suggest` at the command-function level (same
+// discipline as tests/cli-commands.test.ts for check/rules): reads a
+// synthetic JSONL log and the account's policy overlay off a tmp
+// CLAUDE_CONFIG_DIR, no subprocess spawned.
+
+import { afterEach, describe, expect, test } from 'bun:test';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseAuditArgs, runAudit, runRulesLint } from '../src/cli-commands.ts';
+import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
+
+const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+const cleanupDirs: string[] = [];
+
+afterEach(async () => {
+  if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
+  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+async function freshAccountDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'bouncer-audit-cli-test-'));
+  cleanupDirs.push(dir);
+  process.env.CLAUDE_CONFIG_DIR = dir;
+  return dir;
+}
+
+async function writeOverlay(accountDir: string, text: string): Promise<void> {
+  await mkdir(join(accountDir, 'bouncer'), { recursive: true });
+  await writeFile(join(accountDir, 'bouncer', 'policy.toml'), text, 'utf8');
+}
+
+async function writeLog(accountDir: string, lines: readonly Record<string, unknown>[]): Promise<void> {
+  await mkdir(join(accountDir, 'logs', 'hooks'), { recursive: true });
+  const text = `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`;
+  await writeFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), text, 'utf8');
+}
+
+function verdictLine(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    timestamp: '2026-08-10T12:00:00.000Z',
+    session_id: 'sess-1',
+    tool_name: 'Bash',
+    family: 'command',
+    verdict: 'confirm',
+    rule_id: 'git-protected',
+    target: 'git push origin main',
+    ...overrides,
+  };
+}
+
+// Extracts one `## <heading>`-delimited section's own body — a whole-report
+// `.not.toContain(id)` passes wrongly when the id sits on the report's
+// LAST line (no trailing "\n" left to match against a `"- id\n"` pattern),
+// and says nothing about WHICH section the id is (correctly) absent from.
+function sectionOf(report: string, heading: string): string {
+  const lines = report.split('\n');
+  const start = lines.findIndex((l) => l.startsWith(`## ${heading}`));
+  if (start === -1) return '';
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => l.startsWith('## '));
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n');
+}
+
+describe('parseAuditArgs', () => {
+  test('defaults to a 30-day window and no --suggest', () => {
+    expect(parseAuditArgs([])).toEqual({ options: { days: 30, suggest: false } });
+  });
+
+  test('--suggest sets the suggest flag', () => {
+    expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true } });
+  });
+
+  test('--days N overrides the window', () => {
+    expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false } });
+  });
+
+  test('both flags combine regardless of order', () => {
+    expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({ options: { days: 14, suggest: true } });
+    expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({ options: { days: 14, suggest: true } });
+  });
+
+  test('a non-numeric --days value returns an error, never throws', () => {
+    const result = parseAuditArgs(['--days', 'soon']);
+    expect(result.options).toBeUndefined();
+    expect(result.error).toContain('--days');
+  });
+
+  test('a missing --days value returns an error, never throws', () => {
+    const result = parseAuditArgs(['--days']);
+    expect(result.options).toBeUndefined();
+    expect(result.error).toBeDefined();
+  });
+
+  test('an unrecognized flag is an explicit error, never a silently-ignored no-op (round-3 review item 3)', () => {
+    for (const bad of [['--sugest'], ['--dayz'], ['positional-garbage']]) {
+      const result = parseAuditArgs(bad);
+      expect(result.options).toBeUndefined();
+      expect(result.error).toContain(bad[0]);
+    }
+  });
+
+  test('an unrecognized flag alongside otherwise-valid ones is still rejected, not partially applied', () => {
+    const result = parseAuditArgs(['--days', '7', '--sugest']);
+    expect(result.options).toBeUndefined();
+    expect(result.error).toBeDefined();
+  });
+});
+
+describe('runAudit: report mode', () => {
+  test('no log file at all: every conditional rule is reported dead, no friction', async () => {
+    await freshAccountDir();
+    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    expect(ok).toBe(true);
+    expect(text).toContain('no deny/ask entries');
+    expect(text).toContain('git-conditional-branch');
+  });
+
+  test('a frequent block/confirm cluster is surfaced as friction', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git push origin main' }),
+      verdictLine({ target: 'git push origin feature-x' }),
+    ]);
+    const { text } = await runAudit({ days: 30, suggest: false });
+    expect(text).toContain('git-protected');
+    expect(text).toContain('2x');
+  });
+
+  test('an observe entry marks its conditional rule as fired (its own section), not dead', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ verdict: 'observe', rule_id: 'git-conditional-pull', target: 'git pull --ff-only' }),
+    ]);
+    const { text } = await runAudit({ days: 30, suggest: false });
+    expect(sectionOf(text, 'Dead conditional rules')).not.toContain('git-conditional-pull');
+    expect(sectionOf(text, 'Conditional rules that fired')).toContain('git-conditional-pull');
+    expect(text).toContain('git-conditional-branch'); // still dead, never fired
+  });
+
+  test('--days excludes entries outside the window', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ timestamp: '2020-01-01T00:00:00.000Z', target: 'git push origin main' }),
+    ]);
+    const { text } = await runAudit({ days: 30, suggest: false });
+    expect(text).toContain('no deny/ask entries');
+  });
+
+  test('audit-header and policy-warning lines in the log do not break parsing', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      { timestamp: '2026-08-10T00:00:00.000Z', kind: 'audit-header', overrides: [], relaxations: [] },
+      verdictLine({ target: 'git push origin main' }),
+    ]);
+    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    expect(ok).toBe(true);
+    expect(text).toContain('git-protected');
+  });
+
+  test('a missing log file (ENOENT) is treated as empty, no warning line (round-3 review item 6)', async () => {
+    await freshAccountDir();
+    const { text } = await runAudit({ days: 30, suggest: false });
+    expect(text).not.toContain('warning:');
+  });
+
+  test('an EXISTING but unreadable log file surfaces an honest warning, not silent emptiness '
+    + '(round-3 review item 6: ENOENT ≠ EACCES/EISDIR)', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [verdictLine({ target: 'git push origin main' })]);
+    const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
+    await chmod(logFile, 0o000); // unreadable by anyone but root
+    try {
+      const { text, ok } = await runAudit({ days: 30, suggest: false });
+      expect(ok).toBe(true); // advisory, not a hard failure
+      expect(text).toContain('warning: audit log unreadable');
+    } finally {
+      await chmod(logFile, 0o600);
+    }
+  });
+
+  test('a directory at the log path (EISDIR) surfaces the same honest warning', async () => {
+    const dir = await freshAccountDir();
+    await mkdir(join(dir, 'logs', 'hooks', 'bouncer.log'), { recursive: true }); // a DIR, not a file
+    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    expect(ok).toBe(true);
+    expect(text).toContain('warning: audit log unreadable');
+  });
+});
+
+describe('runAudit: --suggest mode', () => {
+  test('produces TOML that `rules lint` accepts as-is (AC3)', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git push origin main' }),
+      verdictLine({ target: 'git push origin feature-x' }),
+    ]);
+    const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true });
+    expect(suggestOk).toBe(true);
+    // git-protected friction ships commented out (round-3 review item 2) —
+    // the literal substring still appears (inside the comment), the active
+    // block does not.
+    expect(suggestText).toContain('# [[relax]]');
+
+    // Feed the suggestion straight into the account's overlay and re-lint —
+    // this is the "generate then lint" proof the ticket asks for.
+    await writeOverlay(dir, suggestText);
+    const { text: lintText, ok: lintOk } = await runRulesLint();
+    expect(lintOk).toBe(true);
+    expect(lintText).toContain('OK');
+  });
+
+  test('an unreadable log in --suggest mode gets a `#`-commented warning (stays valid TOML)', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [verdictLine({ target: 'git push origin main' })]);
+    const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
+    await chmod(logFile, 0o000);
+    try {
+      const { text } = await runAudit({ days: 30, suggest: true });
+      expect(text).toContain('# warning: audit log unreadable');
+      const result = loadPolicyFromOverlayText(text);
+      expect(result.warnings).toEqual([]);
+    } finally {
+      await chmod(logFile, 0o600);
+    }
+  });
+
+  test('an empty window produces a lint-safe "nothing to suggest" comment', async () => {
+    const dir = await freshAccountDir();
+    const { text } = await runAudit({ days: 30, suggest: true });
+    await writeOverlay(dir, text);
+    const { ok } = await runRulesLint();
+    expect(ok).toBe(true);
+  });
+
+  test('never writes to the account overlay file itself (no auto-apply, AC4)', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git push origin main' }),
+      verdictLine({ target: 'git push origin feature-x' }),
+    ]);
+    await runAudit({ days: 30, suggest: true });
+    const overlay = await Bun.file(join(dir, 'bouncer', 'policy.toml')).exists();
+    expect(overlay).toBe(false);
+  });
+});

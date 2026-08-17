@@ -1,11 +1,23 @@
 // The non-`run` CLI subcommands: `check`, `rules lint`, `rules list`,
-// `doctor`. Each returns the text to print plus whether it counts as a
-// success (for the exit code) — kept separate from process.exit/
+// `doctor`, `audit`. Each returns the text to print plus whether it counts
+// as a success (for the exit code) — kept separate from process.exit/
 // console.log so these are unit-testable without spawning a subprocess.
 
+import { readFile } from 'node:fs/promises';
+import {
+  clusterEntries,
+  findDeadConditionalRules,
+  parseLogEntries,
+  renderReport,
+  renderSuggestions,
+  withinWindow,
+} from './adapter/audit.ts';
+import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
 import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
+import { hookLogPath } from './adapter/log-path.ts';
 import { loadCurrentPolicy, overlayPath } from './adapter/policy.ts';
+import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 
 export interface CommandResult {
@@ -137,4 +149,108 @@ export async function runDoctor(settingsPath?: string): Promise<CommandResult> {
   const loaded = await loadCurrentPolicy();
   const report = await runDoctorChecks(settingsPath ?? defaultSettingsPath(), loaded);
   return { text: formatDoctorChecklist(report), ok: report.ok };
+}
+
+export interface AuditOptions {
+  readonly days: number;
+  readonly suggest: boolean;
+}
+
+// Same error-protocol shape as ParsedDoctorArgs (return, never throw, so
+// cli.ts never needs a try/catch around parsing): a discriminated union
+// rather than two independent optionals, because `options` genuinely IS
+// required whenever there is no `error` (unlike ParsedDoctorArgs's
+// settingsPath, which is legitimately optional even on success) — this
+// lets `parsed.options` narrow to defined after the `error` check with no
+// non-null assertion needed.
+export type ParsedAuditArgs =
+  | { readonly options: AuditOptions; readonly error?: undefined }
+  | { readonly options?: undefined; readonly error: string };
+
+const DEFAULT_AUDIT_DAYS = 30;
+const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days']);
+
+/**
+ * Parses `audit`'s own flags (`--days N`, `--suggest`) — deliberately tiny
+ * (two flags, no ordering requirement) rather than pulling in a general
+ * arg-parsing dependency for one subcommand. An unrecognized token
+ * (`--sugest`, `--dayz`, a stray positional, ...) is an explicit error, not
+ * silently ignored — a typo'd flag must not fall through to "30-day report,
+ * exit 0" as if nothing had been asked for.
+ */
+export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
+  let days = DEFAULT_AUDIT_DAYS;
+  let suggest = false;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i]!;
+    if (arg === '--suggest') {
+      suggest = true;
+      continue;
+    }
+    if (arg === '--days') {
+      const value = rest[i + 1];
+      const parsed = value !== undefined ? Number(value) : Number.NaN;
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return { error: `audit: --days requires a positive number, got ${JSON.stringify(value)}` };
+      }
+      days = parsed;
+      i++;
+      continue;
+    }
+    if (!KNOWN_AUDIT_FLAGS.has(arg)) {
+      return { error: `audit: unrecognized argument ${JSON.stringify(arg)} (expected: --days <n> | --suggest)` };
+    }
+  }
+  return { options: { days, suggest } };
+}
+
+/**
+ * `bouncer audit` / `bouncer audit --suggest` — the proactive tuning loop
+ * (ticket 10): clusters this account's deny/ask and conditional-allow log
+ * entries over the last `--days` days and either prints the human report
+ * (frequent friction + dead conditional rules) or, with `--suggest`,
+ * candidate `[[relax]]`/`[[override]]` TOML snippets. Reads the log file
+ * and the current policy off disk — the clustering/rendering itself is
+ * pure (src/adapter/audit.ts). A missing log file (ENOENT) is treated
+ * exactly like an empty one (a fresh account has audited nothing yet, not
+ * a failure); any OTHER read error (permissions, the path being a
+ * directory, ...) is NOT swallowed the same way — the header this function
+ * promises ("missing = empty") would otherwise silently lie for an
+ * existing-but-unreadable log, so that case surfaces a `warning:` line
+ * atop the report instead.
+ */
+export async function runAudit(options: AuditOptions): Promise<CommandResult> {
+  const loaded = await loadCurrentPolicy();
+
+  let logText = '';
+  let logWarning: string | null = null;
+  try {
+    logText = await readFile(hookLogPath(HOOK_NAME), 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'ENOENT') {
+      const message = err instanceof Error ? err.message : String(err);
+      logWarning = `audit log unreadable: ${message}`;
+    }
+  }
+  const entries = withinWindow(parseLogEntries(logText), options.days);
+  const clusters = clusterEntries(entries);
+
+  if (options.suggest) {
+    const resolvable = resolvableRuleIds(loaded.policy);
+    const text = renderSuggestions(clusters, resolvable, { days: options.days });
+    // `#`-commented: renderSuggestions's output is TOML meant to be pasted
+    // straight into an overlay (AC3) — a bare `warning: ...` line ahead of
+    // it would not parse as TOML and would corrupt that contract.
+    const warningLines = logWarning !== null ? [`# warning: ${logWarning}`] : [];
+    return { text: [...warningLines, text].join('\n'), ok: true };
+  }
+
+  const firedObserveRuleIds = new Set(
+    clusters.filter((c) => c.verdict === 'observe').map((c) => c.ruleId),
+  );
+  const deadRuleIds = findDeadConditionalRules(loaded.policy, firedObserveRuleIds);
+  const text = renderReport(clusters, deadRuleIds, { days: options.days });
+  const warningLines = logWarning !== null ? [`warning: ${logWarning}`] : [];
+  return { text: [...warningLines, text].join('\n'), ok: true };
 }

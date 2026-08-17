@@ -6,13 +6,19 @@
 // same `run` envelope dispatch routes SessionStart to it. `check`,
 // `rules lint`, `rules list`, and `doctor` are the policy/diagnostic
 // tooling subcommands — dry-run, validate, and inspect without a live
-// session. `audit` is a later ticket (10), not stubbed here — an
-// unimplemented subcommand name fails loudly rather than silently doing
-// nothing.
+// session. `audit` clusters the account's log for rule tuning.
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunResult } from './adapter/run.ts';
-import { parseDoctorArgs, runCheck, runDoctor, runRulesLint, runRulesList } from './cli-commands.ts';
+import {
+  parseAuditArgs,
+  parseDoctorArgs,
+  runAudit,
+  runCheck,
+  runDoctor,
+  runRulesLint,
+  runRulesList,
+} from './cli-commands.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
 // contract as a malformed envelope: an unreadable stdin (a broken pipe, a
@@ -73,6 +79,17 @@ async function main(): Promise<void> {
     usageError(sub, 'lint | list');
   }
 
+  if (command === 'audit') {
+    const parsed = parseAuditArgs(rest);
+    if (parsed.error !== undefined) {
+      console.error(`${HOOK_NAME}: ${parsed.error}`);
+      process.exit(1);
+    }
+    const { text, ok } = await runAudit(parsed.options);
+    console.log(text);
+    process.exit(ok ? 0 : 1);
+  }
+
   if (command === 'doctor') {
     const parsed = parseDoctorArgs(rest);
     if (parsed.error !== undefined) {
@@ -84,7 +101,7 @@ async function main(): Promise<void> {
     process.exit(ok ? 0 : 1);
   }
 
-  usageError(command, 'run | check | rules | doctor');
+  usageError(command, 'run | check | rules | audit | doctor');
 }
 
 if (import.meta.main) {
