@@ -8,33 +8,37 @@ writes, MCP writes, prompt-injection signatures — one process, one verdict
 path, one audit log. The engine is compiled; the policy is TOML (an embedded
 vetted baseline plus a user overlay with loud, reasoned overrides).
 
-> **Status: pre-v1, spec-driven.** Nothing to install yet. The spec and the
-> ticket breakdown live in `.scratch/bouncer/` — a local, untracked tracker
-> (same convention as the author's other repos). Read the spec first; it
-> records every design decision and its rationale.
+> **Status: pre-v1, spec-driven.** No packaged release yet — build it from
+> this checkout (Quickstart below). The spec and the ticket breakdown live
+> in `.scratch/bouncer/` — a local, untracked tracker (same convention as
+> the author's other repos) — for the design rationale behind anything not
+> covered in `docs/`.
 
-## Naming
+## Quickstart
 
-- **Package:** `@jrobic/agent-bouncer` (personal npm scope — squat-proof);
-  **repository:** `agent-bouncer`. The bare name was verified free on npm,
-  crates.io, and Homebrew on 2026-08-16 (fallback name was `customs`);
-  crates.io has no namespaces, so a future Rust crate would be bare
-  `agent-bouncer`.
-- **Binary on PATH:** `bouncer` — short, self-explanatory. No conflict with
-  the CrowdSec ecosystem's bouncers: those binaries are named
-  `crowdsec-*-bouncer`, never bare `bouncer`.
+```sh
+bun run build   # produces dist/bouncer
+```
 
-## Design in one paragraph
+Wire `dist/bouncer` into a Claude Code `settings.json`
+(`docs/how-to/wire-into-claude-code.md` has the exact hooks block), then
+verify:
 
-Guard logic that a declarative permission list cannot express (shell
-tokenization, git subcommand extraction, conditional flag grammars,
-default-ask inversion) lives in a compiled engine. Everything table-shaped
-(regex rules, path rules, safe-git allowlists, MCP read prefixes) lives in
-TOML. A harness adapter maps the engine's abstract verdicts
-(block / confirm / flag / observe) onto the harness's real capabilities with
-an explicit fail-closed degradation table — a harness that cannot ask,
-blocks. Conformance is held by language-agnostic golden fixtures: any
-reimplementation proves parity by passing the same cases.
+```sh
+./dist/bouncer doctor
+```
+
+## Documentation
+
+| I want to... | Read |
+|---|---|
+| wire bouncer into a Claude Code session | [`docs/how-to/wire-into-claude-code.md`](docs/how-to/wire-into-claude-code.md) |
+| add a rule of my own | [`docs/how-to/add-a-custom-rule.md`](docs/how-to/add-a-custom-rule.md) |
+| disable/soften a baseline rule, or widen a safe list | [`docs/how-to/override-a-baseline-rule.md`](docs/how-to/override-a-baseline-rule.md) |
+| find frequent friction and dead rules | [`docs/how-to/tune-rules-with-audit.md`](docs/how-to/tune-rules-with-audit.md) |
+| look up a subcommand's flags, output, exit code | [`docs/reference/cli.md`](docs/reference/cli.md) |
+| look up the TOML policy format | [`docs/reference/policy.md`](docs/reference/policy.md) |
+| look up the audit log's JSONL shape | [`docs/reference/audit-log.md`](docs/reference/audit-log.md) |
 
 ## Provenance
 
