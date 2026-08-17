@@ -65,20 +65,20 @@ function sectionOf(report: string, heading: string): string {
 
 describe('parseAuditArgs', () => {
   test('defaults to a 30-day window and no --suggest', () => {
-    expect(parseAuditArgs([])).toEqual({ options: { days: 30, suggest: false } });
+    expect(parseAuditArgs([])).toEqual({ options: { days: 30, suggest: false, diff: false } });
   });
 
   test('--suggest sets the suggest flag', () => {
-    expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true } });
+    expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true, diff: false } });
   });
 
   test('--days N overrides the window', () => {
-    expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false } });
+    expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false, diff: false } });
   });
 
   test('both flags combine regardless of order', () => {
-    expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({ options: { days: 14, suggest: true } });
-    expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({ options: { days: 14, suggest: true } });
+    expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({ options: { days: 14, suggest: true, diff: false } });
+    expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({ options: { days: 14, suggest: true, diff: false } });
   });
 
   test('a non-numeric --days value returns an error, never throws', () => {
@@ -111,7 +111,7 @@ describe('parseAuditArgs', () => {
 describe('runAudit: report mode', () => {
   test('no log file at all: every conditional rule is reported dead, no friction', async () => {
     await freshAccountDir();
-    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(ok).toBe(true);
     expect(text).toContain('no deny/ask entries');
     expect(text).toContain('git-conditional-branch');
@@ -123,9 +123,20 @@ describe('runAudit: report mode', () => {
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
     ]);
-    const { text } = await runAudit({ days: 30, suggest: false });
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(text).toContain('git-protected');
     expect(text).toContain('2x');
+  });
+
+  test('pin (review round on ticket 08): a MIXED shadow+enforce log still clusters as one continuous history', async () => {
+    const dir = await freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git push origin main', mode: 'shadow' }),
+      verdictLine({ target: 'git push origin feature-x' }), // enforced, no mode field
+    ]);
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(text).toContain('git-protected');
+    expect(text).toContain('2x'); // both count toward the SAME cluster, mode or not
   });
 
   test('an observe entry marks its conditional rule as fired (its own section), not dead', async () => {
@@ -133,7 +144,7 @@ describe('runAudit: report mode', () => {
     await writeLog(dir, [
       verdictLine({ verdict: 'observe', rule_id: 'git-conditional-apply', target: 'git apply --check p.diff' }),
     ]);
-    const { text } = await runAudit({ days: 30, suggest: false });
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(sectionOf(text, 'Dead conditional rules')).not.toContain('git-conditional-apply');
     expect(sectionOf(text, 'Conditional rules that fired')).toContain('git-conditional-apply');
     expect(text).toContain('git-conditional-branch'); // still dead, never fired
@@ -144,7 +155,7 @@ describe('runAudit: report mode', () => {
     await writeLog(dir, [
       verdictLine({ timestamp: '2020-01-01T00:00:00.000Z', target: 'git push origin main' }),
     ]);
-    const { text } = await runAudit({ days: 30, suggest: false });
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(text).toContain('no deny/ask entries');
   });
 
@@ -154,14 +165,14 @@ describe('runAudit: report mode', () => {
       { timestamp: '2026-08-10T00:00:00.000Z', kind: 'audit-header', overrides: [], relaxations: [] },
       verdictLine({ target: 'git push origin main' }),
     ]);
-    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(ok).toBe(true);
     expect(text).toContain('git-protected');
   });
 
   test('a missing log file (ENOENT) is treated as empty, no warning line (round-3 review item 6)', async () => {
     await freshAccountDir();
-    const { text } = await runAudit({ days: 30, suggest: false });
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(text).not.toContain('warning:');
   });
 
@@ -172,7 +183,7 @@ describe('runAudit: report mode', () => {
     const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
     await chmod(logFile, 0o000); // unreadable by anyone but root
     try {
-      const { text, ok } = await runAudit({ days: 30, suggest: false });
+      const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
       expect(ok).toBe(true); // advisory, not a hard failure
       expect(text).toContain('warning: audit log unreadable');
     } finally {
@@ -183,7 +194,7 @@ describe('runAudit: report mode', () => {
   test('a directory at the log path (EISDIR) surfaces the same honest warning', async () => {
     const dir = await freshAccountDir();
     await mkdir(join(dir, 'logs', 'hooks', 'bouncer.log'), { recursive: true }); // a DIR, not a file
-    const { text, ok } = await runAudit({ days: 30, suggest: false });
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(ok).toBe(true);
     expect(text).toContain('warning: audit log unreadable');
   });
@@ -196,7 +207,7 @@ describe('runAudit: --suggest mode', () => {
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
     ]);
-    const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true });
+    const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true, diff: false });
     expect(suggestOk).toBe(true);
     // git-protected friction ships commented out (round-3 review item 2) —
     // the literal substring still appears (inside the comment), the active
@@ -217,7 +228,7 @@ describe('runAudit: --suggest mode', () => {
     const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
     await chmod(logFile, 0o000);
     try {
-      const { text } = await runAudit({ days: 30, suggest: true });
+      const { text } = await runAudit({ days: 30, suggest: true, diff: false });
       expect(text).toContain('# warning: audit log unreadable');
       const result = loadPolicyFromOverlayText(text);
       expect(result.warnings).toEqual([]);
@@ -228,7 +239,7 @@ describe('runAudit: --suggest mode', () => {
 
   test('an empty window produces a lint-safe "nothing to suggest" comment', async () => {
     const dir = await freshAccountDir();
-    const { text } = await runAudit({ days: 30, suggest: true });
+    const { text } = await runAudit({ days: 30, suggest: true, diff: false });
     await writeOverlay(dir, text);
     const { ok } = await runRulesLint();
     expect(ok).toBe(true);
@@ -240,7 +251,7 @@ describe('runAudit: --suggest mode', () => {
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
     ]);
-    await runAudit({ days: 30, suggest: true });
+    await runAudit({ days: 30, suggest: true, diff: false });
     const overlay = await Bun.file(join(dir, 'bouncer', 'policy.toml')).exists();
     expect(overlay).toBe(false);
   });

@@ -216,6 +216,32 @@ describe('clusterEntries', () => {
     expect(cluster!.count).toBe(10);
     expect(cluster!.exampleTargets.length).toBeLessThanOrEqual(3);
   });
+
+  // Pin (review round on ticket 08): the classic `audit` report never
+  // distinguishes shadow-tagged entries from enforced ones — `mode` is not
+  // part of the clustering key at all, deliberately (audit-diff.ts, not
+  // this module, is where the shadow/enforce distinction matters). A log
+  // spanning a shadow-mode window and a post-cutover enforced window still
+  // clusters as one continuous history.
+  test('a MIXED shadow+enforce log clusters identically to an all-enforce one — mode plays no part', () => {
+    const mixed: AuditEntry[] = [
+      entry({ target: 'git push origin main', timestamp: '2026-08-10T00:00:00.000Z', mode: 'shadow' }),
+      entry({ target: 'git push origin feature-x', timestamp: '2026-08-12T00:00:00.000Z' }), // enforced, no mode
+      entry({ target: 'git push upstream dev', timestamp: '2026-08-11T00:00:00.000Z', mode: 'shadow' }),
+    ];
+    const allEnforced: AuditEntry[] = mixed.map(({ mode: _omit, ...rest }) => rest);
+
+    const mixedClusters = clusterEntries(mixed);
+    const enforcedClusters = clusterEntries(allEnforced);
+    expect(mixedClusters).toHaveLength(1);
+    expect(mixedClusters[0]!.count).toBe(3);
+    // Same shape/count/lastSeen regardless of which entries were shadow —
+    // the only thing that could differ is fields clusterEntries doesn't
+    // even read.
+    expect(mixedClusters[0]!.count).toBe(enforcedClusters[0]!.count);
+    expect(mixedClusters[0]!.shape).toBe(enforcedClusters[0]!.shape);
+    expect(mixedClusters[0]!.lastSeen).toBe(enforcedClusters[0]!.lastSeen);
+  });
 });
 
 describe('conditionalRuleIdsOf / findDeadConditionalRules', () => {

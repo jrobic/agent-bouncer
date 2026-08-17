@@ -15,6 +15,16 @@ import { EXPECTED_PRETOOLUSE_TOOLS } from '../src/adapter/doctor.ts';
 
 export const BOUNCER_COMMAND = '/fake/checkout/dist/bouncer run';
 
+// Ticket 08: shadow-mode wiring — same binary, same `run` arg
+// (pointsAtBouncer only requires 'run' among the args, so this already
+// counts as wired), with `--shadow` appended.
+export const BOUNCER_SHADOW_COMMAND = '/fake/checkout/dist/bouncer run --shadow';
+
+// Ticket 08 review round: a typo'd flag in the LIVE wiring — still
+// "points at bouncer" (pointsAtBouncer only checks for 'run'), but the
+// wiring check should fail loudly on the unrecognized token.
+export const BOUNCER_TYPO_COMMAND = '/fake/checkout/dist/bouncer run --shadwo';
+
 function escapeRegExp(literal: string): string {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

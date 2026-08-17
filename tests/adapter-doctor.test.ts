@@ -15,7 +15,7 @@ import {
   formatDoctorChecklist,
   runDoctorChecks,
 } from '../src/adapter/doctor.ts';
-import { BOUNCER_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { BOUNCER_COMMAND, BOUNCER_SHADOW_COMMAND, BOUNCER_TYPO_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 
 async function scratchSettingsPath(hooks: unknown): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
@@ -172,6 +172,91 @@ describe('runDoctorChecks: wiring', () => {
     const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult());
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring.every((c) => !c.ok)).toBe(true);
+  });
+});
+
+// Ticket 08: `run --shadow` must count as valid wiring (pointsAtBouncer
+// only requires 'run' among the args, which --shadow doesn't remove), and
+// the manual checklist should say so — info, never a failure. After
+// cutover the flag drops and doctor goes back to saying nothing extra;
+// there is no separate "shadow expected" state to configure.
+describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
+  test('a hook command carrying --shadow still passes wiring — pointsAtBouncer already accepts it (arg "run" is present)', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
+  });
+
+  test('the manual checklist message says "shadow mode" for a --shadow-wired event, info not fail', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
+    expect(preToolUse?.ok).toBe(true);
+    expect(preToolUse?.message.toLowerCase()).toContain('shadow mode');
+  });
+
+  test('a non-shadow wiring never mentions shadow mode', async () => {
+    const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
+    expect(preToolUse?.message.toLowerCase()).not.toContain('shadow');
+  });
+
+  test('shadow mode is reported per-event: only the events actually wired with --shadow say so', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
+      // UserPromptSubmit and SessionStart stay on the plain (non-shadow) command.
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.message.toLowerCase()).toContain('shadow');
+    expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.message.toLowerCase()).not.toContain('shadow');
+    expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.message.toLowerCase()).not.toContain('shadow');
+  });
+});
+
+// Ticket 08 review round: a typo'd token in the live wiring (--shadwo
+// instead of --shadow) still "points at bouncer" (pointsAtBouncer only
+// requires 'run'), so it would otherwise pass silently — the wiring check
+// must fail loudly instead, naming the unrecognized token, since this is
+// the one place (SessionStart) it's actually actionable.
+describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 review)', () => {
+  test('a hook command with an unrecognized token FAILS wiring, naming the token', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_TYPO_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
+    expect(preToolUse?.ok).toBe(false);
+    expect(preToolUse?.message).toContain('--shadwo');
+    expect(preToolUse?.message.toLowerCase()).toContain('unrecognized');
+  });
+
+  test('a healthy --shadow wiring (the exact, correct flag) never trips this check', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
+  });
+
+  test('unrecognized-token failure is reported per-event, only for the events actually wired with the typo', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_TYPO_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(false);
+    expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.ok).toBe(true);
+    expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.ok).toBe(true);
   });
 });
 

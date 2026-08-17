@@ -105,7 +105,7 @@ describe('run(): Read on bouncer\'s own audit log confirms, under a real custom 
     // pre-written log line the Read/Grep/Bash cases above got a
     // "confirm" for reads back cleanly through the sanctioned path.
     await freshAccountWithRealLog();
-    const { ok, text } = await runAudit({ days: 30, suggest: false });
+    const { ok, text } = await runAudit({ days: 30, suggest: false, diff: false });
     // A single block entry doesn't clear the friction-clustering threshold
     // (see tests/adapter-audit.test.ts), so the report legitimately shows
     // no findings — what this test actually proves is `ok: true` and a

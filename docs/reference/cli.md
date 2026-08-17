@@ -21,7 +21,18 @@ crash reads to Claude Code as "no hook ran," the opposite of fail-closed.
 bouncer run < envelope.json
 ```
 
-**Flags:** none.
+**Flags:**
+- `--shadow` — observe-only mode (ticket 08). Evaluates every event
+  exactly as normal (same dispatch, same policy, same logging) but NEVER
+  writes to stdout, on any event shape: no deny, no ask, no
+  `additionalContext`, no `SessionStart` scream. Absolute — zero
+  influence on the session. Every log entry `run --shadow` writes carries
+  an extra `"mode":"shadow"` field, including a `SessionStart` doctor
+  verdict that would have screamed (logged as a `kind:"sessionstart-shadow"`
+  entry instead — there is nowhere else for it to go once stdout is
+  suppressed). See `docs/how-to/wire-into-claude-code.md`'s "shadow
+  first" section for wiring it alongside the existing guards during a
+  migration window.
 
 **Dispatch by `hook_event_name`:** `PreToolUse`, `UserPromptSubmit`,
 `SessionStart` are handled; anything else (a future event, a typo, a
@@ -54,6 +65,17 @@ An unremarkable tool call, a clean prompt, or a healthy `SessionStart`
 produces no stdout at all.
 
 **Exit code:** always 0.
+
+**Shadow mode example** — same `rm -rf /` envelope that would normally
+deny, run with `--shadow`:
+
+```sh
+$ bouncer run --shadow < envelope.json
+# nothing on stdout — the tool call proceeds; bouncer is only watching,
+# the TS guards are what's actually enforcing during a shadow window
+$ tail -1 <configDir>/logs/hooks/bouncer.log
+{"timestamp":"...","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","mode":"shadow"}
+```
 
 ## `check`
 
@@ -198,35 +220,97 @@ overrides: none active
 override/relaxation alone does not fail the exit code — it's sovereign,
 reasoned use, not a defect.
 
+**Shadow-aware wiring (ticket 08):** a hook command carrying `--shadow`
+(e.g. `/path/to/bouncer run --shadow`) still counts as valid wiring — the
+`pass` line for that event says so, `... is correctly wired (shadow
+mode)`, informational only, never a `fail`. After cutover the flag drops
+from settings.json and the suffix goes with it; there is nothing else to
+configure on doctor's side.
+
 ## `audit`
 
 Clusters the account's log entries over a time window into a friction
 report, or (`--suggest`) candidate overlay snippets — see
-`docs/how-to/tune-rules-with-audit.md`.
+`docs/how-to/tune-rules-with-audit.md`. `--diff` (ticket 08) is a third,
+mutually exclusive mode: compares bouncer's `--shadow` log entries
+against the TS generation's own guard logs over the same window.
 
 ```sh
 bouncer audit [--days <n>] [--suggest]
+bouncer audit --diff [--days <n>] [--ts-logs <dir>]
 ```
 
 **Flags:**
 - `--days <n>` — window size, default 30. `<n>` must be a positive
-  number.
+  number. Applies to every mode.
 - `--suggest` — print candidate `[[relax]]`/`[[override]]` TOML
-  snippets instead of the human report.
+  snippets instead of the human report. Mutually exclusive with `--diff`.
+- `--diff` — compare bouncer's shadow-mode log entries (`mode:"shadow"`
+  only — a non-shadow entry is never part of this comparison) against
+  the TS generation's four independent guard logs
+  (`guard-command.log`, `guard-secret.log`, `guard-write-secret.log`,
+  `guard-mcp-write.log`), reporting the three divergence kinds below.
+  Read-only — writes nothing, on either side.
+- `--ts-logs <dir>` — the account config dir the four TS guard logs live
+  under (same `logs/hooks/<name>.log` layout bouncer's own log uses).
+  Only valid alongside `--diff`; defaults to the SAME config dir bouncer
+  itself is reading from.
 
-Both flags combine in either order. Any other token (a typo'd flag, a
-stray positional) is a usage error — never silently ignored.
+Any other token (a typo'd flag, a stray positional, `--ts-logs` without
+`--diff`, `--diff` together with `--suggest`) is a usage error — never
+silently ignored.
 
-**Output:** free-form (report) or TOML-commented (suggest) — see the
-how-to page for real examples of both. A missing log file is treated as
-an empty one; an existing-but-unreadable log prepends
+**Output (report/suggest):** free-form (report) or TOML-commented
+(suggest) — see the how-to page for real examples of both. A missing log
+file is treated as an empty one; an existing-but-unreadable log prepends
 `warning: audit log unreadable: <message>` (report mode) or
 `# warning: audit log unreadable: <message>` (suggest mode, kept as a
 TOML comment so the rest of the output stays parseable).
 
-**Exit code:** 0 for both modes, on any input the log parses (a
-malformed *line* is skipped, not fatal). 1 only on a usage error (a bad
-`--days` value, an unrecognized flag).
+**Output (`--diff`):** free-form prose, same rendering discipline as the
+plain report. A volumes line, then three sections, always printed even
+when empty:
+
+```
+bouncer audit --diff — last 30 day(s)
+TS: 480 event(s) (0 line(s) ignored) — bouncer shadow: 502 entries — matched: 470
+
+Correlation is heuristic: (target, tool, timestamp within ±2s) — there is no shared id between bouncer and the TS generation, so this is best-effort pairing, not a guarantee.
+Known blind spot (measured, ticket 05's live demo): a call denied by settings.json's own `permissions` layer never reaches either guard chain's hooks — invisible to BOTH sides. "0 divergence" only covers traffic that REACHES the hooks, not traffic permissions already stopped.
+
+## TS denied/asked, bouncer would allow
+(none)
+
+## bouncer would deny/ask, TS allowed
+- ts=(none) bouncer=git-protected fired 3x on shape "git pull --ff-only" (last: 2026-08-17T09:00:00.000Z) [expected: pull-merge-ff-only-ask — ticket 13 (baseline universality triage)]
+    e.g. git pull --ff-only
+
+## matched, but verdicts differ
+(none)
+```
+
+The volumes line (`TS: N event(s) (K line(s) ignored) — bouncer shadow: M
+entries — matched: P`) is what the cutover criterion (≥500 guarded calls,
+≥7 days, zero untriaged divergence) is read off — `N`/`M` are the call
+counts, `K` is how many raw TS log lines didn't parse as a verdict line
+(a schema drift worth investigating if it's not near zero). Every cluster
+names rule ids from BOTH sides (`ts=...`/`bouncer=...`, `(none)` when
+that side has nothing to name). `[expected: <id> — <ticket ref>]` marks a
+divergence shape already pre-triaged (three families, coded as a
+constant referencing the ticket — see `src/adapter/audit-diff.ts`'s
+`EXPECTED_DIVERGENCES`, deliberately narrow: a bare `git pull` with no
+`--ff-only`, or a bouncer rule firing on a NON-read access to a
+`guard-*.log` path, are real, UNTAGGED divergences, not absorbed into a
+same-named family by a loose match) — informational only, it never
+filters a divergence OUT of the report; the human triage step this
+exists to support still sees everything, tagged or not. Correlation
+being a heuristic, and the settings.json permissions blind spot, are
+both stated in the report itself, not just in this doc.
+
+**Exit code:** 0 for every mode, on any input the logs parse (a
+malformed *line*, on either side, is skipped, not fatal). 1 only on a
+usage error (a bad `--days` value, an unrecognized flag, `--diff` and
+`--suggest` combined, `--ts-logs` without `--diff`).
 
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/envelopes.ts, src/adapter/policy.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/envelopes.ts, src/adapter/policy.ts, src/adapter/log.ts

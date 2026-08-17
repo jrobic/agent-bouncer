@@ -30,6 +30,11 @@ export interface AuditEntry {
   readonly verdict: VerdictKind;
   readonly ruleId: string;
   readonly target: string;
+  // Ticket 08: present (always "shadow") only on an entry `run --shadow`
+  // produced — src/adapter/log.ts's LogMode. Absent on every entry logged
+  // outside a shadow invocation; audit-diff.ts filters on this to compare
+  // ONLY shadow-window entries against the TS generation's logs.
+  readonly mode?: 'shadow';
 }
 
 // The sole discriminator between a verdict line and the other two shapes
@@ -67,6 +72,7 @@ export function parseLogEntries(text: string): AuditEntry[] {
       verdict: raw.verdict as VerdictKind,
       ruleId: raw.rule_id as string,
       target: typeof raw.target === 'string' ? raw.target : '',
+      ...(raw.mode === 'shadow' ? { mode: 'shadow' as const } : {}),
     });
   }
   return entries;

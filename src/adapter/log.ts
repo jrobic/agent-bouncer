@@ -82,17 +82,35 @@ async function appendLogEntry(entry: Record<string, unknown>, loaded?: LoadResul
   }
 }
 
+// Ticket 08: shadow mode logs EVERY entry it produces exactly like a real
+// run, plus this one extra field — the discriminator a reader (or
+// `audit --diff`) uses to tell "what bouncer would have done" apart from
+// "what bouncer actually enforced". Only ever "shadow" today (no
+// "live"/"enforced" counterpart is written — a normal invocation's entries
+// simply carry no `mode` key at all, unchanged from before this ticket).
+export type LogMode = 'shadow';
+
+// The `shadow: boolean -> LogMode | undefined` conversion every logVerdict/
+// logPolicyWarnings call site in run.ts needs — one place instead of the
+// same ternary recomputed at each call.
+export function toLogMode(shadow: boolean): LogMode | undefined {
+  return shadow ? 'shadow' : undefined;
+}
+
 // Every verdict this adapter reaches gets logged — block/confirm/observe
 // from PreToolUse, flag from UserPromptSubmit — including `observe` entries
 // produced only for audit (never surfaced to the model). `input` is the raw
 // hook envelope, kept for session_id/tool_name context in the log line.
 // `loaded`, when given, is the policy load this verdict came from — passed
-// through so a fresh/rotated file gets its Story 19 audit header.
+// through so a fresh/rotated file gets its Story 19 audit header. `mode`,
+// when given, is ticket 08's shadow tag — `run()` passes it on EVERY log
+// call it makes while `--shadow` is active, never only some of them.
 export async function logVerdict(
   family: Family,
   input: HookInput,
   verdict: Verdict,
   loaded?: LoadResult,
+  mode?: LogMode,
 ): Promise<void> {
   await appendLogEntry({
     session_id: input.session_id ?? null,
@@ -101,6 +119,7 @@ export async function logVerdict(
     verdict: verdict.verdict,
     rule_id: verdict.ruleId,
     target: truncateTarget(verdict.target),
+    ...(mode !== undefined ? { mode } : {}),
   }, loaded);
 }
 
@@ -109,9 +128,21 @@ export async function logVerdict(
 // somewhere other than a verdict nobody asked for. This writes one entry
 // per warning to the SAME audit log, kind-tagged so `rules list`/a future
 // `doctor` can find it without parsing free-text `verdict` fields.
-export async function logPolicyWarnings(warnings: readonly string[], loaded?: LoadResult): Promise<void> {
+export async function logPolicyWarnings(warnings: readonly string[], loaded?: LoadResult, mode?: LogMode): Promise<void> {
   for (const message of warnings) {
     // oxlint-disable-next-line no-await-in-loop
-    await appendLogEntry({ kind: 'policy-warning', message }, loaded);
+    await appendLogEntry({ kind: 'policy-warning', message, ...(mode !== undefined ? { mode } : {}) }, loaded);
   }
+}
+
+// Ticket 08, decision 2: in shadow mode, SessionStart's own doctor verdict
+// (what buildSessionStartContext would have put on stdout — a wiring
+// scream, or an override/relaxation announcement) has nowhere else to go,
+// since shadow suppresses that stdout entirely. Logged only when there
+// WOULD have been something to say (`message` — the caller only calls this
+// when buildSessionStartContext returned non-null); a fully healthy,
+// nothing-to-announce SessionStart logs nothing, in shadow or not, the
+// same "silence really means silence" contract SessionStart already has.
+export async function logSessionStartShadow(message: string, loaded?: LoadResult): Promise<void> {
+  await appendLogEntry({ kind: 'sessionstart-shadow', message, mode: 'shadow' satisfies LogMode }, loaded);
 }

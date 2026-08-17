@@ -115,5 +115,44 @@ absolute path from step 1.
 - A protected git command (e.g. `git push`) asks for confirmation instead
   of running immediately.
 
+## Shadow first (recommended before cutover)
+
+Migrating from an existing guard chain (e.g. the TS-generation
+`guard-*` hooks)? Wire bouncer in `--shadow` mode ALONGSIDE the existing
+hooks first, rather than replacing them outright — it evaluates every
+event for real and logs every verdict, but never touches stdout, so it
+cannot deny, ask, or scream on top of a chain that's already enforcing.
+
+1. Add the SAME three hook entries as step 3 above, but append `--shadow`
+   to every `command` string:
+   `"/absolute/path/to/dist/bouncer run --shadow"`. Leave the existing
+   hooks in place — they stay the real enforcement chain for the whole
+   shadow window. `bouncer doctor`'s wiring checks accept `--shadow` as
+   healthy wiring and say so explicitly (`... is correctly wired (shadow
+   mode)`, informational, never a `[fail]`).
+2. Use the session normally for a while, letting both chains observe the
+   same traffic. bouncer writes every verdict it WOULD have produced to
+   its own log, `mode:"shadow"` tagged.
+3. Read the divergence report: `bouncer audit --diff` (add `--ts-logs
+   <dir>` if the TS logs live under a different account config dir than
+   bouncer's own). Every divergence is either tagged `[expected]`
+   (already pre-triaged, cited by ticket) or genuinely new and needs a
+   look — see `docs/reference/cli.md`'s `audit --diff` section for the
+   full output shape and what each divergence kind means.
+4. At cutover: drop `--shadow` from the command strings (and remove the
+   old guard hooks, if replacing them). Re-run `bouncer doctor` — the
+   `(shadow mode)` suffix disappears from any wiring line it was on;
+   nothing else changes.
+
+**Blind spot to keep in mind (measured, ticket 05's live demo):** a tool
+call denied by `settings.json`'s own `permissions` block short-circuits
+BEFORE either guard chain's `PreToolUse` hooks ever run — neither bouncer
+NOR the TS generation sees it, on either side. A `--diff` report reading
+"0 divergence" only proves parity on traffic that actually REACHES the
+hooks; it says nothing about calls `permissions` already stopped upstream.
+If a permissions rule is doing real guarding work, that work stays
+invisible to this whole comparison — worth a separate look before
+concluding the migration is fully covered.
+
 ---
-Source: scratch/demo-settings.json (hooks block shape), src/adapter/doctor.ts, src/cli-commands.ts, src/cli.ts
+Source: scratch/demo-settings.json (hooks block shape), src/adapter/doctor.ts, src/cli-commands.ts, src/cli.ts, src/adapter/run.ts, src/adapter/audit-diff.ts

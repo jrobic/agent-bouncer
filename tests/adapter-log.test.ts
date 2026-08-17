@@ -65,6 +65,28 @@ describe('logVerdict: JSONL entry shape', () => {
   });
 });
 
+describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
+  test('mode: "shadow" is passed through, tagged on the entry', async () => {
+    const accountDir = await freshAccountDir();
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+
+    await logVerdict('command', { tool_name: 'Bash' }, BLOCK, undefined, 'shadow');
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect(entry.mode).toBe('shadow');
+  });
+
+  test('a normal (non-shadow) call carries no "mode" key at all', async () => {
+    const accountDir = await freshAccountDir();
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+
+    await logVerdict('command', { tool_name: 'Bash' }, BLOCK);
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect('mode' in entry).toBe(false);
+  });
+});
+
 describe('logVerdict: per-account routing (two accounts, two logs)', () => {
   test('two different CLAUDE_CONFIG_DIR values never share a log file', async () => {
     const accountA = await freshAccountDir();

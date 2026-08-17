@@ -4,6 +4,7 @@
 // console.log so these are unit-testable without spawning a subprocess.
 
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   clusterEntries,
   findDeadConditionalRules,
@@ -12,10 +13,12 @@ import {
   renderSuggestions,
   withinWindow,
 } from './adapter/audit.ts';
+import { clusterDivergences, diffLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
+import type { TsLogEntry } from './adapter/audit-diff.ts';
 import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
 import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
-import { hookLogPath } from './adapter/log-path.ts';
+import { configDir, hookLogPath } from './adapter/log-path.ts';
 import { loadCurrentPolicy, overlayDirPath, overlayPath } from './adapter/policy.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
@@ -161,6 +164,18 @@ export async function runDoctor(settingsPath?: string): Promise<CommandResult> {
 export interface AuditOptions {
   readonly days: number;
   readonly suggest: boolean;
+  // Ticket 08: `bouncer audit --diff [--ts-logs <dir>]`. `diff` and
+  // `suggest` are mutually exclusive modes (parseAuditArgs rejects
+  // combining them) — a report comparing against the TS generation and a
+  // policy-relaxation suggestion loop answer different questions and have
+  // nothing to compose into.
+  readonly diff: boolean;
+  // Overrides the TS generation's config dir (default: the SAME config
+  // dir bouncer itself uses). This is a CONFIG dir, not the logs/hooks
+  // directory directly —
+  // runAuditDiff appends logs/hooks/<guard>.log itself, same layout
+  // src/adapter/log-path.ts's hookLogPath uses for bouncer's own log.
+  readonly tsLogsDir?: string;
 }
 
 // Same error-protocol shape as ParsedDoctorArgs (return, never throw, so
@@ -175,23 +190,30 @@ export type ParsedAuditArgs =
   | { readonly options?: undefined; readonly error: string };
 
 const DEFAULT_AUDIT_DAYS = 30;
-const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days']);
+const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days', '--diff', '--ts-logs']);
 
 /**
- * Parses `audit`'s own flags (`--days N`, `--suggest`) — deliberately tiny
- * (two flags, no ordering requirement) rather than pulling in a general
+ * Parses `audit`'s own flags (`--days N`, `--suggest`, `--diff`,
+ * `--ts-logs <dir>`) — deliberately tiny rather than pulling in a general
  * arg-parsing dependency for one subcommand. An unrecognized token
  * (`--sugest`, `--dayz`, a stray positional, ...) is an explicit error, not
  * silently ignored — a typo'd flag must not fall through to "30-day report,
- * exit 0" as if nothing had been asked for.
+ * exit 0" as if nothing had been asked for. `--diff`/`--suggest` are
+ * mutually exclusive, and `--ts-logs` only makes sense alongside `--diff`.
  */
 export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
   let days = DEFAULT_AUDIT_DAYS;
   let suggest = false;
+  let diff = false;
+  let tsLogsDir: string | undefined;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]!;
     if (arg === '--suggest') {
       suggest = true;
+      continue;
+    }
+    if (arg === '--diff') {
+      diff = true;
       continue;
     }
     if (arg === '--days') {
@@ -204,11 +226,92 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
       i++;
       continue;
     }
+    if (arg === '--ts-logs') {
+      const value = rest[i + 1];
+      if (value === undefined || value.startsWith('--')) {
+        return { error: 'audit: --ts-logs requires a directory argument' };
+      }
+      tsLogsDir = value;
+      i++;
+      continue;
+    }
     if (!KNOWN_AUDIT_FLAGS.has(arg)) {
-      return { error: `audit: unrecognized argument ${JSON.stringify(arg)} (expected: --days <n> | --suggest)` };
+      return {
+        error: `audit: unrecognized argument ${JSON.stringify(arg)} `
+          + `(expected: --days <n> | --suggest | --diff [--ts-logs <dir>])`,
+      };
     }
   }
-  return { options: { days, suggest } };
+  if (diff && suggest) {
+    return { error: 'audit: --diff and --suggest are mutually exclusive' };
+  }
+  if (tsLogsDir !== undefined && !diff) {
+    return { error: 'audit: --ts-logs requires --diff' };
+  }
+  return { options: { days, suggest, diff, ...(tsLogsDir !== undefined ? { tsLogsDir } : {}) } };
+}
+
+/**
+ * `bouncer audit --diff [--ts-logs <dir>]` (ticket 08, code-only scope):
+ * compares bouncer's shadow-mode log entries against the TS generation's
+ * four independent guard logs over the last `--days` days, reporting the
+ * three divergence kinds src/adapter/audit-diff.ts classifies. Read-only —
+ * this writes nothing anywhere, on either side. A missing TS log file
+ * (ENOENT — a guard that has never fired, or hasn't been wired at all) is
+ * "no entries from that file", not a failure; an existing-but-unreadable
+ * one surfaces its own `warning:` line, same discipline runAudit's own
+ * bouncer-log read already uses.
+ */
+async function runAuditDiff(options: AuditOptions): Promise<CommandResult> {
+  let bouncerLogText = '';
+  let bouncerLogWarning: string | null = null;
+  try {
+    bouncerLogText = await readFile(hookLogPath(HOOK_NAME), 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'ENOENT') {
+      const message = err instanceof Error ? err.message : String(err);
+      bouncerLogWarning = `bouncer audit log unreadable: ${message}`;
+    }
+  }
+  const bouncerEntries = parseLogEntries(bouncerLogText);
+
+  const tsLogsDir = options.tsLogsDir ?? configDir();
+  const tsWarnings: string[] = [];
+  const tsEntries: TsLogEntry[] = [];
+  let tsIgnoredLineCount = 0;
+  for (const filename of TS_GUARD_LOG_FILES) {
+    const filePath = join(tsLogsDir, 'logs', 'hooks', filename);
+    try {
+      // oxlint-disable-next-line no-await-in-loop
+      const text = await readFile(filePath, 'utf8');
+      const parsed = parseTsLogEntries(text);
+      tsEntries.push(...parsed.entries);
+      tsIgnoredLineCount += parsed.ignoredLineCount;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code !== 'ENOENT') {
+        const message = err instanceof Error ? err.message : String(err);
+        tsWarnings.push(`${filePath} unreadable: ${message}`);
+      }
+    }
+  }
+
+  const diffResult = diffLogs(tsEntries, bouncerEntries, options.days);
+  const clusters = clusterDivergences(diffResult.divergences);
+  const text = renderDiffReport(clusters, {
+    days: options.days,
+    tsEventCount: diffResult.tsEventCount,
+    shadowEntryCount: diffResult.shadowEntryCount,
+    matchedCount: diffResult.matchedCount,
+    tsIgnoredLineCount,
+  });
+
+  const warningLines = [
+    ...(bouncerLogWarning !== null ? [`warning: ${bouncerLogWarning}`] : []),
+    ...tsWarnings.map((w) => `warning: ${w}`),
+  ];
+  return { text: [...warningLines, text].join('\n'), ok: true };
 }
 
 /**
@@ -227,6 +330,8 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
  * atop the report instead.
  */
 export async function runAudit(options: AuditOptions): Promise<CommandResult> {
+  if (options.diff) return runAuditDiff(options);
+
   const loaded = await loadCurrentPolicy();
 
   let logText = '';

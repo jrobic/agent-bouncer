@@ -31,12 +31,35 @@ import type { Dispatcher, FamilyVerdict } from './dispatch.ts';
 import { createDispatcher } from './dispatch.ts';
 import { buildSessionStartContext, defaultSettingsPath, type DoctorReport, runDoctorChecks } from './doctor.ts';
 import { buildContextOutput, buildPreToolUseOutput, buildSessionStartOutput } from './envelopes.ts';
-import { logPolicyWarnings, logVerdict } from './log.ts';
+import { logPolicyWarnings, logSessionStartShadow, logVerdict, toLogMode } from './log.ts';
 import { loadCurrentPolicy } from './policy.ts';
 import type { HookInput } from './protocol.ts';
 
 export interface RunResult {
   readonly stdout: string | null;
+}
+
+// Ticket 08: `bouncer run --shadow` (cli.ts parses the flag; `run()` here
+// is where it actually takes effect). Absolute contract — shadow evaluates
+// every event exactly as normal (same dispatch, same policy, same
+// logging), but NEVER writes to stdout, on any event shape: no deny, no
+// ask, no additionalContext, no SessionStart scream. The TS guard chain
+// stays the real enforcement path for the whole shadow window; this
+// process only watches and logs (`mode: "shadow"` on every entry it
+// writes — see log.ts).
+//
+// `unrecognizedTokens`: any argv token cli.ts's `run` handling didn't
+// recognize (a typo like `--shadwo`, a stray flag). The SAFE direction is
+// enforced deliberately: an unrecognized token never disarms enforcement
+// (only the EXACT string `--shadow` ever sets `shadow: true` — a typo
+// stays false, by construction) — but it also must not be silently
+// swallowed, since a live typo desyncing "I meant to be in shadow mode"
+// from "I am actually enforcing" is exactly the kind of drift this ticket
+// exists to make loud. Logged via logPolicyWarnings so it survives in the
+// audit trail even though the tool call itself proceeds normally.
+export interface RunOptions {
+  readonly shadow?: boolean;
+  readonly unrecognizedTokens?: readonly string[];
 }
 
 const SILENT: RunResult = { stdout: null };
@@ -54,19 +77,22 @@ async function runPreToolUse(
   input: HookInput,
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
+  shadow: boolean,
 ): Promise<RunResult> {
+  const mode = toLogMode(shadow);
   const hit: FamilyVerdict | null = await dispatcher.inspectPreToolUse(input);
   if (hit) {
-    await logVerdict(hit.family, input, hit.verdict, loaded);
+    await logVerdict(hit.family, input, hit.verdict, loaded, mode);
+    if (shadow) return SILENT;
     const action = degradeToClaudeCode(hit.verdict);
     return { stdout: buildPreToolUseOutput(action) };
   }
 
   // Nothing to block or confirm — check whether a conditional rule still
-  // earned an audit-log entry (allow proceeds either way).
+  // earned an audit-log entry (allow proceeds either way, shadow or not).
   const observe = dispatcher.classifyObserve(input);
   if (observe) {
-    await logVerdict(observe.family, input, observe.verdict, loaded);
+    await logVerdict(observe.family, input, observe.verdict, loaded, mode);
   }
   return SILENT;
 }
@@ -75,13 +101,16 @@ async function runUserPromptSubmit(
   input: HookInput,
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
+  shadow: boolean,
 ): Promise<RunResult> {
   const hits = dispatcher.inspectUserPromptSubmit(input);
   if (hits.length === 0) return SILENT;
+  const mode = toLogMode(shadow);
   for (const hit of hits) {
     // oxlint-disable-next-line no-await-in-loop
-    await logVerdict('prompt' satisfies Family, input, hit, loaded);
+    await logVerdict('prompt' satisfies Family, input, hit, loaded, mode);
   }
+  if (shadow) return SILENT;
   return { stdout: buildContextOutput(hits) };
 }
 
@@ -100,15 +129,27 @@ async function runUserPromptSubmit(
 // class this ticket exists to catch.
 export async function runSessionStart(
   loaded: LoadResult,
+  shadow: boolean,
   checkFn: (settingsPath: string, loaded: LoadResult) => Promise<DoctorReport> = runDoctorChecks,
 ): Promise<RunResult> {
   try {
     const report = await checkFn(defaultSettingsPath(), loaded);
-    return { stdout: buildSessionStartOutput(buildSessionStartContext(report)) };
+    const context = buildSessionStartContext(report);
+    if (shadow) {
+      // Ticket 08 decision 2: the scream/announcement never reaches
+      // stdout in shadow, but it must not be lost either — logged so
+      // shadow wiring health stays verifiable through the log. Nothing to
+      // log when context is null (a fully healthy SessionStart stays
+      // silent everywhere, shadow or not — there is no "verdict it would
+      // have emitted" when it would not have emitted one).
+      if (context !== null) await logSessionStartShadow(context, loaded);
+      return SILENT;
+    }
+    return { stdout: buildSessionStartOutput(context) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try {
-      await logPolicyWarnings([`doctor checks failed: ${message}`], loaded);
+      await logPolicyWarnings([`doctor checks failed: ${message}`], loaded, toLogMode(shadow));
     } catch {
       // Logging must never be what crashes the hook either.
     }
@@ -129,18 +170,21 @@ async function dispatchByEvent(
   input: HookInput,
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
+  shadow: boolean,
 ): Promise<RunResult> {
   switch (input.hook_event_name) {
     case 'PreToolUse':
-      return runPreToolUse(input, dispatcher, loaded);
+      return runPreToolUse(input, dispatcher, loaded, shadow);
     case 'UserPromptSubmit':
-      return runUserPromptSubmit(input, dispatcher, loaded);
+      return runUserPromptSubmit(input, dispatcher, loaded, shadow);
     default:
       return SILENT;
   }
 }
 
-export async function run(rawStdin: string): Promise<RunResult> {
+export async function run(rawStdin: string, options?: RunOptions): Promise<RunResult> {
+  const shadow = options?.shadow ?? false;
+  const unrecognizedTokens = options?.unrecognizedTokens ?? [];
   const input = parseEnvelope(rawStdin);
   if (input === null) return SILENT;
 
@@ -150,26 +194,41 @@ export async function run(rawStdin: string): Promise<RunResult> {
   // otherwise produces no verdict at all.
   const loaded = await loadCurrentPolicy();
   if (loaded.warnings.length > 0) {
-    await logPolicyWarnings(loaded.warnings, loaded);
+    await logPolicyWarnings(loaded.warnings, loaded, toLogMode(shadow));
+  }
+  if (unrecognizedTokens.length > 0) {
+    // Never disarms enforcement (shadow only ever activates on the exact
+    // `--shadow` token — see RunOptions's own comment) — this is purely
+    // making the mistake visible in the audit trail.
+    await logPolicyWarnings(
+      [`run: unrecognized argument(s) ${unrecognizedTokens.map((t) => JSON.stringify(t)).join(', ')} `
+        + `— ignored, running in normal enforce mode`],
+      loaded,
+      toLogMode(shadow),
+    );
   }
 
   if (input.hook_event_name === 'SessionStart') {
-    return runSessionStart(loaded);
+    return runSessionStart(loaded, shadow);
   }
 
   try {
     const dispatcher = createDispatcher(loaded.policy);
-    return await dispatchByEvent(input, dispatcher, loaded);
+    return await dispatchByEvent(input, dispatcher, loaded, shadow);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try {
-      await logPolicyWarnings([`dispatch failed, retrying with the embedded baseline: ${message}`]);
+      await logPolicyWarnings(
+        [`dispatch failed, retrying with the embedded baseline: ${message}`],
+        undefined,
+        toLogMode(shadow),
+      );
     } catch {
       // Logging must never be what crashes the hook either.
     }
     try {
       const baselineDispatcher = createDispatcher(BASELINE.rules);
-      return await dispatchByEvent(input, baselineDispatcher, undefined);
+      return await dispatchByEvent(input, baselineDispatcher, undefined, shadow);
     } catch {
       // The baseline dispatcher is the vetted, tested set — it should
       // never throw. If it somehow does, silence is still strictly safer

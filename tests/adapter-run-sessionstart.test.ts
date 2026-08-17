@@ -114,6 +114,38 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
   });
 });
 
+// Ticket 08: shadow mode never screams on stdout, even for a genuinely
+// broken wiring — but the would-be scream is not lost, it goes to the log
+// (mode: "shadow") so shadow wiring health is verifiable without stdout.
+describe('run: SessionStart in shadow mode (ticket 08) — never screams, logs what it would have said', () => {
+  test('a broken wiring would normally scream; in shadow it stays silent AND logs the would-be message', async () => {
+    const accountDir = await accountWithSettings({});
+    const { stdout } = await run(SESSION_START_ENVELOPE, { shadow: true });
+    expect(stdout).toBeNull();
+
+    const logContent = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8');
+    const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
+    const shadowEntry = lines.find((l) => l.mode === 'shadow');
+    expect(shadowEntry).toBeDefined();
+    expect(shadowEntry.message).toContain('unguarded');
+  });
+
+  test('a fully healthy wiring stays silent in shadow too, and logs nothing (context is null — nothing to log)', async () => {
+    const accountDir = await accountWithSettings(HEALTHY_HOOKS);
+    const { stdout } = await run(SESSION_START_ENVELOPE, { shadow: true });
+    expect(stdout).toBeNull();
+
+    const logExists = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8').catch(() => null);
+    expect(logExists).toBeNull(); // nothing was ever worth logging, so the file was never created
+  });
+
+  test('WITHOUT shadow, the same broken wiring DOES scream on stdout — confirms shadow, not something else, is what changed', async () => {
+    await accountWithSettings({});
+    const { stdout } = await run(SESSION_START_ENVELOPE);
+    expect(stdout).not.toBeNull();
+  });
+});
+
 describe('runSessionStart: a throwing doctor check is caught, logged, and never crashes the hook', () => {
   const FAKE_LOADED: LoadResult = {
     policy: {} as LoadResult['policy'],
@@ -133,7 +165,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
     const throwingCheck = async (): Promise<never> => {
       throw new Error('doctor check exploded');
     };
-    const result = await runSessionStart(FAKE_LOADED, throwingCheck);
+    const result = await runSessionStart(FAKE_LOADED, false, throwingCheck);
     expect(result.stdout).toBeNull(); // still never crashes the hook
 
     const logContent = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8');

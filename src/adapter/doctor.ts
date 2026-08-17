@@ -145,6 +145,43 @@ function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly Ra
   );
 }
 
+// Ticket 08: `run --shadow` already satisfies pointsAtBouncer above (it
+// only requires 'run' among the args, which --shadow doesn't remove) —
+// this is purely the "say so" half: an entry wired with --shadow is
+// healthy wiring, just worth naming in the manual checklist so a human
+// running `bouncer doctor` mid-shadow-window sees at a glance which
+// events are currently observe-only. Never affects `ok` — info, not fail.
+function commandsOf(entries: readonly RawHookEntry[]): string[] {
+  return entries
+    .flatMap((e) => (Array.isArray(e.hooks) ? e.hooks : []))
+    .map((h) => (h as { command?: unknown } | undefined)?.command)
+    .filter((c): c is string => typeof c === 'string');
+}
+
+function wiredInShadowMode(entries: readonly RawHookEntry[]): boolean {
+  return commandsOf(entries).some((command) => command.trim().split(/\s+/).includes('--shadow'));
+}
+
+// Ticket 08 review: `run()` itself treats an unrecognized argv token
+// safely (never disarms enforcement — see adapter/run.ts's RunOptions
+// comment), but a typo in the LIVE settings.json wiring (`--shadwo`
+// instead of `--shadow`) is exactly the kind of thing worth a scream at
+// SessionStart, not just a quiet log line: the account owner THINKS
+// they're in shadow mode and are actually enforcing (safe), or vice
+// versa in intent even if not in effect — either way the wiring doesn't
+// say what the human meant, and this is the one place (SessionStart) it
+// is actually actionable.
+const KNOWN_RUN_TOKENS: ReadonlySet<string> = new Set(['run', '--shadow']);
+
+function unrecognizedTokensIn(command: string): string[] {
+  const [, ...args] = command.trim().split(/\s+/);
+  return args.filter((a) => !KNOWN_RUN_TOKENS.has(a));
+}
+
+function unrecognizedTokensAmong(entries: readonly RawHookEntry[]): string[] {
+  return [...new Set(commandsOf(entries).flatMap(unrecognizedTokensIn))];
+}
+
 type MatcherCoverage =
   | { readonly kind: 'covers' }
   | { readonly kind: 'gap' }
@@ -201,6 +238,17 @@ function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): D
     };
   }
 
+  const unrecognized = unrecognizedTokensAmong(wired);
+  if (unrecognized.length > 0) {
+    return {
+      id,
+      ok: false,
+      message: `${event} hook command has unrecognized token(s) ${unrecognized.map((t) => JSON.stringify(t)).join(', ')} `
+        + `— likely a typo (e.g. --shadwo instead of --shadow); the tool call itself still runs safely `
+        + `(enforce mode), but the wiring doesn't say what you meant`,
+    };
+  }
+
   if (event === 'PreToolUse') {
     const coverage = evaluateMatcherCoverage(wired);
     if (coverage.kind === 'unparseable') {
@@ -221,7 +269,8 @@ function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): D
     }
   }
 
-  return { id, ok: true, message: `${event} is correctly wired` };
+  const shadowSuffix = wiredInShadowMode(wired) ? ' (shadow mode)' : '';
+  return { id, ok: true, message: `${event} is correctly wired${shadowSuffix}` };
 }
 
 function checkPolicy(loaded: LoadResult): DoctorCheck {
