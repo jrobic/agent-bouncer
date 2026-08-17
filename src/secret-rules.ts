@@ -1,6 +1,6 @@
 // Secret-guard: which filesystem paths and which Bash commands reference
 // secret-bearing material. Pure — no Bun/Node APIs, no harness protocol
-// shapes. The rule tables are policy data (policy/baseline.toml,
+// shapes. The rule tables are policy data (policy/secret.toml,
 // `rules.secret.path` and `rules.secret.bash`); this module owns the
 // scanning algorithms, parameterized over whichever tables are loaded.
 //
@@ -29,7 +29,7 @@ export interface SecretChecker {
  * Builds {checkPath, checkSecretBash, checkUrl} bound to the given rule
  * tables (baseline, or a merged baseline+overlay+override set) and the
  * git config read-mode list the "git_remote_url" special rule needs —
- * shared with the command family (see policy/baseline.toml's
+ * shared with the command family (see policy/command.toml's
  * `rules.command.git.config_read_modes`) so both stay a single source of
  * truth instead of two hardcoded lists drifting apart.
  */

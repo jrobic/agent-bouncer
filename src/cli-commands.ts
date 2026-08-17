@@ -16,7 +16,7 @@ import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
 import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
 import { hookLogPath } from './adapter/log-path.ts';
-import { loadCurrentPolicy, overlayPath } from './adapter/policy.ts';
+import { loadCurrentPolicy, overlayDirPath, overlayPath } from './adapter/policy.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 
@@ -50,22 +50,25 @@ export async function runCheck(command: string): Promise<CommandResult> {
 }
 
 /**
- * `bouncer rules lint` — validates the account's current overlay (if any)
- * against the RE2-like dialect and the [[override]] resolution/reason
- * rules. Non-zero exit on failure (unlike `run`, which must always exit 0
- * for the hook protocol) — this is a validation command meant to be
- * scripted against.
+ * `bouncer rules lint` — validates the account's current overlay set
+ * (`policy.toml` plus every `policy.d/*.toml` file, if any) against the
+ * RE2-like dialect and the [[override]]/[[relax]] resolution/reason/
+ * cross-file-conflict rules. Non-zero exit on failure (unlike `run`, which
+ * must always exit 0 for the hook protocol) — this is a validation command
+ * meant to be scripted against. On success, names every file that was
+ * actually merged in (ticket 12's "reports per file"); on failure, the
+ * warning lines already name the specific offending file.
  */
 export async function runRulesLint(): Promise<CommandResult> {
   const loaded = await loadCurrentPolicy();
   if (loaded.warnings.length === 0) {
     const suffix = loaded.overlayApplied
-      ? `overlay at ${overlayPath()}`
+      ? `overlay: ${loaded.overlayFiles.join(', ')}`
       : 'no overlay present — baseline only';
     return { text: `lint: OK (${suffix})`, ok: true };
   }
   return {
-    text: [`lint: FAILED (${overlayPath()})`, ...loaded.warnings.map((w) => `  - ${w}`)].join('\n'),
+    text: [`lint: FAILED (${overlayPath()}, ${overlayDirPath()})`, ...loaded.warnings.map((w) => `  - ${w}`)].join('\n'),
     ok: false,
   };
 }
@@ -74,11 +77,15 @@ function ruleLine(entry: EffectiveRule): string {
   const suffix = entry.provenance === 'override'
     ? `override(${entry.overrideAction}) — ${entry.overrideReason}`
     : entry.provenance;
-  return `rule ${entry.family} ${entry.rule.id} ${suffix}`;
+  // The source file only exists for overlay/override provenance — a
+  // baseline rule has no file on disk to name, so `sourceFile` stays
+  // absent and this suffix stays empty, leaving baseline lines unchanged.
+  const fileSuffix = entry.sourceFile !== undefined ? ` [${entry.sourceFile}]` : '';
+  return `rule ${entry.family} ${entry.rule.id} ${suffix}${fileSuffix}`;
 }
 
 function overrideLine(loaded: LoadResult): string[] {
-  return loaded.activeOverrides.map((o) => `override ${o.action} ${o.rule} — ${o.reason}`);
+  return loaded.activeOverrides.map((o) => `override ${o.action} ${o.rule} — ${o.reason} [${o.sourceFile}]`);
 }
 
 // `[[relax]]` entries and a governed-sub git-conditional substitution both
@@ -87,7 +94,7 @@ function overrideLine(loaded: LoadResult): string[] {
 // disable/replace/relax an EXISTING rule) so a relaxed allowlist is exactly
 // as impossible to overlook as an active override.
 function relaxationLine(loaded: LoadResult): string[] {
-  return loaded.activeRelaxations.map((r) => `overlay-relax ${r.list} ${r.value} — ${r.reason}`);
+  return loaded.activeRelaxations.map((r) => `overlay-relax ${r.list} ${r.value} — ${r.reason} [${r.sourceFile}]`);
 }
 
 /**

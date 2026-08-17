@@ -1,7 +1,7 @@
 // Write-secret guard: high-signal secret token shapes embedded in text
 // about to be written (a file, an MCP payload). Pure — no Bun/Node APIs,
 // no harness protocol shapes. The rule table itself is policy data
-// (policy/baseline.toml, `[[rules.write_secret]]`); this module owns only
+// (policy/write-secret.toml, `[[rules.write_secret]]`); this module owns only
 // the scanning algorithm, parameterized over whichever table is loaded
 // (createScanSecrets) — `scanSecrets` is that algorithm bound to the
 // embedded baseline, for callers that don't need overlay/override

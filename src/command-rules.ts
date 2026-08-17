@@ -2,7 +2,7 @@
 // plus the git policy (structural tokenizer, ratified conditional
 // grammars). Pure — no Bun/Node APIs, no harness protocol shapes. The
 // regex table and every git-conditional list are policy data
-// (policy/baseline.toml, `rules.command.*`); this module owns the
+// (policy/command.toml, `rules.command.*`); this module owns the
 // tokenizer and the algorithms that interpret that data, parameterized via
 // createCommandChecker() — `checkBash`/`checkGit`/`classifyGitAllow` are
 // that algorithm bound to the embedded baseline.
@@ -58,7 +58,7 @@ function checkRmRfWith(cmd: string, dangerousTargets: readonly RegExp[]): Verdic
     const tokens = seg.split(/\s+/).slice(1).filter((t) => t && !t.startsWith('-'));
     for (const target of tokens) {
       // Dangerous always wins; the RM_ALLOWED_TARGETS documented in
-      // policy/baseline.toml is informative only and cannot override
+      // policy/command.toml is informative only and cannot override
       // system-path destruction (e.g. /etc/node_modules).
       if (isDangerousRmTarget(target, dangerousTargets)) {
         return {

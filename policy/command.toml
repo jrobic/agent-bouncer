@@ -1,18 +1,18 @@
-# bouncer baseline policy — the vetted, embedded rule set.
+# bouncer baseline policy — command family (destructive/exfiltration/
+# escalation shell patterns, and the git conditional-dispatch tables).
 #
 # Rule row schema, uniform across families: {id, regex, reason}, plus
 # optional `flags` (regex flags, e.g. "i"), `except` (a single negating
 # regex — a match here overrides a match on `regex`), and `special` (an
-# engine-recognized marker for logic no regex alone can express, e.g. the
-# remote-url config read/write distinction).
+# engine-recognized marker for logic no regex alone can express). See
+# docs/reference/policy.md for the full row shape and the three
+# declarative git-conditional forms below (ask_flags/safe_first_arg/
+# safe_grammar).
 #
 # Two git subcommands are outside this file entirely: `checkout` (pathspec
 # detection) and `restore` (staged-only form) need real parsing beyond any
 # of the three declarative forms below, and stay in src/command-rules.ts
 # under their own named rule ids (see checkGitCheckout/checkGitRestore).
-
-
-# ═══════════════════════════ command family ═══════════════════════════
 
 [[rules.command.bash]]
 id = "dd-device-write"
@@ -294,202 +294,3 @@ sequences = [
     ["--check"],
     ["--check", "*"],
   ]
-
-
-# ═══════════════════════════ secret family ═══════════════════════════
-
-[[rules.secret.path]]
-id = "dotenv"
-regex = "(^|/)\\.env[^/]*$"
-reason = ".env file blocked (only .env.example and .env.test are allowed)"
-except = "(^|/)\\.env\\.(example|test)$"
-
-[[rules.secret.path]]
-id = "crypto-key"
-regex = "(^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$"
-flags = "i"
-reason = "Cryptographic key/certificate file blocked"
-
-[[rules.secret.path]]
-id = "ssh-key"
-regex = "(^|/)id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$"
-reason = "SSH key file blocked"
-
-[[rules.secret.path]]
-id = "aws-creds"
-regex = "(^|/)\\.aws/(credentials|config)$"
-reason = "AWS credentials/config blocked"
-
-[[rules.secret.path]]
-id = "netrc-pgpass"
-regex = "(^|/)\\.(netrc|pgpass)$"
-reason = ".netrc/.pgpass blocked"
-
-[[rules.secret.path]]
-id = "cloud-sa"
-regex = "(service-account|firebase-adminsdk|gcp-key)[^/]*\\.json$"
-flags = "i"
-reason = "Cloud service-account JSON blocked"
-
-[[rules.secret.path]]
-id = "tfstate"
-regex = "\\.tfstate(\\.backup)?$|\\.terraform\\.tfstate\\.lock\\.info$"
-reason = "Terraform state file blocked (often contains plaintext secrets)"
-
-[[rules.secret.path]]
-id = "npmrc"
-regex = "(^|/)\\.npmrc$"
-reason = ".npmrc blocked outside node_modules/ (may contain _authToken)"
-except = "/node_modules/"
-
-[[rules.secret.path]]
-id = "gitconfig"
-regex = "(^|/)\\.gitconfig$"
-reason = ".gitconfig blocked (may contain [credential] tokens or signing keys)"
-
-[[rules.secret.path]]
-id = "hook-log"
-regex = "(^|/)(?:guard-command|guard-secret|guard-write-secret|guard-mcp-write|transcript-backup)\\.log$"
-reason = "hook audit log blocked (would leak history of denied tool calls)"
-
-[[rules.secret.path]]
-id = "transcript-backup"
-regex = "(^|/)\\.claude/transcripts(/|$)"
-reason = "transcript backup directory blocked (contains full session history)"
-
-[[rules.secret.path]]
-id = "secret-dir"
-regex = "(^|/)(\\.?secrets|credentials)(/|$)"
-reason = "Path inside secrets/ or credentials/ directory blocked"
-
-[[rules.secret.path]]
-id = "ssh-dir"
-regex = "(^|/)\\.ssh(/|$)"
-reason = ".ssh directory blocked"
-
-[[rules.secret.path]]
-id = "gnupg-dir"
-regex = "(^|/)\\.gnupg(/|$)"
-reason = ".gnupg directory blocked"
-
-[[rules.secret.bash]]
-id = "bash-git-leak-credential"
-regex = "\\bgit\\s+config\\b[^\\n]*\\b(credential|user\\.signingkey)\\b"
-reason = "git command may leak credentials (tokens in remote URLs, signing keys, credential helpers)"
-
-[[rules.secret.bash]]
-id = "bash-git-leak-remote-url"
-regex = "\\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b"
-reason = "git command may leak credentials (tokens in remote URLs, signing keys, credential helpers)"
-special = "git_remote_url"
-
-[[rules.secret.bash]]
-id = "bash-url-creds"
-regex = "\\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@"
-reason = "URL contains embedded user:password credentials (likely token leak)"
-
-
-# ═══════════════════════════ mcp-write family ═══════════════════════════
-
-[rules.mcp_write]
-read_prefixes = [
-    "get",
-    "list",
-    "search",
-    "fetch",
-    "read",
-    "query",
-    "lookup",
-    "describe",
-    "view",
-  ]
-
-
-# ═══════════════════════════ write-secret family ═══════════════════════════
-
-[[rules.write_secret]]
-id = "private-key"
-regex = "-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"
-reason = "PEM/OpenSSH private key block"
-
-[[rules.write_secret]]
-id = "aws-access-key-id"
-regex = "\\bAKIA[0-9A-Z]{16}\\b"
-reason = "AWS access key id"
-
-[[rules.write_secret]]
-id = "github-pat"
-regex = "\\bghp_[A-Za-z0-9]{36}\\b|\\bgithub_pat_[A-Za-z0-9_]{22,}\\b"
-reason = "GitHub personal access token"
-
-[[rules.write_secret]]
-id = "github-token"
-regex = "\\bgh[ousr]_[A-Za-z0-9]{36}\\b"
-reason = "GitHub OAuth/app/refresh token"
-
-[[rules.write_secret]]
-id = "slack-token"
-regex = "\\bxox[baprs]-[A-Za-z0-9-]{10,}\\b"
-reason = "Slack token"
-
-[[rules.write_secret]]
-id = "google-api-key"
-regex = "\\bAIza[0-9A-Za-z_-]{35}\\b"
-reason = "Google API key"
-
-[[rules.write_secret]]
-id = "stripe-secret-key"
-regex = "\\b(?:sk|rk)_live_[A-Za-z0-9]{24,}\\b"
-reason = "Stripe live secret key"
-
-[[rules.write_secret]]
-id = "jwt"
-regex = "\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b"
-reason = "JSON Web Token (possible embedded credential)"
-
-
-# ═══════════════════════════ prompt family ═══════════════════════════
-
-[[rules.prompt]]
-id = "ignore-previous"
-regex = "\\bignore\\s+(?:all\\s+|the\\s+|any\\s+)?(?:previous|prior|above|earlier|preceding)\\s+(?:instructions?|prompts?|messages?|context|rules?)\\b"
-flags = "i"
-reason = "attempt to override prior instructions"
-
-[[rules.prompt]]
-id = "disregard"
-regex = "\\bdisregard\\s+(?:all\\s+|the\\s+|any\\s+)?(?:previous|prior|above|earlier|system)\\b"
-flags = "i"
-reason = "attempt to discard prior context"
-
-[[rules.prompt]]
-id = "role-override"
-regex = "\\b(?:you\\s+are\\s+now|from\\s+now\\s+on|act\\s+as|pretend\\s+to\\s+be)\\b[^.\\n]{0,60}\\b(?:dan|jailbreak|unrestricted|no\\s+(?:restrictions?|rules?|limits?)|developer\\s+mode|do\\s+anything)\\b"
-flags = "i"
-reason = "role/jailbreak override"
-
-[[rules.prompt]]
-id = "injected-role-tag"
-regex = "<\\/?\\s*(?:system|instructions?|assistant|developer|tool_call|function_call)\\s*>"
-flags = "i"
-reason = "injected role/system tag"
-
-[[rules.prompt]]
-id = "new-instructions"
-regex = "\\b(?:new|updated|real|actual|important)\\s+(?:system\\s+)?(?:instructions?|prompt|directives?)\\s*:"
-flags = "i"
-reason = "injected new-instructions block"
-
-[[rules.prompt]]
-id = "prompt-exfil"
-regex = "\\b(?:reveal|print|show|repeat|output|leak)\\s+(?:me\\s+)?(?:your\\s+|the\\s+)?(?:system\\s+prompt|initial\\s+instructions|hidden\\s+(?:prompt|instructions)|developer\\s+(?:prompt|message))\\b"
-flags = "i"
-reason = "attempt to exfiltrate the system prompt"
-
-[[rules.prompt]]
-id = "base64-blob"
-regex = "[A-Za-z0-9+/]{200,}={0,2}"
-reason = "long base64 blob (possible encoded payload)"
-# Folded into the same table as the six phrase-based signatures (it used
-# to be a module-level constant evaluated separately in scanPrompt's
-# body) — as policy data there is no structural reason to keep it apart.

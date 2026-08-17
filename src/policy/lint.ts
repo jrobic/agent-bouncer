@@ -7,7 +7,7 @@
 // the vetted set); the overlay's failures are what trigger the
 // loud-warning fallback in load.ts.
 
-import type { EffectiveRule } from './load.ts';
+import type { EffectiveRule, FileTagged } from './load.ts';
 import type { OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
 
 export interface LintIssue {
@@ -118,7 +118,10 @@ export function lintRegexDialect(file: RawPolicyFile): LintIssue[] {
 export function lintEffectiveDialect(effective: readonly EffectiveRule[]): LintIssue[] {
   const issues: LintIssue[] = [];
   for (const entry of effective) {
-    issues.push(...lintOneRule(entry.family, entry.rule));
+    const prefix = entry.sourceFile !== undefined ? `${entry.sourceFile}: ` : '';
+    for (const issue of lintOneRule(entry.family, entry.rule)) {
+      issues.push({ message: `${prefix}${issue.message}` });
+    }
   }
   return issues;
 }
@@ -135,44 +138,45 @@ const VALID_ACTIONS = new Set(['disable', 'replace', 'relax']);
 const VALID_VERDICTS = new Set(['block', 'confirm', 'observe']);
 
 export function lintOverrides(
-  overrides: readonly OverrideEntry[],
+  overrides: readonly FileTagged<OverrideEntry>[],
   resolvable: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
-  for (const override of overrides) {
+  for (const { filename, raw: override } of overrides) {
+    const prefix = `${filename}: `;
     if (!override.reason || override.reason.trim() === '') {
-      issues.push({ message: `override on ${JSON.stringify(override.rule)}: reason must not be empty` });
+      issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)}: reason must not be empty` });
     }
     if (!resolvable.has(override.rule)) {
       issues.push({
-        message: `override rule ${JSON.stringify(override.rule)} does not resolve to any known rule id`,
+        message: `${prefix}override rule ${JSON.stringify(override.rule)} does not resolve to any known rule id`,
       });
     }
     if (!VALID_ACTIONS.has(override.action)) {
       issues.push({
-        message: `override on ${JSON.stringify(override.rule)}: action ${JSON.stringify(override.action)} `
+        message: `${prefix}override on ${JSON.stringify(override.rule)}: action ${JSON.stringify(override.action)} `
           + `is not one of disable/replace/relax`,
       });
     }
     if (override.action === 'replace') {
       if (override.regex === undefined || override.regex.trim() === '') {
         issues.push({
-          message: `override on ${JSON.stringify(override.rule)}: action "replace" requires a "regex" field`,
+          message: `${prefix}override on ${JSON.stringify(override.rule)}: action "replace" requires a "regex" field`,
         });
       } else {
         for (const issue of lintRegexSource(override.regex)) {
-          issues.push({ message: `override on ${JSON.stringify(override.rule)} (regex): ${issue.message}` });
+          issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)} (regex): ${issue.message}` });
         }
       }
     }
     if (override.action === 'relax') {
       if (override.verdict === undefined) {
         issues.push({
-          message: `override on ${JSON.stringify(override.rule)}: action "relax" requires a "verdict" field`,
+          message: `${prefix}override on ${JSON.stringify(override.rule)}: action "relax" requires a "verdict" field`,
         });
       } else if (!VALID_VERDICTS.has(override.verdict)) {
         issues.push({
-          message: `override on ${JSON.stringify(override.rule)}: verdict ${JSON.stringify(override.verdict)} `
+          message: `${prefix}override on ${JSON.stringify(override.rule)}: verdict ${JSON.stringify(override.verdict)} `
             + `is not one of block/confirm/observe`,
         });
       }
@@ -320,15 +324,15 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
 // `sub` NOT in that governed set is a genuinely new declarative rule, not
 // a substitution, and stays reason-optional.
 export function lintGitConditionalRelaxation(
-  entries: readonly { readonly sub: string; readonly reason?: string }[],
+  entries: readonly FileTagged<{ readonly sub: string; readonly reason?: string }>[],
   table: 'ask_flags' | 'safe_first_arg' | 'safe_grammar',
   governedSubs: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
-  for (const e of entries) {
+  for (const { filename, raw: e } of entries) {
     if (governedSubs.has(e.sub) && (!e.reason || e.reason.trim() === '')) {
       issues.push({
-        message: `command.git.${table}: overlay entry for sub ${JSON.stringify(e.sub)} substitutes a `
+        message: `${filename}: command.git.${table}: overlay entry for sub ${JSON.stringify(e.sub)} substitutes a `
           + `baseline-governed subcommand and can only relax its behavior — "reason" must not be empty`,
       });
     }
@@ -346,10 +350,19 @@ export function lintGitConditionalRelaxation(
 // context-free subset, still useful for linting a whole file in isolation
 // (e.g. the baseline itself, which never carries relax/declarative
 // overlay entries).
+//
+// No caller anywhere in src/ or tests/ (confirmed by grep) — a single
+// RawPolicyFile has no filename of its own to attach to lintOverrides'
+// now-mandatory FileTagged shape, so one is synthesized here for the
+// (currently unused) case where a future caller wants to lint a lone file
+// in isolation without a real overlay filename to give it.
 export function lintPolicyFile(file: RawPolicyFile): LintIssue[] {
   const dialectIssues = lintRegexDialect(file);
   const overrideIssues = file.override
-    ? lintOverrides(file.override, resolvableRuleIds(file.rules))
+    ? lintOverrides(
+      file.override.map((raw) => ({ filename: '<file>', raw })),
+      resolvableRuleIds(file.rules),
+    )
     : [];
   return [...dialectIssues, ...overrideIssues];
 }

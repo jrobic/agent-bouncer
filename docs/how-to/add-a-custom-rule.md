@@ -3,11 +3,25 @@
 Goal: add a new regex rule to your account's policy overlay without
 touching the embedded baseline.
 
+## Where personal rules go
+
+Two places, merged together (`<configDir>` is `~/.claude` unless
+`CLAUDE_CONFIG_DIR` is set — see `docs/reference/policy.md`):
+
+- `<configDir>/bouncer/policy.toml` — a single file, fine for a handful
+  of rules.
+- `<configDir>/bouncer/policy.d/*.toml` — split by theme once
+  `policy.toml` gets crowded (`10-npm.toml`, `20-client-x.toml`, ...),
+  merged after `policy.toml` in lexicographic filename order. Same rule
+  syntax, same validation, same fail-closed behavior — just a second
+  place to put a `[[rules...]]`/`[[override]]`/`[[relax]]` block instead
+  of appending to one growing file. The steps below use `policy.toml`;
+  everything they show works identically in a `policy.d/` file.
+
 ## Steps
 
-1. Open (or create) the overlay file at `<configDir>/bouncer/policy.toml`
-   (`<configDir>` is `~/.claude` unless `CLAUDE_CONFIG_DIR` is set — see
-   `docs/reference/policy.md`).
+1. Open (or create) the overlay file — `<configDir>/bouncer/policy.toml`,
+   or a themed file under `<configDir>/bouncer/policy.d/` (see above).
 
 2. Pick the table that matches what you're guarding — one of the five
    regex tables:
@@ -47,8 +61,9 @@ touching the embedded baseline.
    `lint: OK` means the regex compiled, stays inside the RE2-like dialect
    (no lookaround, no backreferences — see `docs/reference/policy.md`),
    and every required field is present. Any failure rejects the WHOLE
-   overlay, not just the broken entry — the baseline stays active in the
-   meantime (see `docs/reference/policy.md`'s fail-closed behavior).
+   overlay file SET (both `policy.toml` and every `policy.d/*.toml`
+   file), not just the broken entry or file — the baseline stays active in
+   the meantime (see `docs/reference/policy.md`'s fail-closed behavior).
 
 5. Check the verdict the new rule actually produces, without a live session:
 
@@ -64,15 +79,18 @@ touching the embedded baseline.
    bouncer rules list | grep block-npm-publish
    ```
 
-   Expect: `rule command.bash block-npm-publish overlay` — `overlay`
-   marks it as coming from your account's file, distinct from `baseline`.
+   Expect: `rule command.bash block-npm-publish overlay [policy.toml]` —
+   `overlay` marks it as coming from your account's files (not
+   `baseline`), and `[policy.toml]` names which one — `[policy.d/10-npm.toml]`
+   instead, had the rule been added there.
 
 ## Verify
 
 - `bouncer rules lint` exits 0.
 - `bouncer check "<a command your rule should catch>"` reports the verdict
   and rule id you expect.
-- `bouncer rules list` shows the new rule with provenance `overlay`.
+- `bouncer rules list` shows the new rule with provenance `overlay` and
+  the file it came from.
 
 ---
-Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/cli-commands.ts
+Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/adapter/policy.ts, src/cli-commands.ts

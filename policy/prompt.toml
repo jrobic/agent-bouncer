@@ -1,0 +1,47 @@
+# bouncer baseline policy — prompt family (submitted-prompt text matching
+# a prompt-injection signature). See docs/reference/policy.md for the
+# rule row shape shared across every family.
+
+[[rules.prompt]]
+id = "ignore-previous"
+regex = "\\bignore\\s+(?:all\\s+|the\\s+|any\\s+)?(?:previous|prior|above|earlier|preceding)\\s+(?:instructions?|prompts?|messages?|context|rules?)\\b"
+flags = "i"
+reason = "attempt to override prior instructions"
+
+[[rules.prompt]]
+id = "disregard"
+regex = "\\bdisregard\\s+(?:all\\s+|the\\s+|any\\s+)?(?:previous|prior|above|earlier|system)\\b"
+flags = "i"
+reason = "attempt to discard prior context"
+
+[[rules.prompt]]
+id = "role-override"
+regex = "\\b(?:you\\s+are\\s+now|from\\s+now\\s+on|act\\s+as|pretend\\s+to\\s+be)\\b[^.\\n]{0,60}\\b(?:dan|jailbreak|unrestricted|no\\s+(?:restrictions?|rules?|limits?)|developer\\s+mode|do\\s+anything)\\b"
+flags = "i"
+reason = "role/jailbreak override"
+
+[[rules.prompt]]
+id = "injected-role-tag"
+regex = "<\\/?\\s*(?:system|instructions?|assistant|developer|tool_call|function_call)\\s*>"
+flags = "i"
+reason = "injected role/system tag"
+
+[[rules.prompt]]
+id = "new-instructions"
+regex = "\\b(?:new|updated|real|actual|important)\\s+(?:system\\s+)?(?:instructions?|prompt|directives?)\\s*:"
+flags = "i"
+reason = "injected new-instructions block"
+
+[[rules.prompt]]
+id = "prompt-exfil"
+regex = "\\b(?:reveal|print|show|repeat|output|leak)\\s+(?:me\\s+)?(?:your\\s+|the\\s+)?(?:system\\s+prompt|initial\\s+instructions|hidden\\s+(?:prompt|instructions)|developer\\s+(?:prompt|message))\\b"
+flags = "i"
+reason = "attempt to exfiltrate the system prompt"
+
+[[rules.prompt]]
+id = "base64-blob"
+regex = "[A-Za-z0-9+/]{200,}={0,2}"
+reason = "long base64 blob (possible encoded payload)"
+# Folded into the same table as the six phrase-based signatures (it used
+# to be a module-level constant evaluated separately in scanPrompt's
+# body) — as policy data there is no structural reason to keep it apart.

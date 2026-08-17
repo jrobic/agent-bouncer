@@ -10,8 +10,9 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/pol
 
 // ─────────────────────────────────────────────────────────────────────────
 // REPOINTED (ticket 06): every rule table this file locks used to be a TS
-// array literal or a TS if-chain; they are now policy/baseline.toml data,
-// loaded through src/policy/baseline.ts. The repointing touches WHERE each
+// array literal or a TS if-chain; they are now policy/*.toml data (one
+// file per family since ticket 12), loaded through src/policy/baseline.ts.
+// The repointing touches WHERE each
 // digest reads from, never the digest DISCIPLINE: this is still a tripwire
 // that names the mutated entry at its own index, never a hash, and the
 // frozen arrays below are still DERIVED by running the real projection and
@@ -138,7 +139,7 @@ describe('guards-digest: every wrapper policy is effective and unknown options f
   }
 });
 
-// policy/baseline.toml `rules.command.bash` — regex-only rules. Privilege
+// policy/command.toml `rules.command.bash` — regex-only rules. Privilege
 // escalation is intentionally outside this table: it shares the structural
 // tokenizer and wrapper consumer with Git, and is locked by behavioral
 // mutations (above) rather than a table digest.
@@ -162,7 +163,7 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '16 process-substitution-download \\b(?:bash|sh|zsh|ksh)\\s+<\\s*\\(\\s*(?:curl|wget)\\b ',
 ];
 
-// policy/baseline.toml `rules.secret.bash`. 3 entries, each with its own
+// policy/secret.toml `rules.secret.bash`. 3 entries, each with its own
 // id (round-3 review: `bash-git-leak` used to be shared by index 0 and
 // index 1 — a `disable` override on that shared id would have silently
 // taken out both, including the `special = "git_remote_url"` marked
@@ -177,7 +178,7 @@ const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '2 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
 ];
 
-// policy/baseline.toml `rules.write_secret` — an identity control: 8
+// policy/write-secret.toml `rules.write_secret` — an identity control: 8
 // entries, none of which this port touches (no signature added, removed,
 // or widened).
 const EXPECTED_WRITE_SECRET_DIGEST: readonly string[] = [
@@ -191,7 +192,7 @@ const EXPECTED_WRITE_SECRET_DIGEST: readonly string[] = [
   '7 jwt \\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b ',
 ];
 
-// policy/baseline.toml `rules.prompt` — the other identity control. The
+// policy/prompt.toml `rules.prompt` — the other identity control. The
 // base64-blob signature (formerly a module constant BASE64_BLOB, evaluated
 // in scanPrompt's body OUTSIDE PROMPT_RULES) is now a plain 7th table row —
 // as policy data there was no structural reason left to keep it apart, and
@@ -246,7 +247,7 @@ function pathRuleDigest(
   return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ""} except=${r.except ?? ""}`);
 }
 
-// DERIVED by running the projection above against policy/baseline.toml and
+// DERIVED by running the projection above against policy/secret.toml and
 // printing the output — never hand-transcribed. `except` carries the
 // ENV_WHITELIST (dotenv) and node_modules (npmrc) exceptions that used to
 // be separate module-level regexes; they are policy data now too, one
@@ -439,7 +440,7 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 // ─────────────────────────────────────────────────────────────────────────
 // REPLACES the old "conditional chain, scraped from its source" lock: there
 // is no more TS if-chain to scrape for 14 of the 16 subcommands — they are
-// policy/baseline.toml data (ask_flags / safe_first_arg / safe_grammar),
+// policy/command.toml data (ask_flags / safe_first_arg / safe_grammar),
 // digested directly, the same discipline as every other table in this file.
 // `checkout` and `restore` are the two that stay engine code (pathspec
 // detection, staged-only form — beyond what any of the three declarative
@@ -466,7 +467,7 @@ function safeGrammarDigest(rules: readonly SafeGrammarRule[]): string[] {
 }
 
 // DERIVED by running the three projections above against
-// policy/baseline.toml and printing the output.
+// policy/command.toml and printing the output.
 const EXPECTED_ASK_FLAGS_DIGEST: readonly string[] = [
   '0 branch flags=[-d,-D,--delete,-m,-M,--move,-f,--force] max_positionals=none',
   '1 tag flags=[-d,--delete] max_positionals=none',

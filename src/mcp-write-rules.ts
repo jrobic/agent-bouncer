@@ -1,7 +1,7 @@
 // MCP-write guard: which MCP tool calls are reads (pass silently) versus
 // everything else (asks for confirmation). Pure — no Bun/Node APIs, no
 // harness protocol shapes. The read-prefix allowlist is policy data
-// (policy/baseline.toml, `rules.mcp_write.read_prefixes`); this module
+// (policy/mcp-write.toml, `rules.mcp_write.read_prefixes`); this module
 // owns only the operation-name parsing (there is no regex TABLE here to
 // load generically — a single allowlist and a fixed parsing rule).
 //

@@ -1,0 +1,16 @@
+# bouncer baseline policy — mcp-write family (default-ask MCP tool calls;
+# a call whose operation name starts with one of these prefixes is a
+# silent read). See docs/reference/policy.md.
+
+[rules.mcp_write]
+read_prefixes = [
+    "get",
+    "list",
+    "search",
+    "fetch",
+    "read",
+    "query",
+    "lookup",
+    "describe",
+    "view",
+  ]

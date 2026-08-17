@@ -4,7 +4,18 @@
 // rejected as a whole, the embedded baseline stays fully active, and the
 // rejection is a loud warning (surfaced by both the audit log and
 // `rules list`), never a silent swallow. Pure — no filesystem access (see
-// src/adapter/policy.ts for reading the overlay file off disk).
+// src/adapter/policy.ts for reading the overlay files off disk).
+//
+// The overlay is a SET of files, not one (ticket 12) — `policy.toml` (if
+// present), then every `policy.d/*.toml` file the adapter found, in
+// lexicographic filename order (src/adapter/policy.ts decides that order;
+// this module just processes whatever list it's given, in the order
+// given). Every failure mode stays collective across the whole set: one
+// bad file rejects everything, never a partial merge of "the files that
+// happened to be fine". `loadPolicyFromOverlayText` is a thin single-file
+// wrapper — test-only now (no production caller reaches for it; the real
+// path, src/adapter/policy.ts's loadCurrentPolicy, always builds a file
+// list and calls loadPolicyFromOverlayFiles directly).
 
 import { BASELINE } from './baseline.ts';
 import {
@@ -37,15 +48,26 @@ export interface EffectiveRule {
   readonly provenance: Provenance;
   readonly overrideAction?: 'replace' | 'relax';
   readonly overrideReason?: string;
+  // The overlay filename this entry came from ("policy.toml",
+  // "policy.d/10-npm.toml", ...) — present for 'overlay' and 'override'
+  // provenance, absent for 'baseline' (the embedded baseline has no file
+  // on disk to name).
+  readonly sourceFile?: string;
+}
+
+export interface ActiveOverride extends OverrideEntry {
+  readonly sourceFile: string;
 }
 
 // A relaxation actively in effect — an allowlist addition via `[[relax]]`,
 // or a git-conditional overlay entry substituting an already-governed
-// baseline subcommand. Always carries a reason (lint-enforced).
+// baseline subcommand. Always carries a reason (lint-enforced) and the
+// file it came from.
 export interface ActiveRelaxation {
   readonly list: string;
   readonly value: string;
   readonly reason: string;
+  readonly sourceFile: string;
 }
 
 export interface LoadResult {
@@ -53,53 +75,107 @@ export interface LoadResult {
   readonly effectiveRules: readonly EffectiveRule[];
   readonly warnings: readonly string[];
   readonly overlayApplied: boolean;
-  readonly activeOverrides: readonly OverrideEntry[];
+  // Every filename successfully merged in, in merge order — empty when
+  // overlayApplied is false (no files given, or the whole set rejected).
+  readonly overlayFiles: readonly string[];
+  readonly activeOverrides: readonly ActiveOverride[];
   readonly activeRelaxations: readonly ActiveRelaxation[];
 }
+
+// One overlay file as read off disk: a display name used in every
+// warning/provenance message (not necessarily a filesystem path —
+// "policy.toml", "policy.d/10-npm.toml") plus either its raw text, or —
+// when the adapter's `readdir` proved the file exists but a subsequent
+// read failed (permission denied, a broken symlink, a directory entry,
+// a TOCTOU race) — a `readError` describing why. A file the adapter
+// legitimately never saw (the root `policy.toml` simply not existing) is
+// never represented here at all; the adapter drops it before building
+// this list. From here on `readError` is treated exactly like a parse
+// error: it rejects the whole overlay set, naming this file (see
+// loadPolicyFromOverlayFiles) — a file readdir already proved present has
+// no license to silently vanish.
+export type OverlayFile =
+  | { readonly filename: string; readonly text: string }
+  | { readonly filename: string; readonly readError: string };
 
 interface Tagged {
   readonly family: string;
   readonly rule: RegexRule;
   readonly provenance: 'baseline' | 'overlay';
+  readonly sourceFile?: string;
+}
+
+export interface FileTagged<T> {
+  readonly filename: string;
+  readonly raw: T;
+}
+
+// The askFlags/safeFirstArg/safeGrammar trio: three parallel per-family
+// lists of git-conditional overlay entries that get threaded through the
+// merge (mergeGitPolicy), the active-relaxation report
+// (buildActiveRelaxations), and the cross-file conflict check together,
+// as one unit, at every call site — bundled here so a call site takes one
+// value instead of three positionally-ordered ones.
+interface GitConditionalEntries {
+  readonly askFlags: readonly FileTagged<AskFlagsRule>[];
+  readonly safeFirstArg: readonly FileTagged<SafeFirstArgRule>[];
+  readonly safeGrammar: readonly FileTagged<SafeGrammarRule>[];
 }
 
 // A structural-shape error at the merge boundary (wrong-typed field) and a
-// lint failure both take the same path out: reject the whole overlay.
+// lint failure both take the same path out: reject the whole overlay SET.
 class PolicyRejected extends Error {}
 
-function asArray<T>(value: unknown, path: string): readonly T[] {
+function getPath(obj: unknown, path: readonly string[]): unknown {
+  let cur: unknown = obj;
+  for (const key of path) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[key];
+  }
+  return cur;
+}
+
+// Reads an array-shaped field at `path` out of one file's parsed TOML,
+// naming that file if the field is present but not an array. Absent is
+// fine — an empty contribution, not a failure.
+function fileArray<T>(parsed: unknown, path: readonly string[], displayPath: string, filename: string): readonly T[] {
+  const value = getPath(parsed, path);
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) throw new PolicyRejected(`${path} must be an array`);
+  if (!Array.isArray(value)) throw new PolicyRejected(`${filename}: ${displayPath} must be an array`);
   return value as T[];
 }
 
 function mergeRegexFamily(
   family: string,
   baseline: readonly RegexRule[],
-  overlay: readonly unknown[],
+  overlayEntries: readonly FileTagged<unknown>[],
 ): Tagged[] {
-  const overlayTagged: Tagged[] = overlay.map((raw) => {
+  const overlayTagged: Tagged[] = overlayEntries.map(({ filename, raw }) => {
     if (
       raw === null || typeof raw !== 'object'
       || typeof (raw as Record<string, unknown>).id !== 'string'
       || typeof (raw as Record<string, unknown>).regex !== 'string'
       || typeof (raw as Record<string, unknown>).reason !== 'string'
     ) {
-      throw new PolicyRejected(`${family}: an overlay rule is missing a required string field (id/regex/reason)`);
+      throw new PolicyRejected(`${filename}: ${family}: an overlay rule is missing a required string field (id/regex/reason)`);
     }
-    return { family, rule: raw as RegexRule, provenance: 'overlay' as const };
+    return { family, rule: raw as RegexRule, provenance: 'overlay' as const, sourceFile: filename };
   });
   const baselineTagged: Tagged[] = baseline.map((rule) => ({ family, rule, provenance: 'baseline' as const }));
   // Regex tables: pure hardening. An overlay addition only ever adds a new
   // BLOCK/confirm signature — it can never relax an existing one — so it
-  // stays silently additive, appended after the vetted baseline set.
+  // stays silently additive, appended after the vetted baseline set, in
+  // the order its file was given (policy.toml, then policy.d lex order).
   return appendedAfterBaseline(baselineTagged, overlayTagged);
 }
 
 // Regex-table families (and the two plain danger lists, rm_rf/privilege):
-// baseline first, overlay entries appended after. The name says the order:
-// an overlay addition can only ever ADD a new signature (pure hardening),
-// never shadow or replace a vetted baseline entry by position.
+// baseline first, overlay entries appended after, in file order. The name
+// says the order: an overlay addition can only ever ADD a new signature
+// (pure hardening), never shadow or replace a vetted baseline entry by
+// position — and among overlay entries themselves, "first match wins"
+// (src/policy/match.ts's firstMatch) means the earlier FILE's entry wins
+// when two overlay rules could both match the same input.
 function appendedAfterBaseline<T>(baseline: readonly T[], overlay: readonly T[]): T[] {
   return [...baseline, ...overlay];
 }
@@ -111,13 +187,17 @@ function appendedAfterBaseline<T>(baseline: readonly T[], overlay: readonly T[])
 // order: overlay wins position, which is exactly what makes such an entry
 // a SUBSTITUTION — and therefore a relaxation requiring `reason` — when the
 // `sub` was already baseline-governed (see lint.ts's
-// lintGitConditionalRelaxation, which this asymmetry is what makes necessary).
+// lintGitConditionalRelaxation, which this asymmetry is what makes
+// necessary). The SAME `sub` substituted by two DIFFERENT overlay files is
+// rejected outright before this function ever runs (see
+// crossFileConflicts below) — there is no "which overlay file wins"
+// question left to answer positionally by the time this executes.
 function overlayTakesPrecedence<T>(overlay: readonly T[], baseline: readonly T[]): T[] {
   return [...overlay, ...baseline];
 }
 
-function relaxedValuesFor(relax: readonly RelaxationEntry[], list: RelaxableList): string[] {
-  return relax.filter((r) => r.list === list).map((r) => r.value);
+function relaxedValuesFor(relax: readonly FileTagged<RelaxationEntry>[], list: RelaxableList): string[] {
+  return relax.filter((r) => r.raw.list === list).map((r) => r.raw.value);
 }
 
 interface MergedPolicy {
@@ -135,14 +215,14 @@ interface MergedPolicy {
 
 function mergeGitPolicy(
   baseline: RulesPolicy['command']['git'],
-  o: Record<string, unknown> | undefined,
-  relax: readonly RelaxationEntry[],
+  entries: GitConditionalEntries,
+  relax: readonly FileTagged<RelaxationEntry>[],
 ): RulesPolicy['command']['git'] {
   return {
     // Additions here can ONLY come from [[relax]] (reason-mandatory,
     // lint-enforced) — a plain `rules.command.git.safe_subcommands`/
-    // `config_read_modes` entry in the overlay's [rules] table is rejected
-    // before mergeAll is ever called (see loadPolicyFromOverlayText).
+    // `config_read_modes` entry in any overlay file's [rules] table is
+    // rejected before this is ever called (see loadPolicyFromOverlayFiles).
     safe_subcommands: appendedAfterBaseline(
       baseline.safe_subcommands,
       relaxedValuesFor(relax, 'command.git.safe_subcommands'),
@@ -151,52 +231,9 @@ function mergeGitPolicy(
       baseline.config_read_modes,
       relaxedValuesFor(relax, 'command.git.config_read_modes'),
     ),
-    ask_flags: overlayTakesPrecedence(asArray<AskFlagsRule>(o?.['ask_flags'], 'rules.command.git.ask_flags'), baseline.ask_flags),
-    safe_first_arg: overlayTakesPrecedence(
-      asArray<SafeFirstArgRule>(o?.['safe_first_arg'], 'rules.command.git.safe_first_arg'),
-      baseline.safe_first_arg,
-    ),
-    safe_grammar: overlayTakesPrecedence(
-      asArray<SafeGrammarRule>(o?.['safe_grammar'], 'rules.command.git.safe_grammar'),
-      baseline.safe_grammar,
-    ),
-  };
-}
-
-function mergeAll(baseline: RulesPolicy, overlayRules: unknown, relax: readonly RelaxationEntry[]): MergedPolicy {
-  const o = (overlayRules ?? {}) as Record<string, any>;
-  const oCommand = o.command ?? {};
-  const oSecret = o.secret ?? {};
-
-  return {
-    command: {
-      bash: mergeRegexFamily('command.bash', baseline.command.bash, asArray(oCommand.bash, 'rules.command.bash')),
-      rm_rf: {
-        dangerous_targets: appendedAfterBaseline(
-          baseline.command.rm_rf.dangerous_targets,
-          asArray<string>(oCommand.rm_rf?.dangerous_targets, 'rules.command.rm_rf.dangerous_targets'),
-        ),
-      },
-      privilege_escalation: {
-        commands: appendedAfterBaseline(
-          baseline.command.privilege_escalation.commands,
-          asArray<string>(oCommand.privilege_escalation?.commands, 'rules.command.privilege_escalation.commands'),
-        ),
-      },
-      git: mergeGitPolicy(baseline.command.git, oCommand.git, relax),
-    },
-    secret: {
-      path: mergeRegexFamily('secret.path', baseline.secret.path, asArray(oSecret.path, 'rules.secret.path')),
-      bash: mergeRegexFamily('secret.bash', baseline.secret.bash, asArray(oSecret.bash, 'rules.secret.bash')),
-    },
-    mcp_write: {
-      read_prefixes: appendedAfterBaseline(
-        baseline.mcp_write.read_prefixes,
-        relaxedValuesFor(relax, 'mcp_write.read_prefixes'),
-      ),
-    },
-    write_secret: mergeRegexFamily('write_secret', baseline.write_secret, asArray(o.write_secret, 'rules.write_secret')),
-    prompt: mergeRegexFamily('prompt', baseline.prompt, asArray(o.prompt, 'rules.prompt')),
+    ask_flags: overlayTakesPrecedence(entries.askFlags.map((t) => t.raw), baseline.ask_flags),
+    safe_first_arg: overlayTakesPrecedence(entries.safeFirstArg.map((t) => t.raw), baseline.safe_first_arg),
+    safe_grammar: overlayTakesPrecedence(entries.safeGrammar.map((t) => t.raw), baseline.safe_grammar),
   };
 }
 
@@ -209,12 +246,13 @@ function mergeAll(baseline: RulesPolicy, overlayRules: unknown, relax: readonly 
 function lintMergedDialect(merged: MergedPolicy): string[] {
   const issues: string[] = [];
   for (const t of allTagged(merged)) {
+    const prefix = t.sourceFile !== undefined ? `${t.sourceFile}: ` : '';
     for (const issue of lintRegexSource(t.rule.regex, t.rule.flags)) {
-      issues.push(`${t.family} rule ${JSON.stringify(t.rule.id)}: ${issue.message}`);
+      issues.push(`${prefix}${t.family} rule ${JSON.stringify(t.rule.id)}: ${issue.message}`);
     }
     if (t.rule.except !== undefined) {
       for (const issue of lintRegexSource(t.rule.except, t.rule.flags)) {
-        issues.push(`${t.family} rule ${JSON.stringify(t.rule.id)} (except): ${issue.message}`);
+        issues.push(`${prefix}${t.family} rule ${JSON.stringify(t.rule.id)} (except): ${issue.message}`);
       }
     }
   }
@@ -238,10 +276,20 @@ function allTagged(merged: MergedPolicy): Tagged[] {
 
 // Applies every [[override]] to the tagged rule it names (by id — id is
 // not guaranteed unique within a family, e.g. a family with two entries
-// sharing an id, so an override touches every entry sharing it).
-function applyOverrides(tagged: readonly Tagged[], overrides: readonly OverrideEntry[]): EffectiveRule[] {
-  let current: EffectiveRule[] = tagged.map((t) => ({ family: t.family, rule: t.rule, provenance: t.provenance }));
-  for (const override of overrides) {
+// sharing an id, so an override touches every entry sharing it). Multiple
+// overrides on the same rule id WITHIN one file still chain sequentially,
+// exactly as before this ticket (e.g. replace then relax) — only a
+// cross-FILE conflict on the same rule id is rejected, and that rejection
+// happens earlier, before this function is ever called (see
+// crossFileConflicts).
+function applyOverrides(tagged: readonly Tagged[], overrides: readonly FileTagged<OverrideEntry>[]): EffectiveRule[] {
+  let current: EffectiveRule[] = tagged.map((t) => ({
+    family: t.family,
+    rule: t.rule,
+    provenance: t.provenance,
+    ...(t.sourceFile !== undefined ? { sourceFile: t.sourceFile } : {}),
+  }));
+  for (const { filename, raw: override } of overrides) {
     current = current.flatMap((entry): EffectiveRule[] => {
       if (entry.rule.id !== override.rule) return [entry];
       if (override.action === 'disable') return [];
@@ -252,6 +300,7 @@ function applyOverrides(tagged: readonly Tagged[], overrides: readonly OverrideE
           provenance: 'override',
           overrideAction: 'replace',
           overrideReason: override.reason,
+          sourceFile: filename,
         }];
       }
       // relax
@@ -261,6 +310,7 @@ function applyOverrides(tagged: readonly Tagged[], overrides: readonly OverrideE
         provenance: 'override',
         overrideAction: 'relax',
         overrideReason: override.reason,
+        sourceFile: filename,
       }];
     });
   }
@@ -275,7 +325,8 @@ function buildResult(
   merged: MergedPolicy,
   effective: readonly EffectiveRule[],
   overlayApplied: boolean,
-  activeOverrides: readonly OverrideEntry[],
+  overlayFiles: readonly string[],
+  activeOverrides: readonly ActiveOverride[],
   activeRelaxations: readonly ActiveRelaxation[],
   warnings: readonly string[],
 ): LoadResult {
@@ -294,13 +345,32 @@ function buildResult(
     write_secret: regexRulesOf(effective, 'write_secret'),
     prompt: regexRulesOf(effective, 'prompt'),
   };
-  return { policy, effectiveRules: effective, overlayApplied, activeOverrides, activeRelaxations, warnings };
+  return { policy, effectiveRules: effective, overlayApplied, overlayFiles, activeOverrides, activeRelaxations, warnings };
+}
+
+function mergedBaselineOnly(): MergedPolicy {
+  const baseline = BASELINE.rules;
+  return {
+    command: {
+      bash: mergeRegexFamily('command.bash', baseline.command.bash, []),
+      rm_rf: { dangerous_targets: baseline.command.rm_rf.dangerous_targets },
+      privilege_escalation: { commands: baseline.command.privilege_escalation.commands },
+      git: mergeGitPolicy(baseline.command.git, { askFlags: [], safeFirstArg: [], safeGrammar: [] }, []),
+    },
+    secret: {
+      path: mergeRegexFamily('secret.path', baseline.secret.path, []),
+      bash: mergeRegexFamily('secret.bash', baseline.secret.bash, []),
+    },
+    mcp_write: { read_prefixes: baseline.mcp_write.read_prefixes },
+    write_secret: mergeRegexFamily('write_secret', baseline.write_secret, []),
+    prompt: mergeRegexFamily('prompt', baseline.prompt, []),
+  };
 }
 
 function baselineOnlyResult(warnings: readonly string[] = []): LoadResult {
-  const merged = mergeAll(BASELINE.rules, undefined, []);
+  const merged = mergedBaselineOnly();
   const effective = applyOverrides(allTagged(merged), []);
-  return buildResult(merged, effective, false, [], [], warnings);
+  return buildResult(merged, effective, false, [], [], [], warnings);
 }
 
 // Every subcommand the baseline already has an opinion on: unconditionally
@@ -321,96 +391,278 @@ function baselineGovernedSubs(git: RulesPolicy['command']['git']): ReadonlySet<s
 }
 
 function buildActiveRelaxations(
-  relax: readonly RelaxationEntry[],
-  rawAskFlags: readonly { readonly sub: string; readonly reason?: string }[],
-  rawSafeFirstArg: readonly { readonly sub: string; readonly reason?: string }[],
-  rawSafeGrammar: readonly { readonly sub: string; readonly reason?: string }[],
+  relax: readonly FileTagged<RelaxationEntry>[],
+  entries: GitConditionalEntries,
   governedSubs: ReadonlySet<string>,
 ): ActiveRelaxation[] {
   const fromGitConditional = (
-    entries: readonly { readonly sub: string; readonly reason?: string }[],
+    list: readonly FileTagged<{ readonly sub: string; readonly reason?: string }>[],
     table: string,
   ): ActiveRelaxation[] =>
-    entries
-      .filter((e) => governedSubs.has(e.sub))
-      .map((e) => ({ list: `command.git.${table}`, value: e.sub, reason: e.reason! }));
+    list
+      .filter((e) => governedSubs.has(e.raw.sub))
+      .map((e) => ({ list: `command.git.${table}`, value: e.raw.sub, reason: e.raw.reason!, sourceFile: e.filename }));
   return [
-    ...relax.map((r) => ({ list: r.list, value: r.value, reason: r.reason })),
-    ...fromGitConditional(rawAskFlags, 'ask_flags'),
-    ...fromGitConditional(rawSafeFirstArg, 'safe_first_arg'),
-    ...fromGitConditional(rawSafeGrammar, 'safe_grammar'),
+    ...relax.map((r) => ({ list: r.raw.list, value: r.raw.value, reason: r.raw.reason, sourceFile: r.filename })),
+    ...fromGitConditional(entries.askFlags, 'ask_flags'),
+    ...fromGitConditional(entries.safeFirstArg, 'safe_first_arg'),
+    ...fromGitConditional(entries.safeGrammar, 'safe_grammar'),
   ];
 }
 
+// Detects the SAME conflict target (an override's `rule`, a relax's
+// `list`+`value`, a declarative entry's `sub`) contributed by more than
+// one FILE — an explicit lint failure, never a silent "last file wins".
+// Multiple entries for the same target WITHIN one file are unaffected by
+// this check (existing single-file semantics: sequential override
+// chaining, first-entry-wins table lookup) — only cross-file duplication
+// is ambiguous enough to reject outright.
+//
+// `keyOf` is only ever used to GROUP entries (map equality, never shown to
+// a human) — it can encode however it likes. `labelOf` produces the
+// human-readable label straight from the raw entry, once per key, for the
+// caller's error message; it is never derived by re-parsing `keyOf`'s
+// output, which used to be `${list} ${value}` re-split on a space — lossy
+// for any `value` that itself contains a space.
+function crossFileConflicts<T>(
+  entries: readonly FileTagged<T>[],
+  keyOf: (v: T) => string,
+  labelOf: (v: T) => string,
+): { readonly label: string; readonly files: readonly string[] }[] {
+  const byKey = new Map<string, { label: string; files: Set<string> }>();
+  for (const { filename, raw } of entries) {
+    const key = keyOf(raw);
+    const entry = byKey.get(key) ?? { label: labelOf(raw), files: new Set<string>() };
+    entry.files.add(filename);
+    byKey.set(key, entry);
+  }
+  const conflicts: { label: string; files: string[] }[] = [];
+  for (const { label, files } of byKey.values()) {
+    if (files.size > 1) conflicts.push({ label, files: [...files].sort() });
+  }
+  return conflicts;
+}
+
+// The three declarative git-conditional tables' cross-file conflict check
+// is the same shape three times over (group by `sub`, reject if more than
+// one file contributes the same one) — one helper, called once per table,
+// instead of three near-identical crossFileConflicts-call-then-.map(...)
+// blocks.
+function declarativeTableConflicts(
+  table: string,
+  entries: readonly FileTagged<{ readonly sub: string }>[],
+): { readonly table: string; readonly label: string; readonly files: readonly string[] }[] {
+  return crossFileConflicts(entries, (e) => e.sub, (e) => e.sub).map((c) => ({ ...c, table }));
+}
+
+interface ParsedFile {
+  readonly filename: string;
+  readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown };
+}
+
 /**
- * Loads the effective policy from raw overlay TEXT (or `null` for "no
- * overlay file present"). Never throws: any failure — invalid TOML, a
- * wrong-shaped rule table, a lint-failing regex or declarative entry, an
- * unresolvable/reason-less override, a silent-relaxation attempt missing
- * its mandatory reason — rejects the WHOLE overlay and returns the
- * baseline alone, with the reason in `warnings`.
+ * Loads the effective policy from a SET of overlay files — `policy.toml`
+ * and every `policy.d/*.toml` file, in the order given (the adapter is
+ * responsible for that order: policy.toml first, then policy.d files
+ * lexicographically). An empty list is "no overlay at all": baseline
+ * alone, silently. Never throws: any failure anywhere in the set —
+ * invalid TOML in any one file, a wrong-shaped rule table, a lint-failing
+ * regex or declarative entry, an unresolvable/reason-less
+ * override/relax, a silent-relaxation attempt missing its mandatory
+ * reason, a cross-file conflict on the same override/relax/declarative
+ * target — rejects the WHOLE set and returns the baseline alone, with the
+ * reason (naming the offending file(s)) in `warnings`.
  */
-export function loadPolicyFromOverlayText(overlayText: string | null): LoadResult {
-  if (overlayText === null) return baselineOnlyResult();
-  if (overlayText.trim() === '') return baselineOnlyResult();
+export function loadPolicyFromOverlayFiles(files: readonly OverlayFile[]): LoadResult {
+  if (files.length === 0) return baselineOnlyResult();
 
   try {
-    const parsed = Bun.TOML.parse(overlayText) as { rules?: unknown; override?: unknown; relax?: unknown };
-    const rawOverrides = asArray<OverrideEntry>(parsed.override, 'override');
-    const rawRelax = asArray<Record<string, unknown>>(parsed.relax, 'relax');
+    const parsedFiles: ParsedFile[] = files.map((file) => {
+      if ('readError' in file) {
+        // readdir already proved this file exists — a subsequent read
+        // failure (permission denied, a broken symlink, a directory
+        // entry, a TOCTOU race) is never silently treated as "absent",
+        // it rejects the whole set exactly like a parse error, naming
+        // the file.
+        throw new PolicyRejected(`${file.filename}: ${file.readError}`);
+      }
+      try {
+        return { filename: file.filename, parsed: Bun.TOML.parse(file.text) as ParsedFile['parsed'] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new PolicyRejected(`${file.filename}: ${message}`);
+      }
+    });
 
-    const rulesRaw = (parsed.rules ?? {}) as Record<string, any>;
-    const oGit = (rulesRaw.command ?? {}).git ?? {};
-    const rawAskFlags = asArray<Record<string, unknown>>(oGit.ask_flags, 'rules.command.git.ask_flags');
-    const rawSafeFirstArg = asArray<Record<string, unknown>>(oGit.safe_first_arg, 'rules.command.git.safe_first_arg');
-    const rawSafeGrammar = asArray<Record<string, unknown>>(oGit.safe_grammar, 'rules.command.git.safe_grammar');
+    const rawOverrides: FileTagged<OverrideEntry>[] = [];
+    const rawRelax: FileTagged<RelaxationEntry>[] = [];
+    const rawAskFlags: FileTagged<AskFlagsRule>[] = [];
+    const rawSafeFirstArg: FileTagged<SafeFirstArgRule>[] = [];
+    const rawSafeGrammar: FileTagged<SafeGrammarRule>[] = [];
+    const rawCommandBash: FileTagged<unknown>[] = [];
+    const rawSecretPath: FileTagged<unknown>[] = [];
+    const rawSecretBash: FileTagged<unknown>[] = [];
+    const rawWriteSecret: FileTagged<unknown>[] = [];
+    const rawPrompt: FileTagged<unknown>[] = [];
+    let rmRfTargets: string[] = [];
+    let privilegeCommands: string[] = [];
 
-    // Shape-validate the three declarative forms before anything
-    // downstream (governed-subs check, merge, the checker itself) reads
-    // their fields — a malformed entry must fail lint, not throw at match
-    // time.
-    const shapeIssues = [
-      ...lintAskFlagsShape(rawAskFlags),
-      ...lintSafeFirstArgShape(rawSafeFirstArg),
-      ...lintSafeGrammarShape(rawSafeGrammar),
+    // Phase 1: per-file extraction and per-file shape validation, in the
+    // order the files were given. A failure here always names the ONE
+    // file it came from.
+    for (const { filename, parsed } of parsedFiles) {
+      const fileOverrides = fileArray<OverrideEntry>(parsed, ['override'], 'override', filename);
+      const fileRelax = fileArray<Record<string, unknown>>(parsed, ['relax'], 'relax', filename);
+      const fileAskFlags = fileArray<Record<string, unknown>>(
+        parsed,
+        ['rules', 'command', 'git', 'ask_flags'],
+        'rules.command.git.ask_flags',
+        filename,
+      );
+      const fileSafeFirstArg = fileArray<Record<string, unknown>>(
+        parsed,
+        ['rules', 'command', 'git', 'safe_first_arg'],
+        'rules.command.git.safe_first_arg',
+        filename,
+      );
+      const fileSafeGrammar = fileArray<Record<string, unknown>>(
+        parsed,
+        ['rules', 'command', 'git', 'safe_grammar'],
+        'rules.command.git.safe_grammar',
+        filename,
+      );
+
+      const shapeIssues = [
+        ...lintAskFlagsShape(fileAskFlags),
+        ...lintSafeFirstArgShape(fileSafeFirstArg),
+        ...lintSafeGrammarShape(fileSafeGrammar),
+      ];
+      if (shapeIssues.length > 0) throw new PolicyRejected(`${filename}: ${shapeIssues.map((i) => i.message).join('; ')}`);
+
+      if (getPath(parsed, ['rules', 'command', 'git', 'safe_subcommands']) !== undefined) {
+        throw new PolicyRejected(
+          `${filename}: rules.command.git.safe_subcommands cannot be extended directly — use [[relax]] `
+            + `(list = "command.git.safe_subcommands") with a reason`,
+        );
+      }
+      if (getPath(parsed, ['rules', 'command', 'git', 'config_read_modes']) !== undefined) {
+        throw new PolicyRejected(
+          `${filename}: rules.command.git.config_read_modes cannot be extended directly — use [[relax]] `
+            + `(list = "command.git.config_read_modes") with a reason`,
+        );
+      }
+      if (getPath(parsed, ['rules', 'mcp_write', 'read_prefixes']) !== undefined) {
+        throw new PolicyRejected(
+          `${filename}: rules.mcp_write.read_prefixes cannot be extended directly — use [[relax]] `
+            + `(list = "mcp_write.read_prefixes") with a reason`,
+        );
+      }
+
+      const fileRelaxIssues = lintRelaxEntries(fileRelax);
+      if (fileRelaxIssues.length > 0) throw new PolicyRejected(`${filename}: ${fileRelaxIssues.map((i) => i.message).join('; ')}`);
+
+      for (const raw of fileOverrides) rawOverrides.push({ filename, raw });
+      for (const raw of fileRelax) rawRelax.push({ filename, raw: raw as unknown as RelaxationEntry });
+      for (const raw of fileAskFlags) rawAskFlags.push({ filename, raw: raw as unknown as AskFlagsRule });
+      for (const raw of fileSafeFirstArg) rawSafeFirstArg.push({ filename, raw: raw as unknown as SafeFirstArgRule });
+      for (const raw of fileSafeGrammar) rawSafeGrammar.push({ filename, raw: raw as unknown as SafeGrammarRule });
+      for (const raw of fileArray<unknown>(parsed, ['rules', 'command', 'bash'], 'rules.command.bash', filename)) {
+        rawCommandBash.push({ filename, raw });
+      }
+      for (const raw of fileArray<unknown>(parsed, ['rules', 'secret', 'path'], 'rules.secret.path', filename)) {
+        rawSecretPath.push({ filename, raw });
+      }
+      for (const raw of fileArray<unknown>(parsed, ['rules', 'secret', 'bash'], 'rules.secret.bash', filename)) {
+        rawSecretBash.push({ filename, raw });
+      }
+      for (const raw of fileArray<unknown>(parsed, ['rules', 'write_secret'], 'rules.write_secret', filename)) {
+        rawWriteSecret.push({ filename, raw });
+      }
+      for (const raw of fileArray<unknown>(parsed, ['rules', 'prompt'], 'rules.prompt', filename)) {
+        rawPrompt.push({ filename, raw });
+      }
+      rmRfTargets = rmRfTargets.concat(
+        fileArray<string>(parsed, ['rules', 'command', 'rm_rf', 'dangerous_targets'], 'rules.command.rm_rf.dangerous_targets', filename),
+      );
+      privilegeCommands = privilegeCommands.concat(
+        fileArray<string>(
+          parsed,
+          ['rules', 'command', 'privilege_escalation', 'commands'],
+          'rules.command.privilege_escalation.commands',
+          filename,
+        ),
+      );
+    }
+
+    // Phase 2: cross-file conflicts — the same override/relax/declarative
+    // substitution target named by more than one file is ambiguous,
+    // rejected explicitly rather than resolved by silent file order.
+    const overrideConflicts = crossFileConflicts(rawOverrides, (o) => o.rule, (o) => o.rule);
+    if (overrideConflicts.length > 0) {
+      throw new PolicyRejected(
+        overrideConflicts
+          .map((c) => `conflicting [[override]] for rule ${JSON.stringify(c.label)} in ${c.files.join(' and ')}`)
+          .join('; '),
+      );
+    }
+    const relaxConflicts = crossFileConflicts(
+      rawRelax,
+      (r) => JSON.stringify([r.list, r.value]),
+      (r) => `${r.list}=${JSON.stringify(r.value)}`,
+    );
+    if (relaxConflicts.length > 0) {
+      throw new PolicyRejected(
+        relaxConflicts
+          .map((c) => `conflicting [[relax]] for ${c.label} in ${c.files.join(' and ')}`)
+          .join('; '),
+      );
+    }
+    const declarativeConflicts = [
+      ...declarativeTableConflicts('ask_flags', rawAskFlags),
+      ...declarativeTableConflicts('safe_first_arg', rawSafeFirstArg),
+      ...declarativeTableConflicts('safe_grammar', rawSafeGrammar),
     ];
-    if (shapeIssues.length > 0) throw new PolicyRejected(shapeIssues.map((i) => i.message).join('; '));
-
-    // The three pure allowlists can only be widened through [[relax]]
-    // (reason-mandatory) — a direct addition via [rules.command.git] or
-    // [rules.mcp_write] bypasses that requirement and is rejected outright.
-    if (oGit.safe_subcommands !== undefined) {
+    if (declarativeConflicts.length > 0) {
       throw new PolicyRejected(
-        'rules.command.git.safe_subcommands cannot be extended directly — use [[relax]] '
-          + '(list = "command.git.safe_subcommands") with a reason',
+        declarativeConflicts
+          .map((c) => `conflicting command.git.${c.table} entries for sub ${JSON.stringify(c.label)} in ${c.files.join(' and ')}`)
+          .join('; '),
       );
     }
-    if (oGit.config_read_modes !== undefined) {
-      throw new PolicyRejected(
-        'rules.command.git.config_read_modes cannot be extended directly — use [[relax]] '
-          + '(list = "command.git.config_read_modes") with a reason',
-      );
-    }
-    if ((rulesRaw.mcp_write ?? {}).read_prefixes !== undefined) {
-      throw new PolicyRejected(
-        'rules.mcp_write.read_prefixes cannot be extended directly — use [[relax]] '
-          + '(list = "mcp_write.read_prefixes") with a reason',
-      );
-    }
-
-    const relaxIssues = lintRelaxEntries(rawRelax);
-    if (relaxIssues.length > 0) throw new PolicyRejected(relaxIssues.map((i) => i.message).join('; '));
-    const relax = rawRelax as unknown as RelaxationEntry[];
 
     const governedSubs = baselineGovernedSubs(BASELINE.rules.command.git);
+    const gitConditionalEntries: GitConditionalEntries = {
+      askFlags: rawAskFlags,
+      safeFirstArg: rawSafeFirstArg,
+      safeGrammar: rawSafeGrammar,
+    };
     const conditionalReasonIssues = [
-      ...lintGitConditionalRelaxation(rawAskFlags as { sub: string; reason?: string }[], 'ask_flags', governedSubs),
-      ...lintGitConditionalRelaxation(rawSafeFirstArg as { sub: string; reason?: string }[], 'safe_first_arg', governedSubs),
-      ...lintGitConditionalRelaxation(rawSafeGrammar as { sub: string; reason?: string }[], 'safe_grammar', governedSubs),
+      ...lintGitConditionalRelaxation(gitConditionalEntries.askFlags, 'ask_flags', governedSubs),
+      ...lintGitConditionalRelaxation(gitConditionalEntries.safeFirstArg, 'safe_first_arg', governedSubs),
+      ...lintGitConditionalRelaxation(gitConditionalEntries.safeGrammar, 'safe_grammar', governedSubs),
     ];
     if (conditionalReasonIssues.length > 0) throw new PolicyRejected(conditionalReasonIssues.map((i) => i.message).join('; '));
 
-    const merged = mergeAll(BASELINE.rules, parsed.rules, relax);
+    // Phase 3: merge, in file order.
+    const merged: MergedPolicy = {
+      command: {
+        bash: mergeRegexFamily('command.bash', BASELINE.rules.command.bash, rawCommandBash),
+        rm_rf: { dangerous_targets: appendedAfterBaseline(BASELINE.rules.command.rm_rf.dangerous_targets, rmRfTargets) },
+        privilege_escalation: {
+          commands: appendedAfterBaseline(BASELINE.rules.command.privilege_escalation.commands, privilegeCommands),
+        },
+        git: mergeGitPolicy(BASELINE.rules.command.git, gitConditionalEntries, rawRelax),
+      },
+      secret: {
+        path: mergeRegexFamily('secret.path', BASELINE.rules.secret.path, rawSecretPath),
+        bash: mergeRegexFamily('secret.bash', BASELINE.rules.secret.bash, rawSecretBash),
+      },
+      mcp_write: {
+        read_prefixes: appendedAfterBaseline(BASELINE.rules.mcp_write.read_prefixes, relaxedValuesFor(rawRelax, 'mcp_write.read_prefixes')),
+      },
+      write_secret: mergeRegexFamily('write_secret', BASELINE.rules.write_secret, rawWriteSecret),
+      prompt: mergeRegexFamily('prompt', BASELINE.rules.prompt, rawPrompt),
+    };
 
     const dialectIssues = lintMergedDialect(merged);
     if (dialectIssues.length > 0) throw new PolicyRejected(dialectIssues.join('; '));
@@ -435,19 +687,36 @@ export function loadPolicyFromOverlayText(overlayText: string | null): LoadResul
     const postOverrideDialectIssues = lintEffectiveDialect(effective);
     if (postOverrideDialectIssues.length > 0) throw new PolicyRejected(postOverrideDialectIssues.join('; '));
 
-    const activeRelaxations = buildActiveRelaxations(
-      relax,
-      rawAskFlags as { sub: string; reason?: string }[],
-      rawSafeFirstArg as { sub: string; reason?: string }[],
-      rawSafeGrammar as { sub: string; reason?: string }[],
-      governedSubs,
-    );
+    const activeRelaxations = buildActiveRelaxations(rawRelax, gitConditionalEntries, governedSubs);
+    const activeOverrides: ActiveOverride[] = rawOverrides.map(({ filename, raw }) => ({ ...raw, sourceFile: filename }));
 
-    return buildResult(merged, effective, true, rawOverrides, activeRelaxations, []);
+    return buildResult(
+      merged,
+      effective,
+      true,
+      parsedFiles.map((f) => f.filename),
+      activeOverrides,
+      activeRelaxations,
+      [],
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return baselineOnlyResult([
       `overlay policy rejected — falling back to the embedded baseline: ${message}`,
     ]);
   }
+}
+
+/**
+ * Single-file convenience wrapper around loadPolicyFromOverlayFiles —
+ * test-only now: no production caller reaches for this, the real
+ * (adapter) path calls loadPolicyFromOverlayFiles directly and applies
+ * this same "null/blank means no overlay" rule itself, before ever
+ * building the file list (see src/adapter/policy.ts's readOverlayFile).
+ * `null` and blank text are both "no overlay file present" — baseline
+ * alone, silently (matches the original, pre-ticket-12 behavior exactly).
+ */
+export function loadPolicyFromOverlayText(overlayText: string | null): LoadResult {
+  if (overlayText === null || overlayText.trim() === '') return baselineOnlyResult();
+  return loadPolicyFromOverlayFiles([{ filename: 'policy.toml', text: overlayText }]);
 }

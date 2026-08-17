@@ -67,6 +67,7 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
       list: 'command.git.safe_subcommands',
       value: 'my-custom-readonly-subcommand',
       reason: 'our CI treats this alias as read-only',
+      sourceFile: 'policy.toml',
     });
   });
 
@@ -147,15 +148,16 @@ describe('loadPolicyFromOverlayText: a git-conditional entry substituting an alr
       list: 'command.git.ask_flags',
       value: 'branch',
       reason: 'our workflow never deletes/renames branches from an agent session',
+      sourceFile: 'policy.toml',
     });
   });
 
   test('a declarative entry for a genuinely NEW subcommand needs no reason', () => {
     // Nested array literal spaced out ([ [...] ], not [[...]]) — Bun's TOML
     // parser mis-parses a bare leading "[[" as an array-of-tables header
-    // even mid-value; policy/baseline.toml's own safe_grammar entries hit
+    // even mid-value; policy/command.toml's own safe_grammar entries hit
     // the same constraint and avoid it by putting the outer bracket on its
-    // own line (see baseline.toml's pull/merge/apply entries).
+    // own line (see command.toml's pull/merge/apply entries).
     const overlay = `
       [[rules.command.git.safe_grammar]]
       sub = "rebase"

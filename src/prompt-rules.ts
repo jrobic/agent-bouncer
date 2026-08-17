@@ -1,6 +1,6 @@
 // Prompt-injection detection. Pure — no Bun/Node APIs, no harness protocol
 // shapes (`buildContextOutput` moved to src/adapter/envelopes.ts in ticket
-// 05). The rule table is policy data (policy/baseline.toml,
+// 05). The rule table is policy data (policy/prompt.toml,
 // `[[rules.prompt]]` — the base64-blob signature is now a plain 7th entry
 // in that same table rather than a module constant evaluated apart from
 // it); this module owns only the scanning algorithm.

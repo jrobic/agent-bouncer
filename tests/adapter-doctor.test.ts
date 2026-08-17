@@ -32,6 +32,7 @@ function cleanLoadResult(overlayApplied = false): LoadResult {
     ],
     warnings: [],
     overlayApplied,
+    overlayFiles: overlayApplied ? ['policy.toml'] : [],
     activeOverrides: [],
     activeRelaxations: [],
   };
@@ -48,10 +49,21 @@ function loadResultWithOverrides(): LoadResult {
   return {
     ...cleanLoadResult(true),
     activeOverrides: [
-      { rule: 'curl-file-upload', action: 'relax', verdict: 'confirm', reason: 'we want a prompt, not a hard stop' },
+      {
+        rule: 'curl-file-upload',
+        action: 'relax',
+        verdict: 'confirm',
+        reason: 'we want a prompt, not a hard stop',
+        sourceFile: 'policy.toml',
+      },
     ],
     activeRelaxations: [
-      { list: 'command.git.safe_subcommands', value: 'push', reason: 'our CI force-pushes to a throwaway branch' },
+      {
+        list: 'command.git.safe_subcommands',
+        value: 'push',
+        reason: 'our CI force-pushes to a throwaway branch',
+        sourceFile: 'policy.toml',
+      },
     ],
   };
 }

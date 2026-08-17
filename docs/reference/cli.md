@@ -91,9 +91,12 @@ reports what would happen, it never fails because the answer was
 
 ## `rules lint`
 
-Validates the account's current overlay (if any) against the RE2-like
-regex dialect and the `[[override]]`/`[[relax]]` resolution and shape
-rules — see `docs/reference/policy.md`.
+Validates the account's current overlay file SET (`policy.toml` plus
+every `policy.d/*.toml` file, if any) against the RE2-like regex dialect
+and the `[[override]]`/`[[relax]]` resolution, shape, and cross-file
+conflict rules — see `docs/reference/policy.md`. On success, names every
+file that was actually merged in; on failure, the warning line names the
+one file that broke the whole set.
 
 ```sh
 bouncer rules lint
@@ -108,22 +111,26 @@ $ bouncer rules lint
 lint: OK (no overlay present — baseline only)
 
 $ bouncer rules lint
-lint: OK (overlay at /path/to/policy.toml)
+lint: OK (overlay: policy.toml)
 
 $ bouncer rules lint
-lint: FAILED (/path/to/policy.toml)
-  - overlay policy rejected — falling back to the embedded baseline: <reason>
+lint: OK (overlay: policy.toml, policy.d/10-yarn.toml)
+
+$ bouncer rules lint
+lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
+  - overlay policy rejected — falling back to the embedded baseline: policy.d/20-broken.toml: Failed to parse toml
 ```
 
-**Exit code:** 0 when the overlay (or its absence) is clean; 1 when it
-was rejected. Unlike `run`, this command is meant to be scripted
+**Exit code:** 0 when the overlay set (or its absence) is clean; 1 when
+it was rejected. Unlike `run`, this command is meant to be scripted
 against (a pre-commit hook, CI) — a rejected overlay must be visible in
 the exit code, not just in text.
 
 ## `rules list`
 
-Prints one line per effective rule (family, id, provenance), active
-overrides and relaxations listed first and counted in a summary line.
+Prints one line per effective rule (family, id, provenance, source
+file), active overrides and relaxations listed first and counted in a
+summary line.
 
 ```sh
 bouncer rules list
@@ -140,13 +147,15 @@ rule command.bash mkfs baseline
 ...
 ```
 
-With an active override: an extra `override <action> <rule> — <reason>`
-line, and the rule's own line reads
-`rule command.bash <id> override(<action>) — <reason>` instead of
-`... baseline`. With an active relaxation: an extra
-`overlay-relax <list> <value> — <reason>` line. A rejected overlay adds
-`warning: <message>` lines and the summary's count reflects the
-baseline it fell back to.
+With an active override: an extra
+`override <action> <rule> — <reason> [<file>]` line, and the rule's own
+line reads `rule command.bash <id> override(<action>) — <reason> [<file>]`
+instead of `... baseline`. With an active relaxation: an extra
+`overlay-relax <list> <value> — <reason> [<file>]` line. A rejected
+overlay adds `warning: <message>` lines and the summary's count reflects
+the baseline it fell back to. `[<file>]` is `policy.toml` or
+`policy.d/<name>.toml` — whichever file contributed that line; a
+`baseline`-provenance rule has no file to name and carries no suffix.
 
 Provenance values: `baseline`, `overlay` (an overlay addition),
 `override(disable|replace|relax)`.
@@ -220,4 +229,4 @@ malformed *line* is skipped, not fatal). 1 only on a usage error (a bad
 `--days` value, an unrecognized flag).
 
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/envelopes.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/envelopes.ts, src/adapter/policy.ts

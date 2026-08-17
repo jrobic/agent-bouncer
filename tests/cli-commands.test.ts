@@ -122,4 +122,30 @@ describe('runRulesList', () => {
     expect(text).toContain('warning:');
     expect(text).toContain('rule command.bash mkfs baseline');
   });
+
+  test('an overlay rule\'s provenance names its source file (ticket 12)', async () => {
+    const dir = await freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[rules.command.bash]]\nid = "block-npm-publish"\nregex = "npm publish"\nreason = "test"\n',
+    );
+    const { text } = await runRulesList();
+    expect(text).toContain('rule command.bash block-npm-publish overlay [policy.toml]');
+  });
+
+  test('a policy.d rule\'s provenance names its file, and an override/relax from policy.d does too', async () => {
+    const dir = await freshAccountDir();
+    await mkdir(join(dir, 'bouncer', 'policy.d'), { recursive: true });
+    await writeFile(
+      join(dir, 'bouncer', 'policy.d', '10-npm.toml'),
+      '[[rules.command.bash]]\nid = "block-npm-publish"\nregex = "npm publish"\nreason = "test"\n\n'
+        + '[[override]]\nrule = "mkfs"\naction = "disable"\nreason = "test"\n\n'
+        + '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "test"\n',
+      'utf8',
+    );
+    const { text } = await runRulesList();
+    expect(text).toContain('rule command.bash block-npm-publish overlay [policy.d/10-npm.toml]');
+    expect(text).toContain('override disable mkfs — test [policy.d/10-npm.toml]');
+    expect(text).toContain('overlay-relax command.git.safe_subcommands push — test [policy.d/10-npm.toml]');
+  });
 });

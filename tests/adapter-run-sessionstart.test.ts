@@ -120,6 +120,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
     effectiveRules: [],
     warnings: [],
     overlayApplied: false,
+    overlayFiles: [],
     activeOverrides: [],
     activeRelaxations: [],
   };

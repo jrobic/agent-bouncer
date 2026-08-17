@@ -4,21 +4,34 @@ The policy is TOML, in two layers.
 
 ## Baseline vs. overlay
 
-**Baseline** — `policy/baseline.toml` in this repository, compiled into
-the binary at build time (`bun build --compile`). Always present, never
-edited at runtime. The vetted starting point.
+**Baseline** — five files in this repository, one per rule family,
+compiled into the binary at build time (`bun build --compile`):
+`policy/command.toml`, `policy/secret.toml`, `policy/mcp-write.toml`,
+`policy/write-secret.toml`, `policy/prompt.toml`. Each file's own
+top-level TOML header (`[[rules.command.bash]]`, `[rules.secret...]`,
+...) already scopes it to its family, so merging the five at build time
+is a plain shallow merge — no file ever contributes to another's key.
+Always present, never edited at runtime. The vetted starting point.
 
-**Overlay** — `<configDir>/bouncer/policy.toml`, read from disk on every
-`bouncer run`/`check`/`rules`/`doctor`/`audit` invocation (no caching, no
-restart needed after an edit). `<configDir>` is `~/.claude` unless the
-`CLAUDE_CONFIG_DIR` environment variable is set, in which case it's that
-value (`~` expanded, trailing slash normalized). Absent overlay = baseline
-only, silently — a fresh account with no overlay file is a normal,
-healthy state, not a warning.
+**Overlay** — a SET of files, read from disk on every `bouncer
+run`/`check`/`rules`/`doctor`/`audit` invocation (no caching, no restart
+needed after an edit):
+
+1. `<configDir>/bouncer/policy.toml` — the single overlay file, if present.
+2. `<configDir>/bouncer/policy.d/*.toml` — every `.toml` file in that
+   directory, in lexicographic FILENAME order (not write time), merged
+   after `policy.toml`. A conf.d-style split for personal rules by theme
+   (`10-npm.toml`, `20-client-x.toml`, ...).
+
+`<configDir>` is `~/.claude` unless the `CLAUDE_CONFIG_DIR` environment
+variable is set, in which case it's that value (`~` expanded, trailing
+slash normalized). No files at all (neither `policy.toml` nor a
+`policy.d/` directory) = baseline only, silently — a fresh account with
+no overlay file is a normal, healthy state, not a warning.
 
 The effective policy `bouncer` actually runs on is baseline merged with
-overlay, per-table (see § Merge order below), plus `[[override]]` and
-`[[relax]]` applied on top.
+every overlay file in that order, per-table (see § Merge order below),
+plus `[[override]]` and `[[relax]]` applied on top.
 
 ## The rule row: `{id, regex, reason, flags?, except?, special?}`
 
@@ -66,12 +79,17 @@ two subcommands these three forms can't express (pathspec detection,
 staged-only form) — they stay engine code under their own names.
 
 **`ask_flags`** — safe unless one of `flags` is present, or (with
-`max_positionals`) too many non-flag arguments are given:
+`max_positionals`) too many non-flag arguments are given. This is
+baseline's own `branch` row verbatim, so pasting it into an overlay as-is
+is a SUBSTITUTION of an already-governed subcommand (§ [[relax]] below)
+— `reason` is what makes it valid as a real overlay entry, not just a
+baseline-shape illustration:
 
 ```toml
 [[rules.command.git.ask_flags]]
 sub = "branch"
 flags = ["-d", "-D", "--delete", "-m", "-M", "--move", "-f", "--force"]
+reason = "example only — this duplicates the baseline row verbatim"
 ```
 
 | Field | Type | Required |
@@ -81,7 +99,8 @@ flags = ["-d", "-D", "--delete", "-m", "-M", "--move", "-f", "--force"]
 | `max_positionals` | number | no |
 | `reason` | string | conditional — see § [[relax]] below |
 
-**`safe_first_arg`** — safety hinges on the first non-flag argument:
+**`safe_first_arg`** — safety hinges on the first non-flag argument.
+Baseline's own `stash` row; same substitution note as above:
 
 ```toml
 [[rules.command.git.safe_first_arg]]
@@ -89,6 +108,7 @@ sub = "stash"
 values = ["drop", "clear"]
 invert = true
 safe_when_absent = true
+reason = "example only — this duplicates the baseline row verbatim"
 ```
 
 | Field | Type | Required |
@@ -100,12 +120,19 @@ safe_when_absent = true
 | `reason` | string | conditional — see § [[relax]] below |
 
 **`safe_grammar`** — safe only if the arguments match one exact token
-sequence (`"*"` matches any single non-flag token):
+sequence (`"*"` matches any single non-flag token). Written on its own
+line, `sequences = [ ["--ff-only"] ]` needs a space after the first
+`[` — Bun's TOML parser misreads a bare leading `[[` as an
+array-of-tables header even mid-value (see `policy/command.toml`'s own
+`pull`/`merge`/`apply` entries, which avoid it by putting the outer
+bracket on its own line). Baseline's own `pull` row; same substitution
+note as `ask_flags` above:
 
 ```toml
 [[rules.command.git.safe_grammar]]
 sub = "pull"
-sequences = [["--ff-only"]]
+sequences = [ ["--ff-only"] ]
+reason = "example only — this duplicates the baseline row verbatim"
 ```
 
 | Field | Type | Required |
@@ -137,7 +164,10 @@ declarative forms above.
 
 A plain string list — an MCP tool call is a silent read when its
 operation name (everything after the tool name's second `__`) starts
-with one of these prefixes; anything else asks for confirmation.
+with one of these prefixes; anything else asks for confirmation. This is
+the baseline table (`[rules.mcp_write]` directly) — an overlay can only
+ADD to it through `[[relax]]` (§ below), never by writing this table
+itself:
 
 ```toml
 [rules.mcp_write]
@@ -196,29 +226,79 @@ injected `regex`) is compiled and checked:
 
 ## Fail-closed behavior
 
-Any failure anywhere in the overlay — invalid TOML, a wrong-shaped
-table, a lint-failing regex, an unresolvable or reason-less
-`[[override]]`/`[[relax]]`, a malformed declarative git-conditional
-entry — rejects the **whole** overlay, not just the broken part. The
-embedded baseline stays fully active, and the rejection is a loud
-warning: in the audit log (`kind: "policy-warning"`, see
-`docs/reference/audit-log.md`), in `bouncer rules lint`'s exit code, and
-in `bouncer doctor`'s `policy` check. Never partial application, never a
-silent fallback.
+Any failure anywhere in the overlay **file set** — invalid TOML in any
+one file, a wrong-shaped table, a lint-failing regex, an unresolvable or
+reason-less `[[override]]`/`[[relax]]`, a malformed declarative
+git-conditional entry, a cross-file conflict (§ below) — rejects the
+**whole set**, not just the broken file. The embedded baseline stays
+fully active, and the rejection is a loud warning naming the specific
+file at fault: in the audit log (`kind: "policy-warning"`, see
+`docs/reference/audit-log.md`), in `bouncer rules lint`'s output, and in
+`bouncer doctor`'s `policy` check. Never partial application (a good
+`policy.d/10-npm.toml` sitting next to a broken `policy.d/20-bad.toml`
+does not apply on its own), never a silent fallback:
+
+```
+$ bouncer rules lint
+lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
+  - overlay policy rejected — falling back to the embedded baseline: policy.d/30-broken.toml: Failed to parse toml
+```
 
 ## Merge order
 
-Two different orders, by table shape:
+Three different orders, by scope:
 
+- **The file SET itself** — `policy.toml` first (if present), then every
+  `policy.d/*.toml` file in lexicographic filename order. Where this
+  matters observably: two overlay files each adding a regex-table rule
+  that could match the same input — "first match wins"
+  (src/policy/match.ts) means the earlier FILE's rule fires.
 - **The five regex tables, `rm_rf.dangerous_targets`,
-  `privilege_escalation.commands`** — baseline first, overlay entries
-  appended after. An overlay addition can only ever add, never shadow a
-  baseline entry by position.
+  `privilege_escalation.commands`** — baseline first, then every overlay
+  file's additions, in file order. An overlay addition can only ever add,
+  never shadow a baseline entry by position.
 - **`ask_flags` / `safe_first_arg` / `safe_grammar`** — overlay entries
   come first. Every consumer looks a `sub` up by `Array.find()`, so an
   overlay entry for an already-governed `sub` wins over the baseline
   one — this asymmetry is what makes such an entry a substitution
   (§ `[[relax]]` above), not a plain addition.
 
+## Cross-file conflicts: explicit lint error, never last-file-wins
+
+Two DIFFERENT overlay files targeting the SAME thing is ambiguous enough
+to reject outright, rather than silently letting file order decide:
+
+- Two `[[override]]` entries for the same `rule`, in two different files.
+- Two `[[relax]]` entries for the same `list` + `value`, in two different
+  files.
+- Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
+  `sub`, in two different files.
+
+```
+$ bouncer rules lint
+lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
+  - overlay policy rejected — falling back to the embedded baseline: conflicting [[override]] for rule "curl-file-upload" in policy.d/20-relax.toml and policy.d/30-conflict.toml
+```
+
+Multiple entries for the same target WITHIN one file are unaffected —
+that's existing, single-file behavior (sequential override chaining,
+e.g. `replace` then `relax` on the same rule; first-entry-wins table
+lookup), unchanged by this rule.
+
+## Provenance: which file a rule came from
+
+`bouncer rules list` names the source file for every overlay-provenance
+line — an addition, an override, or a relaxation — in a trailing
+`[filename]`:
+
+```
+override disable curl-file-upload — our CI legitimately uploads build artifacts via curl in every deploy [policy.d/20-relax.toml]
+overlay-relax command.git.safe_subcommands push — our CI force-pushes to a scratch branch and the confirm prompt blocks the pipeline [policy.d/10-npm.toml]
+rule command.bash block-npm-publish overlay [policy.d/10-npm.toml]
+```
+
+A `baseline`-provenance line has no file to name (the embedded baseline
+has no file on disk) and carries no suffix.
+
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, policy/baseline.toml, src/adapter/policy.ts, src/adapter/log-path.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/prompt.toml, src/adapter/policy.ts, src/adapter/log-path.ts
