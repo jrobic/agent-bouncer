@@ -12,8 +12,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runAudit } from '../src/cli-commands.ts';
 import { run } from '../src/adapter/run.ts';
+import { runAudit } from '../src/cli-commands.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
@@ -24,7 +24,7 @@ afterEach(async () => {
   await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function freshAccountWithRealLog(): Promise<{ accountDir: string; logPath: string }> {
+async function freshAccountWithRealLog(): Promise<{ accountDir: string; logPath: string; }> {
   const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-log-protection-'));
   cleanupDirs.push(accountDir);
   const logDir = join(accountDir, 'logs', 'hooks');

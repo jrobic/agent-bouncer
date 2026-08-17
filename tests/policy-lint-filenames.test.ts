@@ -9,8 +9,8 @@
 // lintMergedDialect, which already did this.
 
 import { describe, expect, test } from 'bun:test';
-import type { EffectiveRule, FileTagged } from '../src/policy/load.ts';
 import { lintEffectiveDialect, lintGitConditionalRelaxation, lintOverrides } from '../src/policy/lint.ts';
+import type { EffectiveRule, FileTagged } from '../src/policy/load.ts';
 import type { OverrideEntry } from '../src/policy/schema.ts';
 
 describe('lintOverrides: names the file an issue came from', () => {
@@ -39,7 +39,7 @@ describe('lintOverrides: names the file an issue came from', () => {
 
 describe('lintGitConditionalRelaxation: names the file an issue came from', () => {
   test('a reason-less substitution of a baseline-governed sub is prefixed with its file', () => {
-    const entries: FileTagged<{ readonly sub: string; readonly reason?: string }>[] = [
+    const entries: FileTagged<{ readonly sub: string; readonly reason?: string; }>[] = [
       { filename: 'policy.d/30-x.toml', raw: { sub: 'branch' } },
     ];
     const issues = lintGitConditionalRelaxation(entries, 'ask_flags', new Set(['branch']));

@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  checkBash,
-  checkGit,
-  checkRmRf,
-  extractGitSubcommand,
-  SAFE_GIT_SUBCOMMANDS,
-} from '../src/command-rules.ts';
+import { checkBash, checkGit, checkRmRf, extractGitSubcommand, SAFE_GIT_SUBCOMMANDS } from '../src/command-rules.ts';
 
 // One test per ruleId (nominal match on a representative sample), plus the
 // benign counter-examples called out in the task: `rm -rf node_modules`,
@@ -422,7 +416,7 @@ describe('command-rules: wrappers consume their own options before git', () => {
   });
 
   test('a quoted exclamation mark is an executable name, not shell negation', () => {
-    expect(checkGit("'!' git push")).toBeNull();
+    expect(checkGit('\'!\' git push')).toBeNull();
     expect(checkBash('"!" sudo apt')).toBeNull();
     expect(checkGit('echo "! git push"')).toBeNull();
   });
@@ -476,7 +470,7 @@ describe('command-rules: wrappers consume their own options before git', () => {
   });
 
   test('quoted or escaped exclamation marks after time stay command data', () => {
-    expect(checkGit("time '!' git push")).toBeNull();
+    expect(checkGit('time \'!\' git push')).toBeNull();
     expect(checkBash('time -p "!" sudo apt')).toBeNull();
     expect(checkGit('time \\! git push')).toBeNull();
   });
@@ -544,19 +538,19 @@ describe('command-rules: wrappers consume their own options before git', () => {
 // checkGit must preserve quoted content while ignoring its shell syntax
 // BEFORE splitting on `;`/`&`/`|`/newline, so a separator inside a quoted
 // argument can neither fabricate a phantom git segment nor hide a real one.
-describe("command-rules: quoted separators don't fabricate segments (tokenizer semantics)", () => {
+describe('command-rules: quoted separators don\'t fabricate segments (tokenizer semantics)', () => {
   test('ruleId git-protected: a quoted executable name, "git" push, still asks', () => {
     expect(checkGit('"git" push')?.ruleId).toBe('git-protected');
   });
 
   test('ruleId git-protected: a single-quoted or concatenated executable name still asks', () => {
-    expect(checkGit("'git' push")?.ruleId).toBe('git-protected');
+    expect(checkGit('\'git\' push')?.ruleId).toBe('git-protected');
     expect(checkGit('g"it" push')?.ruleId).toBe('git-protected');
   });
 
   test('ruleId sudo: a quoted privilege executable name is still denied', () => {
     expect(checkBash('"sudo" apt')?.ruleId).toBe('sudo');
-    expect(checkBash("'sudo' apt")?.ruleId).toBe('sudo');
+    expect(checkBash('\'sudo\' apt')?.ruleId).toBe('sudo');
   });
 
   // The privilege family gets the same tokenizer guarantee as the git
@@ -568,7 +562,7 @@ describe("command-rules: quoted separators don't fabricate segments (tokenizer s
   // engine's structural tokenizer sees the whole quoted string as one
   // argument to `echo`, so no privilege-escalation segment exists to catch.
   test('benign: a quoted separator followed by a privilege tool does not fabricate a command segment', () => {
-    expect(checkBash("echo '; sudo apt'")).toBeNull();
+    expect(checkBash('echo \'; sudo apt\'')).toBeNull();
     expect(checkBash('echo "; sudo apt"')).toBeNull();
   });
 
@@ -588,12 +582,12 @@ describe("command-rules: quoted separators don't fabricate segments (tokenizer s
   // BOTH quote characters (`"` and `'`); every vector so far only exercised
   // double quotes, so a masker narrowed to double-quotes-only would still
   // pass this whole describe block. These two close that hole.
-  test("benign: git commit -m 'fix; git push' stays silent (the ; is quoted, single quotes)", () => {
-    expect(checkGit("git commit -m 'fix; git push'")).toBeNull();
+  test('benign: git commit -m \'fix; git push\' stays silent (the ; is quoted, single quotes)', () => {
+    expect(checkGit('git commit -m \'fix; git push\'')).toBeNull();
   });
 
-  test("benign: git commit -m 'a && git reset --hard' stays silent (the && is quoted, single quotes)", () => {
-    expect(checkGit("git commit -m 'a && git reset --hard'")).toBeNull();
+  test('benign: git commit -m \'a && git reset --hard\' stays silent (the && is quoted, single quotes)', () => {
+    expect(checkGit('git commit -m \'a && git reset --hard\'')).toBeNull();
   });
 
   test('benign: separators and comments inside one quoted argument stay literal data', () => {
@@ -756,15 +750,15 @@ describe('command-rules: the curl file upload stays caught in its long form', ()
 // header's "Known limits" section.
 describe('command-rules: known limits (bypass) — documented gaps stay intentional', () => {
   test.each([
-    ["printf '\\x72\\x6d -rf /' | sh", 'obfuscated rm via printf hex (no curl/wget pipe)'],
+    ['printf \'\\x72\\x6d -rf /\' | sh', 'obfuscated rm via printf hex (no curl/wget pipe)'],
     ['rm -rf "/"', 'rm -rf with double-quoted target'],
-    ["rm -rf '/'", 'rm -rf with single-quoted target'],
+    ['rm -rf \'/\'', 'rm -rf with single-quoted target'],
     ['rm -rf \\/', 'rm -rf with backslash-escaped target'],
     ['D=/; rm -rf $D', 'rm -rf via variable indirection'],
     ['rm -rf $(echo /)', 'rm -rf via command substitution'],
     ['rm -rf `echo /`', 'rm -rf via backtick command substitution'],
     ['rm -rf /???', 'rm -rf via glob expansion'],
-    ["bash <<< 'rm -rf /'", 'rm -rf inside heredoc'],
+    ['bash <<< \'rm -rf /\'', 'rm -rf inside heredoc'],
     [
       'curl x>/tmp/s.sh && bash /tmp/s.sh',
       'download-then-exec split (not piped)',

@@ -36,9 +36,7 @@ function coveredRuleIds(filename: string): Set<string> {
   // rewritten to use single quotes throughout, while the source
   // generation's own tests used double quotes — the convention this lock
   // reads is the "ruleId <id>:" title prefix, not a specific quote char.
-  const ids = [...source.matchAll(/\btest\(\s*['"]ruleId ([a-zA-Z0-9._-]+)\s*:/g)].map((m) =>
-    m[1]!
-  );
+  const ids = [...source.matchAll(/\btest\(\s*['"]ruleId ([a-zA-Z0-9._-]+)\s*:/g)].map((m) => m[1]!);
 
   if (ids.length === 0) {
     throw new Error(
@@ -56,8 +54,8 @@ function expectRuleIdsToMatch(
 ): void {
   const rules = new Set(ruleIds);
   const diff = {
-    rulesWithoutCases: [...rules].filter((id) => !covered.has(id)).sort(),
-    casesWithoutRules: [...covered].filter((id) => !rules.has(id)).sort(),
+    rulesWithoutCases: [...rules].filter((id) => !covered.has(id)).toSorted(),
+    casesWithoutRules: [...covered].filter((id) => !rules.has(id)).toSorted(),
   };
 
   expect(diff, `${table}: ruleId mismatch`).toEqual({

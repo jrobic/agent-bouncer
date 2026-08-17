@@ -201,8 +201,10 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
     // `--shadow` token — see RunOptions's own comment) — this is purely
     // making the mistake visible in the audit trail.
     await logPolicyWarnings(
-      [`run: unrecognized argument(s) ${unrecognizedTokens.map((t) => JSON.stringify(t)).join(', ')} `
-        + `— ignored, running in normal enforce mode`],
+      [
+        `run: unrecognized argument(s) ${unrecognizedTokens.map((t) => JSON.stringify(t)).join(', ')} `
+        + `— ignored, running in normal enforce mode`,
+      ],
       loaded,
       toLogMode(shadow),
     );

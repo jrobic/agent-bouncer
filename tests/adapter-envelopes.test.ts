@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Verdict } from '../src/types.ts';
 import { buildContextOutput, buildPreToolUseOutput } from '../src/adapter/envelopes.ts';
+import type { Verdict } from '../src/types.ts';
 
 describe('buildPreToolUseOutput', () => {
   test('deny action produces a Claude Code PreToolUse deny payload', () => {

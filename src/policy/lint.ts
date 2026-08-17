@@ -337,7 +337,7 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
 // `sub` NOT in that governed set is a genuinely new declarative rule, not
 // a substitution, and stays reason-optional.
 export function lintGitConditionalRelaxation(
-  entries: readonly FileTagged<{ readonly sub: string; readonly reason?: string }>[],
+  entries: readonly FileTagged<{ readonly sub: string; readonly reason?: string; }>[],
   table: 'ask_flags' | 'safe_first_arg' | 'safe_grammar',
   governedSubs: ReadonlySet<string>,
 ): LintIssue[] {

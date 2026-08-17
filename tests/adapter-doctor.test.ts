@@ -9,12 +9,8 @@ import { describe, expect, test } from 'bun:test';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
 import type { LoadResult } from '../src/policy/load.ts';
-import {
-  buildSessionStartContext,
-  formatDoctorChecklist,
-  runDoctorChecks,
-} from '../src/adapter/doctor.ts';
 import { BOUNCER_COMMAND, BOUNCER_SHADOW_COMMAND, BOUNCER_TYPO_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 
 async function scratchSettingsPath(hooks: unknown): Promise<string> {
@@ -78,7 +74,7 @@ describe('runDoctorChecks: wiring', () => {
   });
 
   test('removing PreToolUse fails only that wiring check, with an explicit message', async () => {
-    const { PreToolUse, ...rest } = HEALTHY_HOOKS;
+    const { PreToolUse: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
@@ -90,7 +86,7 @@ describe('runDoctorChecks: wiring', () => {
   });
 
   test('removing UserPromptSubmit fails only that wiring check', async () => {
-    const { UserPromptSubmit, ...rest } = HEALTHY_HOOKS;
+    const { UserPromptSubmit: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.ok).toBe(false);
@@ -98,7 +94,7 @@ describe('runDoctorChecks: wiring', () => {
   });
 
   test('removing SessionStart fails only that wiring check (the doctor hook itself)', async () => {
-    const { SessionStart, ...rest } = HEALTHY_HOOKS;
+    const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.ok).toBe(false);
@@ -427,7 +423,7 @@ describe('runDoctorChecks: report.ok', () => {
   });
 
   test('ok is false when any check fails', async () => {
-    const { SessionStart, ...rest } = HEALTHY_HOOKS;
+    const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     expect(report.ok).toBe(false);
@@ -452,7 +448,7 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
   });
 
   test('a failing check shows [fail], not silently omitted', async () => {
-    const { SessionStart, ...rest } = HEALTHY_HOOKS;
+    const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const text = formatDoctorChecklist(await runDoctorChecks(settingsPath, cleanLoadResult()));
     expect(text).toContain('[fail] wiring:SessionStart');
@@ -467,7 +463,7 @@ describe('buildSessionStartContext: silent when healthy, screams on anomaly, ann
   });
 
   test('a wiring anomaly produces non-null context naming the problem', async () => {
-    const { SessionStart, ...rest } = HEALTHY_HOOKS;
+    const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     const context = buildSessionStartContext(report);

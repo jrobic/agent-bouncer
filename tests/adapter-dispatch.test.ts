@@ -22,7 +22,7 @@ describe('strictestOf: severity ordering', () => {
     const hits = [hit('command', 'confirm', 'git-protected'), hit('secret', 'block', 'bash-git-leak-credential')];
     expect(strictestOf(hits)?.verdict.ruleId).toBe('bash-git-leak-credential');
     // Order-independence: the same two hits, reversed, must agree.
-    expect(strictestOf([...hits].reverse())?.verdict.ruleId).toBe('bash-git-leak-credential');
+    expect(strictestOf(hits.toReversed())?.verdict.ruleId).toBe('bash-git-leak-credential');
   });
 
   test('confirm beats observe', () => {

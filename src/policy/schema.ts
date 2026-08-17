@@ -82,8 +82,8 @@ export interface CommandGitPolicy {
 
 export interface CommandPolicy {
   readonly bash: readonly RegexRule[];
-  readonly rm_rf: { readonly dangerous_targets: readonly string[] };
-  readonly privilege_escalation: { readonly commands: readonly string[] };
+  readonly rm_rf: { readonly dangerous_targets: readonly string[]; };
+  readonly privilege_escalation: { readonly commands: readonly string[]; };
   readonly git: CommandGitPolicy;
 }
 

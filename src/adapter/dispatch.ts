@@ -71,8 +71,8 @@ function writeSecretText(tool: string | undefined, ti: Record<string, unknown>):
     const edits = Array.isArray(ti['edits']) ? (ti['edits'] as unknown[]) : [];
     return edits
       .map((edit) =>
-        edit && typeof edit === 'object' && typeof (edit as { new_string?: unknown }).new_string === 'string'
-          ? (edit as { new_string: string }).new_string
+        edit && typeof edit === 'object' && typeof (edit as { new_string?: unknown; }).new_string === 'string'
+          ? (edit as { new_string: string; }).new_string
           : ''
       )
       .join('\n');
@@ -115,9 +115,7 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
     );
   }
   if (hits.length === 0) return null;
-  return hits.reduce((strictest, hit) =>
-    SEVERITY[hit.verdict.verdict] > SEVERITY[strictest.verdict.verdict] ? hit : strictest
-  );
+  return hits.reduce((strictest, hit) => SEVERITY[hit.verdict.verdict] > SEVERITY[strictest.verdict.verdict] ? hit : strictest);
 }
 
 /**

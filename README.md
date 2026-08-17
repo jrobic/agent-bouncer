@@ -30,15 +30,15 @@ verify:
 
 ## Documentation
 
-| I want to... | Read |
-|---|---|
-| wire bouncer into a Claude Code session | [`docs/how-to/wire-into-claude-code.md`](docs/how-to/wire-into-claude-code.md) |
-| add a rule of my own | [`docs/how-to/add-a-custom-rule.md`](docs/how-to/add-a-custom-rule.md) |
+| I want to...                                         | Read                                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| wire bouncer into a Claude Code session              | [`docs/how-to/wire-into-claude-code.md`](docs/how-to/wire-into-claude-code.md)       |
+| add a rule of my own                                 | [`docs/how-to/add-a-custom-rule.md`](docs/how-to/add-a-custom-rule.md)               |
 | disable/soften a baseline rule, or widen a safe list | [`docs/how-to/override-a-baseline-rule.md`](docs/how-to/override-a-baseline-rule.md) |
-| find frequent friction and dead rules | [`docs/how-to/tune-rules-with-audit.md`](docs/how-to/tune-rules-with-audit.md) |
-| look up a subcommand's flags, output, exit code | [`docs/reference/cli.md`](docs/reference/cli.md) |
-| look up the TOML policy format | [`docs/reference/policy.md`](docs/reference/policy.md) |
-| look up the audit log's JSONL shape | [`docs/reference/audit-log.md`](docs/reference/audit-log.md) |
+| find frequent friction and dead rules                | [`docs/how-to/tune-rules-with-audit.md`](docs/how-to/tune-rules-with-audit.md)       |
+| look up a subcommand's flags, output, exit code      | [`docs/reference/cli.md`](docs/reference/cli.md)                                     |
+| look up the TOML policy format                       | [`docs/reference/policy.md`](docs/reference/policy.md)                               |
+| look up the audit log's JSONL shape                  | [`docs/reference/audit-log.md`](docs/reference/audit-log.md)                         |
 
 ## Provenance
 
@@ -51,4 +51,4 @@ origin.
 
 ## License
 
-Not chosen yet — required before the repository goes public.
+MIT — see [LICENSE](LICENSE).

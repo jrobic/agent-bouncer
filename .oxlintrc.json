@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    // oxlint's own default (only "correctness" turns on unconfigured) plus
+    // two more categories that stayed clean against this codebase as-is —
+    // no per-repo tuning needed beyond the two rule-level exceptions below.
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    // Not in correctness/suspicious/perf by default, but the codebase
+    // already carries deliberate, individually-justified
+    // `oxlint-disable-next-line no-await-in-loop` comments at every
+    // genuinely-sequential await-in-loop site (see src/adapter/policy.ts,
+    // src/policy/load.ts) — turned on explicitly so that convention keeps
+    // meaning something for any NEW loop, instead of relying on category
+    // selection to silently cover it.
+    "no-await-in-loop": "warn",
+    // Every hit was a single-use test/fixture stub or a describe-scoped
+    // test helper (tests/adapter-run-sessionstart.test.ts's throwingCheck,
+    // tests/cli.test.ts's throwingReader, tests/adapter-policy.test.ts's
+    // writePolicyDFile) — this repo's tests deliberately keep such helpers
+    // local to where they're used over hoisting them to module scope; the
+    // "recreated on every call" cost the rule warns about doesn't apply to
+    // a function invoked once per test run.
+    "unicorn/consistent-function-scoping": "off",
+    // The two real hits (src/policy/load.ts) were `{ ...entry, extraField }`
+    // over arrays with at most a handful of entries (cross-file conflicts,
+    // active overrides) — not a hot path, and object-spread-to-augment is
+    // this codebase's established idiom throughout (see e.g.
+    // src/policy/load.ts's applyOverrides). The perf rationale doesn't
+    // apply at this scale; readability wins.
+    "oxc/no-map-spread": "off"
+  },
+  "env": {
+    "builtin": true
+  }
+}

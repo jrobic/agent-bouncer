@@ -107,7 +107,7 @@ describe('loadPolicyFromOverlayFiles: lexicographic order — an order-dependent
 
     // Reversed order flips which one is first — proving the outcome
     // genuinely depends on file order, not on some other tiebreak.
-    const reversed = loadPolicyFromOverlayFiles([...files].reverse());
+    const reversed = loadPolicyFromOverlayFiles(files.toReversed());
     const reversedHit = reversed.policy.command.bash.find((r) => r.regex === 'shared-trigger');
     expect(reversedHit?.id).toBe('rule-from-20-b');
   });

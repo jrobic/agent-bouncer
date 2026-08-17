@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { checkBash } from '../src/command-rules.ts';
-import { checkSecretBash, checkPath, checkUrl } from '../src/secret-rules.ts';
+import { checkPath, checkSecretBash, checkUrl } from '../src/secret-rules.ts';
 import { extractTargets, type GuardedToolCall, isGuardedToolName } from '../src/targets.ts';
 
 const HOOK_NAME = 'targets-test';
@@ -213,7 +213,7 @@ describe('target-extraction parity: command-guard sees the same commands either 
     // limit — the escalation is not in command position.
     const ctx: GuardedToolCall = {
       toolName: `${CTX}execute`,
-      toolInput: { language: 'python', code: "import os; os.system('sudo apt update')" },
+      toolInput: { language: 'python', code: 'import os; os.system(\'sudo apt update\')' },
     };
     expect(inspectCommand(ctx)).toBeNull();
   });

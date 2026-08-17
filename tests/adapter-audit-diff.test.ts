@@ -212,7 +212,12 @@ describe('diffLogs: verdict-divergence (matched, different verdicts)', () => {
   });
 
   test('matched TS deny + bouncer block: SAME semantic bucket, no divergence at all', () => {
-    const divergences = divergencesOf([tsEntry({ decision: 'deny' })], [bouncerEntry({ verdict: 'block' })], 30, new Date('2026-08-10T12:00:10.000Z'));
+    const divergences = divergencesOf(
+      [tsEntry({ decision: 'deny' })],
+      [bouncerEntry({ verdict: 'block' })],
+      30,
+      new Date('2026-08-10T12:00:10.000Z'),
+    );
     expect(divergences).toHaveLength(0);
   });
 
@@ -246,8 +251,18 @@ describe('diffLogs: TS event grouping is GAP-BASED, not a fixed time bucket (rev
     // when the GAP exceeds the threshold) must not do that.
     const target = 'git config credential.helper store';
     const first = tsEntry({ decision: 'ask', ruleId: 'git-protected', target, timestamp: '2026-08-10T12:00:01.999Z' });
-    const second = tsEntry({ decision: 'deny', ruleId: 'bash-git-leak-credential', target, timestamp: '2026-08-10T12:00:02.001Z' });
-    const bouncerHit = bouncerEntry({ verdict: 'block', ruleId: 'bash-git-leak-credential', target, timestamp: '2026-08-10T12:00:02.000Z' });
+    const second = tsEntry({
+      decision: 'deny',
+      ruleId: 'bash-git-leak-credential',
+      target,
+      timestamp: '2026-08-10T12:00:02.001Z',
+    });
+    const bouncerHit = bouncerEntry({
+      verdict: 'block',
+      ruleId: 'bash-git-leak-credential',
+      target,
+      timestamp: '2026-08-10T12:00:02.000Z',
+    });
 
     const result = diffLogs([first, second], [bouncerHit], 30, new Date('2026-08-10T12:01:00.000Z'));
     expect(result.tsEventCount).toBe(1); // ONE combined event, not two
@@ -296,7 +311,7 @@ describe('diffLogs: severity-max parity (ticket 05) — a combined multi-family 
 
 describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergences attendues") — tightened predicates', () => {
   test('has exactly the three tag-as-expected families', () => {
-    expect(EXPECTED_DIVERGENCES.map((f) => f.id).sort()).toEqual([
+    expect(EXPECTED_DIVERGENCES.map((f) => f.id).toSorted()).toEqual([
       'guard-log-reads',
       'pull-merge-ff-only-ask',
       'transcripts-deny-to-confirm',

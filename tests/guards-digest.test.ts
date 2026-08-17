@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  checkBash as checkCommandBash,
-  checkGit,
-  GIT_BENIGN_PREFIXES,
-  WRAPPER_OPTION_POLICIES,
-} from '../src/command-rules.ts';
+import { checkBash as checkCommandBash, checkGit, GIT_BENIGN_PREFIXES, WRAPPER_OPTION_POLICIES } from '../src/command-rules.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/policy/schema.ts';
 
@@ -33,9 +28,9 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/pol
 // ─────────────────────────────────────────────────────────────────────────
 
 function ruleDigest(
-  rules: readonly { readonly id: string; readonly regex: string; readonly flags?: string }[],
+  rules: readonly { readonly id: string; readonly regex: string; readonly flags?: string; }[],
 ): string[] {
-  return rules.map((r, i) => `${i} ${r.id} ${r.regex} ${r.flags ?? ""}`);
+  return rules.map((r, i) => `${i} ${r.id} ${r.regex} ${r.flags ?? ''}`);
 }
 
 function orderedValueDigest(values: Iterable<string>): string[] {
@@ -69,8 +64,8 @@ function wrapperPolicyDigest(
   >,
 ): string[] {
   return Object.entries(policies).map(([name, policy], index) =>
-    `${index} ${name} flags=[${[...policy.flags].join(",")}] `
-    + `args=[${[...policy.optionsWithArg].join(",")}] `
+    `${index} ${name} flags=[${[...policy.flags].join(',')}] `
+    + `args=[${[...policy.optionsWithArg].join(',')}] `
     + `assignments=${policy.acceptsAssignments === true}`
   );
 }
@@ -251,7 +246,7 @@ function pathRuleDigest(
     readonly verdict?: string;
   }[],
 ): string[] {
-  return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ""} except=${r.except ?? ""} verdict=${r.verdict ?? ""}`);
+  return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ''} except=${r.except ?? ''} verdict=${r.verdict ?? ''}`);
 }
 
 // DERIVED by running the projection above against policy/secret.toml and
@@ -429,7 +424,7 @@ describe('guards-digest: tamper lock — the 14 conditional git subcommands', ()
 });
 
 describe('guards-digest: tamper lock — every branch of the config read alternation', () => {
-  const GIT_CONFIG_READ_BRANCHES: readonly { readonly branch: string; readonly cmd: string }[] = [
+  const GIT_CONFIG_READ_BRANCHES: readonly { readonly branch: string; readonly cmd: string; }[] = [
     { branch: '--get', cmd: 'git config --get user.name' },
     { branch: '--get-all', cmd: 'git config --get-all user.name' },
     { branch: '--get-regexp', cmd: 'git config --get-regexp ^user\\.' },
@@ -467,14 +462,12 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 // ─────────────────────────────────────────────────────────────────────────
 
 function askFlagsDigest(rules: readonly AskFlagsRule[]): string[] {
-  return rules.map((r, i) =>
-    `${i} ${r.sub} flags=[${r.flags.join(",")}] max_positionals=${r.max_positionals ?? "none"}`
-  );
+  return rules.map((r, i) => `${i} ${r.sub} flags=[${r.flags.join(',')}] max_positionals=${r.max_positionals ?? 'none'}`);
 }
 
 function safeFirstArgDigest(rules: readonly SafeFirstArgRule[]): string[] {
   return rules.map((r, i) =>
-    `${i} ${r.sub} values=[${r.values.join(",")}] invert=${r.invert ?? false} safe_when_absent=${r.safe_when_absent}`
+    `${i} ${r.sub} values=[${r.values.join(',')}] invert=${r.invert ?? false} safe_when_absent=${r.safe_when_absent}`
   );
 }
 

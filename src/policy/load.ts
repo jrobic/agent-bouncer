@@ -96,8 +96,8 @@ export interface LoadResult {
 // loadPolicyFromOverlayFiles) — a file readdir already proved present has
 // no license to silently vanish.
 export type OverlayFile =
-  | { readonly filename: string; readonly text: string }
-  | { readonly filename: string; readonly readError: string };
+  | { readonly filename: string; readonly text: string; }
+  | { readonly filename: string; readonly readError: string; };
 
 interface Tagged {
   readonly family: string;
@@ -204,12 +204,12 @@ function relaxedValuesFor(relax: readonly FileTagged<RelaxationEntry>[], list: R
 interface MergedPolicy {
   readonly command: {
     readonly bash: Tagged[];
-    readonly rm_rf: { readonly dangerous_targets: readonly string[] };
-    readonly privilege_escalation: { readonly commands: readonly string[] };
+    readonly rm_rf: { readonly dangerous_targets: readonly string[]; };
+    readonly privilege_escalation: { readonly commands: readonly string[]; };
     readonly git: RulesPolicy['command']['git'];
   };
-  readonly secret: { readonly path: Tagged[]; readonly bash: Tagged[] };
-  readonly mcp_write: { readonly read_prefixes: readonly string[] };
+  readonly secret: { readonly path: Tagged[]; readonly bash: Tagged[]; };
+  readonly mcp_write: { readonly read_prefixes: readonly string[]; };
   readonly write_secret: Tagged[];
   readonly prompt: Tagged[];
 }
@@ -396,7 +396,7 @@ function buildActiveRelaxations(
   governedSubs: ReadonlySet<string>,
 ): ActiveRelaxation[] {
   const fromGitConditional = (
-    list: readonly FileTagged<{ readonly sub: string; readonly reason?: string }>[],
+    list: readonly FileTagged<{ readonly sub: string; readonly reason?: string; }>[],
     table: string,
   ): ActiveRelaxation[] =>
     list
@@ -428,17 +428,17 @@ function crossFileConflicts<T>(
   entries: readonly FileTagged<T>[],
   keyOf: (v: T) => string,
   labelOf: (v: T) => string,
-): { readonly label: string; readonly files: readonly string[] }[] {
-  const byKey = new Map<string, { label: string; files: Set<string> }>();
+): { readonly label: string; readonly files: readonly string[]; }[] {
+  const byKey = new Map<string, { label: string; files: Set<string>; }>();
   for (const { filename, raw } of entries) {
     const key = keyOf(raw);
     const entry = byKey.get(key) ?? { label: labelOf(raw), files: new Set<string>() };
     entry.files.add(filename);
     byKey.set(key, entry);
   }
-  const conflicts: { label: string; files: string[] }[] = [];
+  const conflicts: { label: string; files: string[]; }[] = [];
   for (const { label, files } of byKey.values()) {
-    if (files.size > 1) conflicts.push({ label, files: [...files].sort() });
+    if (files.size > 1) conflicts.push({ label, files: [...files].toSorted() });
   }
   return conflicts;
 }
@@ -450,8 +450,8 @@ function crossFileConflicts<T>(
 // blocks.
 function declarativeTableConflicts(
   table: string,
-  entries: readonly FileTagged<{ readonly sub: string }>[],
-): { readonly table: string; readonly label: string; readonly files: readonly string[] }[] {
+  entries: readonly FileTagged<{ readonly sub: string; }>[],
+): { readonly table: string; readonly label: string; readonly files: readonly string[]; }[] {
   return crossFileConflicts(entries, (e) => e.sub, (e) => e.sub).map((c) => ({ ...c, table }));
 }
 
@@ -461,8 +461,8 @@ function declarativeTableConflicts(
 // reason must all be strings" shape check still lives in
 // mergeRegexFamily (Phase 3), which independently rejects a
 // non-string-id entry regardless of this function's leniency here.
-function withStringId(entries: readonly FileTagged<unknown>[]): FileTagged<{ readonly id: string }>[] {
-  const out: FileTagged<{ readonly id: string }>[] = [];
+function withStringId(entries: readonly FileTagged<unknown>[]): FileTagged<{ readonly id: string; }>[] {
+  const out: FileTagged<{ readonly id: string; }>[] = [];
   for (const { filename, raw } of entries) {
     const id = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>).id : undefined;
     if (typeof id === 'string') out.push({ filename, raw: { id } });
@@ -472,7 +472,7 @@ function withStringId(entries: readonly FileTagged<unknown>[]): FileTagged<{ rea
 
 interface ParsedFile {
   readonly filename: string;
-  readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown };
+  readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown; };
 }
 
 /**

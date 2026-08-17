@@ -17,9 +17,9 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { VerdictKind } from '../src/types.ts';
-import type { HookInput } from '../src/adapter/protocol.ts';
 import { inspectPreToolUse, inspectUserPromptSubmit } from '../src/adapter/dispatch.ts';
+import type { HookInput } from '../src/adapter/protocol.ts';
+import type { VerdictKind } from '../src/types.ts';
 
 export interface ExpectedVerdict {
   readonly verdict: VerdictKind;
@@ -50,7 +50,7 @@ const FIXTURES_DIR = join(import.meta.dir, '..', 'fixtures');
 export function listFixtureFiles(): string[] {
   return readdirSync(FIXTURES_DIR)
     .filter((name) => name.endsWith('.json'))
-    .sort();
+    .toSorted();
 }
 
 export function loadFixtureFile(filename: string): FixtureFile {

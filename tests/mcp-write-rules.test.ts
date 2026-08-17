@@ -135,7 +135,7 @@ describe('mcp-write-rules: an MCP write asks, on any server', () => {
     expect(checkMcpWrite('mcp__memory__delete_observations')?.verdict).toBe('confirm');
   });
 
-  test("atlassianUserInfo, allowed by the workstation's tenant allowlist, now asks", () => {
+  test('atlassianUserInfo, allowed by the workstation\'s tenant allowlist, now asks', () => {
     // The workstation guard carried a fifth read prefix, `atlassianUserInfo`,
     // scoped to one tenant. It does not survive into the generic trunk — a
     // tenant-scoped allowlist belongs in a sidecar, not in the trunk.
@@ -143,7 +143,7 @@ describe('mcp-write-rules: an MCP write asks, on any server', () => {
   });
 });
 
-describe("mcp-write-rules: a read passes, and each prefix's boundary holds", () => {
+describe('mcp-write-rules: a read passes, and each prefix\'s boundary holds', () => {
   for (const [prefix, tool] of READ_VECTORS) {
     test(`read prefix ${prefix}: ${tool} passes`, () => {
       expect(checkMcpWrite(tool)).toBeNull();
@@ -160,7 +160,7 @@ describe("mcp-write-rules: a read passes, and each prefix's boundary holds", () 
     });
   }
 
-  test("searchAndDelete is allowed — recognition is on the name's start, not its meaning", () => {
+  test('searchAndDelete is allowed — recognition is on the name\'s start, not its meaning', () => {
     // Accepted residue: correcting it with a list of write verbs would be
     // fail-open in the other direction.
     expect(checkMcpWrite('mcp__anything__searchAndDelete')).toBeNull();
@@ -190,7 +190,7 @@ describe('mcp-write-rules: the operation is everything after the SECOND __', () 
 });
 
 describe('mcp-write-rules: out-of-scope inputs return null', () => {
-  test("an empty name passes (the glue coalesces a missing tool_name to '')", () => {
+  test('an empty name passes (the glue coalesces a missing tool_name to \'\')', () => {
     expect(checkMcpWrite('')).toBeNull();
   });
 

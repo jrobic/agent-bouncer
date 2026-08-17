@@ -10,15 +10,7 @@
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunOptions, type RunResult } from './adapter/run.ts';
-import {
-  parseAuditArgs,
-  parseDoctorArgs,
-  runAudit,
-  runCheck,
-  runDoctor,
-  runRulesLint,
-  runRulesList,
-} from './cli-commands.ts';
+import { parseAuditArgs, parseDoctorArgs, runAudit, runCheck, runDoctor, runRulesLint, runRulesList } from './cli-commands.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
 // contract as a malformed envelope: an unreadable stdin (a broken pipe, a

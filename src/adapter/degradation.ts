@@ -7,9 +7,9 @@
 import type { Verdict } from '../types.ts';
 
 export type CcAction =
-  | { readonly kind: 'deny'; readonly reason: string }
-  | { readonly kind: 'ask'; readonly reason: string }
-  | { readonly kind: 'logOnly' };
+  | { readonly kind: 'deny'; readonly reason: string; }
+  | { readonly kind: 'ask'; readonly reason: string; }
+  | { readonly kind: 'logOnly'; };
 
 // ─── The table ─────────────────────────────────────────────────────────
 //

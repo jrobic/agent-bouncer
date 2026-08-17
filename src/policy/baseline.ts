@@ -43,7 +43,7 @@ export function assertExactlyOneFamily<K extends keyof RulesPolicy>(
   data: unknown,
   expectedKey: K,
   filename: string,
-): { readonly rules: Pick<RulesPolicy, K> } {
+): { readonly rules: Pick<RulesPolicy, K>; } {
   const rules = data !== null && typeof data === 'object' ? (data as Record<string, unknown>).rules : undefined;
   if (rules === null || typeof rules !== 'object') {
     throw new Error(`baseline family file ${filename} has no [rules] table`);

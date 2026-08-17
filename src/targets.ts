@@ -25,8 +25,7 @@ export interface GuardedToolCall {
   readonly toolInput?: Record<string, unknown> | undefined;
 }
 
-const CTX_TOOL =
-  /^mcp__plugin_context-mode_context-mode__ctx_(execute|execute_file|batch_execute|index|fetch_and_index)$/;
+const CTX_TOOL = /^mcp__plugin_context-mode_context-mode__ctx_(execute|execute_file|batch_execute|index|fetch_and_index)$/;
 
 export function isGuardedToolName(toolName: string | undefined): boolean {
   return toolName === 'Bash' || (toolName !== undefined && CTX_TOOL.test(toolName));
@@ -82,9 +81,9 @@ function readBatchCommands(
     }
     if (
       entry && typeof entry === 'object'
-      && typeof (entry as { command?: unknown }).command === 'string'
+      && typeof (entry as { command?: unknown; }).command === 'string'
     ) {
-      out.push((entry as { command: string }).command);
+      out.push((entry as { command: string; }).command);
       continue;
     }
     console.error(`[${hookName}] skipping unreadable entry in tool_input.commands`);
@@ -101,9 +100,7 @@ function readBatchUrls(ti: Record<string, unknown>, hookName: string): string[] 
     return [];
   }
   return raw
-    .filter((e): e is { url: string } =>
-      Boolean(e) && typeof e === 'object' && typeof (e as { url?: unknown }).url === 'string'
-    )
+    .filter((e): e is { url: string; } => Boolean(e) && typeof e === 'object' && typeof (e as { url?: unknown; }).url === 'string')
     .map((e) => e.url);
 }
 

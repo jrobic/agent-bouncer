@@ -78,9 +78,9 @@ interface RawHookEntry {
 }
 
 type SettingsReadResult =
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'ok'; readonly settings: Record<string, unknown> }
-  | { readonly kind: 'corrupt'; readonly detail: string };
+  | { readonly kind: 'absent'; }
+  | { readonly kind: 'ok'; readonly settings: Record<string, unknown>; }
+  | { readonly kind: 'corrupt'; readonly detail: string; };
 
 // Absent and corrupt are NOT the same failure, and reporting them as one
 // ("hook missing") would name the wrong problem: a fresh account with no
@@ -141,7 +141,7 @@ function pointsAtBouncer(command: unknown): boolean {
 
 function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly RawHookEntry[] {
   return entries.filter(
-    (e) => Array.isArray(e.hooks) && e.hooks.some((h) => pointsAtBouncer((h as { command?: unknown } | undefined)?.command)),
+    (e) => Array.isArray(e.hooks) && e.hooks.some((h) => pointsAtBouncer((h as { command?: unknown; } | undefined)?.command)),
   );
 }
 
@@ -154,7 +154,7 @@ function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly Ra
 function commandsOf(entries: readonly RawHookEntry[]): string[] {
   return entries
     .flatMap((e) => (Array.isArray(e.hooks) ? e.hooks : []))
-    .map((h) => (h as { command?: unknown } | undefined)?.command)
+    .map((h) => (h as { command?: unknown; } | undefined)?.command)
     .filter((c): c is string => typeof c === 'string');
 }
 
@@ -183,9 +183,9 @@ function unrecognizedTokensAmong(entries: readonly RawHookEntry[]): string[] {
 }
 
 type MatcherCoverage =
-  | { readonly kind: 'covers' }
-  | { readonly kind: 'gap' }
-  | { readonly kind: 'unparseable'; readonly matcher: string; readonly detail: string };
+  | { readonly kind: 'covers'; }
+  | { readonly kind: 'gap'; }
+  | { readonly kind: 'unparseable'; readonly matcher: string; readonly detail: string; };
 
 // Claude Code's own matcher semantics, not a generic regex reading: an
 // ABSENT matcher on a hook entry means "run for every tool" (the entry

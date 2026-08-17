@@ -5,6 +5,8 @@
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { clusterDivergences, diffLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
+import type { TsLogEntry } from './adapter/audit-diff.ts';
 import {
   clusterEntries,
   findDeadConditionalRules,
@@ -13,8 +15,6 @@ import {
   renderSuggestions,
   withinWindow,
 } from './adapter/audit.ts';
-import { clusterDivergences, diffLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
-import type { TsLogEntry } from './adapter/audit-diff.ts';
 import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
 import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
@@ -112,7 +112,7 @@ export async function runRulesList(): Promise<CommandResult> {
   const overridesActive = loaded.activeOverrides.length + loaded.activeRelaxations.length;
   const lines = [
     `summary: ${loaded.effectiveRules.length} rules, ${overridesActive} overrides active`
-      + (loaded.warnings.length > 0 ? `, ${loaded.warnings.length} warnings` : ''),
+    + (loaded.warnings.length > 0 ? `, ${loaded.warnings.length} warnings` : ''),
     ...loaded.warnings.map((w) => `warning: ${w}`),
     ...overrideLine(loaded),
     ...relaxationLine(loaded),
@@ -186,8 +186,8 @@ export interface AuditOptions {
 // lets `parsed.options` narrow to defined after the `error` check with no
 // non-null assertion needed.
 export type ParsedAuditArgs =
-  | { readonly options: AuditOptions; readonly error?: undefined }
-  | { readonly options?: undefined; readonly error: string };
+  | { readonly options: AuditOptions; readonly error?: undefined; }
+  | { readonly options?: undefined; readonly error: string; };
 
 const DEFAULT_AUDIT_DAYS = 30;
 const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days', '--diff', '--ts-logs']);

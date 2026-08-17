@@ -211,7 +211,7 @@ export function clusterEntries(entries: readonly AuditEntry[]): Cluster[] {
       });
     }
   }
-  return [...byKey.values()].sort(byFrequencyThenRecency);
+  return [...byKey.values()].toSorted(byFrequencyThenRecency);
 }
 
 // ─── dead conditional rules ────────────────────────────────────────────
@@ -329,9 +329,9 @@ export function renderReport(
 // fabricated, lint-rejected snippet.
 
 type SuggestionAction =
-  | { readonly kind: 'relax'; readonly list: RelaxableList; readonly value: string }
-  | { readonly kind: 'override'; readonly rule: string; readonly verdict: VerdictKind }
-  | { readonly kind: 'none' };
+  | { readonly kind: 'relax'; readonly list: RelaxableList; readonly value: string; }
+  | { readonly kind: 'override'; readonly rule: string; readonly verdict: VerdictKind; }
+  | { readonly kind: 'none'; };
 
 // Mirrors mcp-write-rules.ts's MCP_TOOL_NAME split (non-greedy up to the
 // SECOND `__`) — duplicated here deliberately: this is a suggestion-text

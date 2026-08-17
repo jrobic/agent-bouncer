@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkSecretBash, checkPath, checkUrl } from '../src/secret-rules.ts';
+import { checkPath, checkSecretBash, checkUrl } from '../src/secret-rules.ts';
 
 // One test per PATH_RULES id (nominal) + the two ENV_WHITELIST counter-examples
 // and the node_modules/.npmrc counter-example called out in the task.
@@ -251,7 +251,7 @@ describe('secret-rules: BASH_RULES (secret)', () => {
       checkSecretBash('git config "remote.origin.url" https://host/x.git')?.ruleId,
     ).toBe('bash-git-leak-remote-url');
     expect(
-      checkSecretBash("git config 'remote.origin.url' https://host/x.git")?.ruleId,
+      checkSecretBash('git config \'remote.origin.url\' https://host/x.git')?.ruleId,
     ).toBe('bash-git-leak-remote-url');
   });
 
@@ -351,7 +351,7 @@ describe('secret-rules: BASH_RULES (secret)', () => {
   // un-anchored extension-only crypto-key pattern used to match it as a key
   // file.
   test('benign: jq field accessor is not mistaken for a key file', () => {
-    expect(checkSecretBash("jq '.settings.key' config.json")).toBeNull();
+    expect(checkSecretBash('jq \'.settings.key\' config.json')).toBeNull();
   });
 
   test('benign: an ordinary command passes', () => {
@@ -398,7 +398,7 @@ describe('secret-rules: checkUrl (target-extraction parity)', () => {
 // real shell semantics. A test here documents the gap rather than hiding it.
 describe('secret-rules: known limits (shell obfuscation bypasses)', () => {
   test.each([
-    "printf '\\x2e\\x65\\x6e\\x76' | xargs cat",
+    'printf \'\\x2e\\x65\\x6e\\x76\' | xargs cat',
     'F=secret_path_var; cat $F',
     'cat $(echo Lmlu | base64 -d)nv',
   ])('does NOT detect obfuscated reference: %s', (cmd) => {

@@ -77,8 +77,12 @@ describe('parseAuditArgs', () => {
   });
 
   test('both flags combine regardless of order', () => {
-    expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({ options: { days: 14, suggest: true, diff: false } });
-    expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({ options: { days: 14, suggest: true, diff: false } });
+    expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({
+      options: { days: 14, suggest: true, diff: false },
+    });
+    expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({
+      options: { days: 14, suggest: true, diff: false },
+    });
   });
 
   test('a non-numeric --days value returns an error, never throws', () => {

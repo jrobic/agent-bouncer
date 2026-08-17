@@ -29,9 +29,9 @@
 // about calls the permissions layer already stopped. Stated in the
 // rendered report itself (renderDiffReport), not just here.
 
+import type { VerdictKind } from '../types.ts';
 import { normalizeTarget, withinWindow } from './audit.ts';
 import type { AuditEntry } from './audit.ts';
-import type { VerdictKind } from '../types.ts';
 
 // ─── TS log parsing ────────────────────────────────────────────────────
 
@@ -199,7 +199,7 @@ function groupIntoTsEvents(entries: readonly TsLogEntry[]): TsEvent[] {
 
   const events: TsEvent[] = [];
   for (const group of byTarget.values()) {
-    const sorted = [...group].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+    const sorted = group.toSorted((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
     let current: TsLogEntry[] = [];
     let lastValidTime: number | null = null;
     for (const e of sorted) {
@@ -385,7 +385,8 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
       + 'personal overlay) — the TS generation allowed this specific form silently. A BARE pull/merge (no '
       + '--ff-only at all) is a DIFFERENT, untagged divergence — ticket 13 hardened that too, but it deserves '
       + 'its own explicit triage, not a loose match riding in on this family\'s name.',
-    matches: (d) => d.kind === 'ts-allowed'
+    matches: (d) =>
+      d.kind === 'ts-allowed'
       && d.bouncerRuleId === 'git-protected'
       && /^git\s+(pull|merge)\b/.test(d.target)
       && /--ff-only\b/.test(d.target),
@@ -398,7 +399,8 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
       + 'examples/personal-overlay.toml to close it. A bouncer rule firing on a NON-read access to the same '
       + 'path (a delete, a write) is a real, untagged divergence — hook-log covering more than reads was never '
       + 'the claim.',
-    matches: (d) => d.kind === 'ts-allowed'
+    matches: (d) =>
+      d.kind === 'ts-allowed'
       && d.bouncerRuleId === null
       && d.toolName !== null
       && READ_SHAPED_TOOLS.has(d.toolName)
@@ -410,7 +412,8 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
     description: 'transcript-backup softened from block to confirm, EXACTLY that direction — a legitimate direct '
       + 'read is asked about, not stopped outright. The reverse (bouncer weaker than confirm, or TS at "ask" '
       + 'instead of "deny") is never this family — a real divergence a loose match would otherwise hide.',
-    matches: (d) => d.kind === 'verdict-divergence'
+    matches: (d) =>
+      d.kind === 'verdict-divergence'
       && d.bouncerRuleId === 'transcript-backup'
       && d.tsDecision === 'deny'
       && d.bouncerVerdict === 'confirm',
@@ -482,7 +485,7 @@ export function clusterDivergences(divergences: readonly DiffDivergence[]): Diff
       });
     }
   }
-  return [...byKey.values()].sort(byFrequencyThenRecency);
+  return [...byKey.values()].toSorted(byFrequencyThenRecency);
 }
 
 export interface DiffReportOptions {

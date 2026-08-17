@@ -54,7 +54,7 @@ describe('secret.path: hook-log is restored under the personal overlay', () => {
     expect(checkPath('/proj/hooks/guard-command.log')?.ruleId).toBe('hook-log');
   });
 
-  test("ruleId hook-log: guard-mcp-write.log is blocked (fifth guard's log)", () => {
+  test('ruleId hook-log: guard-mcp-write.log is blocked (fifth guard\'s log)', () => {
     expect(checkPath('/proj/hooks/guard-mcp-write.log')?.ruleId).toBe('hook-log');
   });
 

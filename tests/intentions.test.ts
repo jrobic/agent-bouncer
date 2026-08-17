@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { checkGit } from '../src/command-rules.ts';
-import { checkSecretBash, checkPath } from '../src/secret-rules.ts';
+import { checkPath, checkSecretBash } from '../src/secret-rules.ts';
 
 // Three deliberate absences, grouped outside their rule modules. Each vector
 // names the decision that makes silence intentional, so deleting it as a

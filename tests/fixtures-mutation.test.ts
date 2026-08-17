@@ -64,19 +64,19 @@ const scanPromptWithoutIgnorePrevious = (prompt: string): Verdict[] =>
 describe('fixtures-mutation: the real engine matches the fixture before it is mutated', () => {
   test('command: rm-rf-dangerous-root', () => {
     const kase = findCase('command.json', 'rm-rf-dangerous-root');
-    const command = (kase.toolInput as { command: string }).command;
+    const command = (kase.toolInput as { command: string; }).command;
     expect(matchesExpected(toExpected(REAL.checkBash(command)), kase)).toBe(true);
   });
 
   test('command: git-push-asks', () => {
     const kase = findCase('command.json', 'git-push-asks');
-    const command = (kase.toolInput as { command: string }).command;
+    const command = (kase.toolInput as { command: string; }).command;
     expect(matchesExpected(toExpected(REAL.checkBash(command)), kase)).toBe(true);
   });
 
   test('secret: dotenv-blocked', () => {
     const kase = findCase('secret.json', 'dotenv-blocked');
-    const path = (kase.toolInput as { file_path: string }).file_path;
+    const path = (kase.toolInput as { file_path: string; }).file_path;
     expect(matchesExpected(toExpected(REAL.checkPath(path)), kase)).toBe(true);
   });
 
@@ -87,7 +87,7 @@ describe('fixtures-mutation: the real engine matches the fixture before it is mu
 
   test('write-secret: jwt', () => {
     const kase = findCase('write-secret.json', 'jwt');
-    const content = (kase.toolInput as { content: string }).content;
+    const content = (kase.toolInput as { content: string; }).content;
     expect(matchesExpected(toExpected(REAL.scanSecrets(content, 'target')), kase)).toBe(true);
   });
 
@@ -101,21 +101,21 @@ describe('fixtures-mutation: the real engine matches the fixture before it is mu
 describe('fixtures-mutation: a broken rule fails the fixture that names it', () => {
   test('command: deleting rm-rf-dangerous reddens rm-rf-dangerous-root', () => {
     const kase = findCase('command.json', 'rm-rf-dangerous-root');
-    const command = (kase.toolInput as { command: string }).command;
+    const command = (kase.toolInput as { command: string; }).command;
     const actual = toExpected(bashWithoutRmRfDangerous(command));
     expect(matchesExpected(actual, kase)).toBe(false);
   });
 
   test('command: deleting the git policy reddens git-push-asks', () => {
     const kase = findCase('command.json', 'git-push-asks');
-    const command = (kase.toolInput as { command: string }).command;
+    const command = (kase.toolInput as { command: string; }).command;
     const actual = toExpected(bashWithoutGitPolicy(command));
     expect(matchesExpected(actual, kase)).toBe(false);
   });
 
   test('secret: deleting the dotenv path rule reddens dotenv-blocked', () => {
     const kase = findCase('secret.json', 'dotenv-blocked');
-    const path = (kase.toolInput as { file_path: string }).file_path;
+    const path = (kase.toolInput as { file_path: string; }).file_path;
     const actual = toExpected(checkPathWithoutDotenv(path));
     expect(matchesExpected(actual, kase)).toBe(false);
   });
@@ -128,7 +128,7 @@ describe('fixtures-mutation: a broken rule fails the fixture that names it', () 
 
   test('write-secret: deleting the jwt signature reddens the jwt fixture', () => {
     const kase = findCase('write-secret.json', 'jwt');
-    const content = (kase.toolInput as { content: string }).content;
+    const content = (kase.toolInput as { content: string; }).content;
     const actual = toExpected(scanSecretsWithoutJwt(content, 'target'));
     expect(matchesExpected(actual, kase)).toBe(false);
   });
@@ -144,7 +144,7 @@ describe('fixtures-mutation: a broken rule fails the fixture that names it', () 
 
   test('negative control: an unrelated mutation does not reintroduce a failure on rm-rf-dangerous-root', () => {
     const kase = findCase('command.json', 'rm-rf-dangerous-root');
-    const command = (kase.toolInput as { command: string }).command;
+    const command = (kase.toolInput as { command: string; }).command;
     // checkMcpWriteAlwaysAllows is irrelevant to a Bash rm -rf command — the
     // real checkBash must still match, proving "reddens" is not trivially
     // true for any change, mutation-unrelated included.

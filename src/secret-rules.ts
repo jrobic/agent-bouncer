@@ -34,7 +34,7 @@ export interface SecretChecker {
  * truth instead of two hardcoded lists drifting apart.
  */
 export function createSecretChecker(
-  tables: { readonly path: readonly RegexRule[]; readonly bash: readonly RegexRule[] },
+  tables: { readonly path: readonly RegexRule[]; readonly bash: readonly RegexRule[]; },
   configReadModes: readonly string[],
 ): SecretChecker {
   const compiledPath = compileRules(tables.path);

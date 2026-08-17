@@ -3,8 +3,8 @@
 // only proves each mapping actually produces the action it claims to.
 
 import { describe, expect, test } from 'bun:test';
-import type { Verdict } from '../src/types.ts';
 import { degradeToClaudeCode } from '../src/adapter/degradation.ts';
+import type { Verdict } from '../src/types.ts';
 
 function verdict(kind: Verdict['verdict'], ruleId = 'some-rule'): Verdict {
   return { verdict: kind, ruleId, reason: 'because reasons', target: 'target' };

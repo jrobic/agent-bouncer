@@ -16,11 +16,11 @@ import {
   renderSuggestions,
   withinWindow,
 } from '../src/adapter/audit.ts';
-import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
-import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
-import { resolvableRuleIds } from '../src/policy/lint.ts';
-import { RELAXABLE_LISTS } from '../src/policy/schema.ts';
 import type { AuditEntry } from '../src/adapter/audit.ts';
+import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
+import { resolvableRuleIds } from '../src/policy/lint.ts';
+import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
+import { RELAXABLE_LISTS } from '../src/policy/schema.ts';
 
 const BASELINE_POLICY = loadPolicyFromOverlayText(null).policy;
 
@@ -210,8 +210,10 @@ describe('clusterEntries', () => {
   });
 
   test('caps stored example targets without capping the count', () => {
-    const entries: AuditEntry[] = Array.from({ length: 10 }, (_, i) =>
-      entry({ target: `git push origin branch-${i}`, timestamp: `2026-08-0${(i % 9) + 1}T00:00:00.000Z` }));
+    const entries: AuditEntry[] = Array.from(
+      { length: 10 },
+      (_, i) => entry({ target: `git push origin branch-${i}`, timestamp: `2026-08-0${(i % 9) + 1}T00:00:00.000Z` }),
+    );
     const [cluster] = clusterEntries(entries);
     expect(cluster!.count).toBe(10);
     expect(cluster!.exampleTargets.length).toBeLessThanOrEqual(3);

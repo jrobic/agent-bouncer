@@ -79,7 +79,7 @@ async function readOverlayDirFiles(): Promise<OverlayFile[]> {
   } catch {
     return [];
   }
-  const tomlNames = names.filter((n) => n.endsWith('.toml')).sort();
+  const tomlNames = names.filter((n) => n.endsWith('.toml')).toSorted();
   const files = await Promise.all(
     tomlNames.map((name) => readOverlayFile(`policy.d/${name}`, join(dir, name), false)),
   );

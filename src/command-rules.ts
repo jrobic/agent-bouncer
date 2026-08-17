@@ -146,7 +146,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
   let token = '';
   let tokenStarted = false;
   let tokenHasLiteralizingSyntax = false;
-  let quote: '"' | "'" | null = null;
+  let quote: '"' | '\'' | null = null;
   let comment = false;
 
   const flushToken = (): void => {
@@ -209,7 +209,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
       }
       continue;
     }
-    if (ch === '"' || ch === "'") {
+    if (ch === '"' || ch === '\'') {
       quote = ch;
       tokenStarted = true;
       tokenHasLiteralizingSyntax = true;
@@ -238,7 +238,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-type GitCommand = { sub: string; rest: string[]; forceConfirm?: true };
+type GitCommand = { sub: string; rest: string[]; forceConfirm?: true; };
 
 export function extractGitSubcommand(segment: string): GitCommand | null {
   const tokens = tokenizeShellSegments(segment)[0] ?? [];
@@ -251,9 +251,7 @@ function extractGitSubcommandFromTokens(
   const prefix = consumeCommandPrefixes(tokens);
   let i = prefix.index;
   if (prefix.ambiguous) {
-    i = tokens.findIndex((token, index) =>
-      index >= prefix.index && (token.value === 'git' || token.value.endsWith('/git'))
-    );
+    i = tokens.findIndex((token, index) => index >= prefix.index && (token.value === 'git' || token.value.endsWith('/git')));
     if (i === -1) return null;
   }
   if (i >= tokens.length) return null;
@@ -274,7 +272,7 @@ function extractGitSubcommandFromTokens(
 function consumeCommandPrefixes(
   tokens: readonly ShellToken[],
   benignPrefixes: ReadonlySet<string> = GIT_BENIGN_PREFIXES,
-): { readonly index: number; readonly ambiguous: boolean } {
+): { readonly index: number; readonly ambiguous: boolean; } {
   let i = 0;
 
   const consumeBangOperators = (): void => {
@@ -362,18 +360,14 @@ export function isGitConfigRead(cmdOrRest: string | readonly string[], configRea
     .map(extractGitSubcommandFromTokens)
     .filter((parsed): parsed is GitCommand => parsed?.sub === 'config');
   return configCommands.length > 0
-    && configCommands.every((parsed) =>
-      parsed.forceConfirm !== true && configReadModes.includes(parsed.rest[0] ?? '')
-    );
+    && configCommands.every((parsed) => parsed.forceConfirm !== true && configReadModes.includes(parsed.rest[0] ?? ''));
 }
 
 const GIT_REMOTE_URL_KEY = /^remote\.[^\s]+\.url$/;
 
 export function hasUnsafeGitConfigRemoteUrl(cmd: string, configReadModes: readonly string[]): boolean {
   for (const tokens of tokenizeShellSegments(cmd)) {
-    const gitIndex = tokens.findIndex((token) =>
-      token.value === 'git' || token.value.endsWith('/git')
-    );
+    const gitIndex = tokens.findIndex((token) => token.value === 'git' || token.value.endsWith('/git'));
     if (
       gitIndex === -1
       || !tokens.slice(gitIndex + 1).some((token) => token.value === 'config')
@@ -473,8 +467,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
       return {
         verdict: 'confirm',
         ruleId: 'git-protected',
-        reason:
-          `git ${parsed.sub} can rewrite history, mutate a remote, or discard work — confirm before running`,
+        reason: `git ${parsed.sub} can rewrite history, mutate a remote, or discard work — confirm before running`,
         target: cmd,
       };
     }
