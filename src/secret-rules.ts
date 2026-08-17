@@ -63,7 +63,13 @@ export function createSecretChecker(
       const pathHit = checkPath(normalized);
       if (pathHit) {
         return {
-          verdict: 'block',
+          // The underlying path rule's OWN verdict, not a hardcoded
+          // "block" — a confirm-verdict rule (transcript-backup, ticket
+          // 13; bouncer-audit-log, ticket 14) must stay confirm whether
+          // it's reached via Read/Grep or via a Bash command referencing
+          // the same path; only the ruleId/reason get the `bash-`
+          // wrapping treatment.
+          verdict: pathHit.verdict,
           ruleId: `bash-${pathHit.ruleId}`,
           reason: `Bash command references sensitive path: ${pathHit.reason}`,
           target: cmd,

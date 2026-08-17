@@ -260,8 +260,9 @@ function pathRuleDigest(
 // be separate module-level regexes; they are policy data now too, one
 // field on the row they qualify, which is what let this lock stop needing
 // a second "declared outside the block" append step. `transcript-backup`
-// is the one row with a non-default `verdict` ("confirm" — review round
-// 2's arbitration; see policy/secret.toml).
+// and `bouncer-audit-log` are the two rows with a non-default `verdict`
+// ("confirm" — review round 2's arbitration for transcript-backup, ticket
+// 14's own arbitration for bouncer-audit-log; see policy/secret.toml).
 const EXPECTED_PATH_DIGEST: readonly string[] = [
   '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
   '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
@@ -273,13 +274,14 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '7 npmrc (^|/)\\.npmrc$ flags= except=/node_modules/ verdict=',
   '8 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
   '9 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
-  '10 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
-  '11 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
-  '12 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
+  '10 bouncer-audit-log (^|/)logs/hooks/bouncer\\.log(\\.1)?$ flags= except= verdict=confirm',
+  '11 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
+  '12 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
+  '13 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the thirteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (13 entries + except/verdict fields)', () => {
+describe('guards-digest: tamper lock — secret.path, the fourteen-entry path guard', () => {
+  test('secret.path matches the frozen ordered digest (14 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });

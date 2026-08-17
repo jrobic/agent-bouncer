@@ -120,6 +120,77 @@ describe('secret-rules: PATH_RULES', () => {
     expect(hit?.verdict).toBe('confirm');
   });
 
+  // Ticket 14: the binary's OWN audit log — universal (every consumer has
+  // it), confirm not block (Jonathan's arbitration: same reasoning as
+  // transcript-backup — `bouncer audit` is the sanctioned read path and
+  // never goes through this guard at all; a direct ad hoc read is a
+  // legitimate, if less common, path that gets asked about, not stopped).
+  describe('ruleId bouncer-audit-log: the binary\'s own audit trail', () => {
+    test('ruleId bouncer-audit-log: a relative path ending in logs/hooks/bouncer.log is confirmed', () => {
+      const hit = checkPath('logs/hooks/bouncer.log');
+      expect(hit?.ruleId).toBe('bouncer-audit-log');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    test('an absolute path under an arbitrary CLAUDE_CONFIG_DIR shape is confirmed', () => {
+      const hit = checkPath('/custom/config/dir/logs/hooks/bouncer.log');
+      expect(hit?.ruleId).toBe('bouncer-audit-log');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    // Rotation sibling: src/adapter/log.ts's rotateIfNeeded always renames
+    // to exactly `.log.1` (single slot — a fresh rotation overwrites the
+    // previous one via `rename`, never `.2`/`.3`/...), so covering it
+    // exactly does not widen onto any other .log file. Chosen over a
+    // knownLimit — unlike the predecessor hook-log rule (whose SEVERAL
+    // legacy log stems made a wildcard-ish widening a real risk), this
+    // rule names exactly one file, so the one-slot rotation sibling can be
+    // matched precisely.
+    test('the rotation sibling logs/hooks/bouncer.log.1 is ALSO confirmed (covered, not a known limit)', () => {
+      const hit = checkPath('/home/user/logs/hooks/bouncer.log.1');
+      expect(hit?.ruleId).toBe('bouncer-audit-log');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    test('a second rotation generation (.log.2, which the engine never produces) is NOT matched', () => {
+      // Pins the precision of the choice above: the pattern names exactly
+      // what rotateIfNeeded can produce, not "any numbered suffix".
+      expect(checkPath('/home/user/logs/hooks/bouncer.log.2')).toBeNull();
+    });
+
+    test('negative: a file named bouncer.log OUTSIDE logs/hooks/ is not touched', () => {
+      // The discriminant is the full logs/hooks/bouncer.log path, not the
+      // bare filename — a user's own unrelated file sharing the name is
+      // never a bouncer audit log.
+      expect(checkPath('/home/user/projects/my-app/bouncer.log')).toBeNull();
+      expect(checkPath('/home/user/bouncer.log')).toBeNull();
+    });
+
+    test('negative: a near-miss directory name (other-logs/hooks/) does not match', () => {
+      expect(checkPath('/home/user/other-logs/hooks/bouncer.log')).toBeNull();
+    });
+
+    test('Bash: cat logs/hooks/bouncer.log propagates the confirm verdict, not a hardcoded block', () => {
+      // Regression seam: checkSecretBash used to hardcode verdict:"block"
+      // on every path-token hit regardless of the underlying rule's own
+      // verdict — silently upgrading a "confirm" rule (transcript-backup,
+      // and now this one) to "block" the moment it was reached through a
+      // Bash command instead of a Read/Grep tool call. Fixed alongside
+      // this ticket; see src/secret-rules.ts's checkSecretBash.
+      const hit = checkSecretBash('cat logs/hooks/bouncer.log');
+      expect(hit?.ruleId).toBe('bash-bouncer-audit-log');
+      expect(hit?.verdict).toBe('confirm');
+    });
+  });
+
+  test('Bash: cat on a transcript-backup path also propagates confirm, not a hardcoded block', () => {
+    // Same regression seam as bouncer-audit-log above, proven against the
+    // OTHER confirm-verdict rule already in the baseline (ticket 13).
+    const hit = checkSecretBash('cat .claude/transcripts/foo.json');
+    expect(hit?.ruleId).toBe('bash-transcript-backup');
+    expect(hit?.verdict).toBe('confirm');
+  });
+
   test('ruleId secret-dir: secrets/ directory is blocked', () => {
     expect(checkPath('/proj/secrets/db.yaml')?.ruleId).toBe('secret-dir');
   });
