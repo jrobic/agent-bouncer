@@ -1,5 +1,5 @@
 // Pure audit-diff logic (ticket 08, code-only scope): parsing the TS
-// generation's own log lines (guard-command.log etc — schema read from
+// generation's own log lines (command-guard.log etc — schema read from
 // ~/dotfiles/claude/hooks/_shared/lib.ts's logDeny, read-only
 // reference), correlating them against bouncer's shadow-mode log entries,
 // and classifying the three divergence kinds. No filesystem — see
@@ -355,7 +355,7 @@ describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergen
   });
 
   describe('guard-log-reads', () => {
-    test('a Read of guard-command.log (TS allowed, no bouncer rule) is tagged expected', () => {
+    test('a Read of command-guard.log (TS allowed, no bouncer rule) is tagged expected', () => {
       const d: DiffDivergence = {
         kind: 'ts-allowed',
         tsRuleIds: [],
@@ -363,13 +363,13 @@ describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergen
         tsDecision: null,
         bouncerVerdict: null,
         toolName: 'Read',
-        target: '/proj/hooks/guard-command.log',
+        target: '/proj/hooks/command-guard.log',
         timestamp: '2026-08-10T12:00:00.000Z',
       };
       expect(expectedFamilyOf(d)?.id).toBe('guard-log-reads');
     });
 
-    test('near-miss: bouncer BLOCKING a Bash deletion of guard-command.log is NOT tagged — a real, more severe divergence', () => {
+    test('near-miss: bouncer BLOCKING a Bash deletion of command-guard.log is NOT tagged — a real, more severe divergence', () => {
       const d: DiffDivergence = {
         kind: 'ts-allowed',
         tsRuleIds: [],
@@ -377,7 +377,7 @@ describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergen
         tsDecision: null,
         bouncerVerdict: 'block',
         toolName: 'Bash', // not a read-shaped tool
-        target: 'rm /proj/hooks/guard-command.log',
+        target: 'rm /proj/hooks/command-guard.log',
         timestamp: '2026-08-10T12:00:00.000Z',
       };
       expect(expectedFamilyOf(d)).toBeNull();

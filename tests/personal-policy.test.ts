@@ -50,43 +50,52 @@ const secretChecker = createSecretChecker(loaded.policy.secret, loaded.policy.co
 const { checkPath } = secretChecker;
 
 describe('secret.path: hook-log is restored under the personal overlay', () => {
-  test('ruleId hook-log: guard-command.log is blocked', () => {
-    expect(checkPath('/proj/hooks/guard-command.log')?.ruleId).toBe('hook-log');
+  // Real workstation basenames (secret-guard.ts:107's own protection,
+  // <x>-guard.log — see examples/personal-overlay.toml's provenance
+  // comment). The original port inverted these to `guard-<x>.log`, a
+  // fictional naming scheme the workstation never wrote, and this file's
+  // own tests validated that fiction until a real `audit --diff` run
+  // caught it (0 TS events parsed, hook-log silently dead).
+  test('ruleId hook-log: command-guard.log is blocked', () => {
+    expect(checkPath('/proj/hooks/command-guard.log')?.ruleId).toBe('hook-log');
   });
 
-  test('ruleId hook-log: guard-mcp-write.log is blocked (fifth guard\'s log)', () => {
-    expect(checkPath('/proj/hooks/guard-mcp-write.log')?.ruleId).toBe('hook-log');
+  test('ruleId hook-log: secret-guard.log is blocked, as a guard', () => {
+    expect(checkPath('/proj/hooks/secret-guard.log')?.ruleId).toBe('hook-log');
   });
 
-  test('documented gap: rotated guard-mcp-write.log.1 is not blocked', () => {
+  test('ruleId hook-log: transcript-backup.log is blocked', () => {
+    expect(checkPath('/proj/hooks/transcript-backup.log')?.ruleId).toBe('hook-log');
+  });
+
+  test('documented gap: rotated command-guard.log.1 is not blocked', () => {
     // Rotation is not covered because hook-log ends at `.log$`. Locked as a
     // visible gap so a future extension must update this assertion
     // consciously — unchanged by the ticket 13 move.
-    expect(checkPath('/proj/hooks/guard-mcp-write.log.1')).toBeNull();
+    expect(checkPath('/proj/hooks/command-guard.log.1')).toBeNull();
   });
 
-  test('ruleId hook-log: guard-secret.log is blocked, as a guard', () => {
-    expect(checkPath('/proj/hooks/guard-secret.log')?.ruleId).toBe('hook-log');
+  // mcp-write-guard.log is a real workstation log too, but the ORIGINAL
+  // secret-guard.ts:107 regex never protected it either — restoring
+  // fidelity means leaving this gap in place, not closing it. Widening
+  // hook-log to cover it would be a hardening decision, not a parity fix.
+  test('documented gap: mcp-write-guard.log is not blocked (matches the original\'s own scope, not covered)', () => {
+    expect(checkPath('/proj/hooks/mcp-write-guard.log')).toBeNull();
+  });
+
+  // Regression pin: the ORIGINAL bug. `guard-command.log` (the inverted,
+  // fictional name this repo shipped and tested against) must NOT match —
+  // if it ever does again, the inversion is back.
+  test('regression: the old inverted name guard-command.log is NOT blocked (pins the fixed bug)', () => {
+    expect(checkPath('/proj/hooks/guard-command.log')).toBeNull();
   });
 
   test.each([
+    'guard-secret',
     'guard-write-secret',
-    'transcript-backup',
-  ])('ruleId hook-log: %s.log is blocked', (stem) => {
-    expect(checkPath(`/proj/hooks/${stem}.log`)?.ruleId).toBe('hook-log');
-  });
-
-  // Negative discriminator: the workstation's naming scheme. The workstation
-  // writes command-guard.log and secret-guard.log — no engine guard writes
-  // either — plus transcript-backup.log, which coincides with a branch name
-  // and so is not a discriminator. Without both tests below, nothing stops
-  // someone widening the alternation to either workstation name on its own.
-  test('benign: secret-guard.log (workstation naming scheme) is not blocked', () => {
-    expect(checkPath('/proj/hooks/secret-guard.log')).toBeNull();
-  });
-
-  test('benign: command-guard.log (workstation naming scheme) is not blocked', () => {
-    expect(checkPath('/proj/hooks/command-guard.log')).toBeNull();
+    'guard-mcp-write',
+  ])('regression: the old inverted name %s.log is NOT blocked', (stem) => {
+    expect(checkPath(`/proj/hooks/${stem}.log`)).toBeNull();
   });
 });
 

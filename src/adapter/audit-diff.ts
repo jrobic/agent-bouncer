@@ -100,16 +100,26 @@ export function parseTsLogEntries(text: string): ParsedTsLog {
   return { entries, ignoredLineCount };
 }
 
-// The four predecessor guard log filenames, each written by its own
-// independently-registered TS hook. `write-secret` and `mcp-write` match
-// bouncer's own family naming (ticket 06 ported these ids); the files
-// themselves live at `<dir>/logs/hooks/<name>.log`, same layout as
-// bouncer's own hookLogPath.
+// The real predecessor guard log basenames — confirmed against the TS
+// source (each hook's own HOOK_NAME constant + hookLogPath(), which
+// resolves to `<dir>/logs/hooks/<name>.log`, same layout used below):
+// secret-guard.ts's HOOK_NAME = "secret-guard", command-guard.ts's =
+// "command-guard", mcp-write-guard.ts's = "mcp-write-guard", and
+// transcript-backup.log is the fourth name secret-guard.ts:107's own
+// hook-log protection regex names (observed in an actual logged command
+// enumerating all four together). There is no separate "write-secret"
+// log: bouncer's own `write-secret` rule family (Write/Edit content
+// scanning) is handled by secret-guard.ts itself and lands in
+// secret-guard.log, not a distinct file — the previous list's
+// `guard-write-secret.log` entry named a file that never existed.
+// (This list previously read `guard-<x>.log` for all four — inverted
+// from the real `<x>-guard.log` naming — see examples/personal-overlay.toml
+// for the same fix and its provenance comment.)
 export const TS_GUARD_LOG_FILES: readonly string[] = [
-  'guard-command.log',
-  'guard-secret.log',
-  'guard-write-secret.log',
-  'guard-mcp-write.log',
+  'command-guard.log',
+  'secret-guard.log',
+  'mcp-write-guard.log',
+  'transcript-backup.log',
 ];
 
 // Two DISTINCT constants, deliberately not one reused for both jobs
@@ -371,8 +381,8 @@ export interface ExpectedDivergenceFamily {
 // to tag [expected], only a test proving no divergence occurs (see
 // "severity-max parity" in tests/adapter-audit-diff.test.ts).
 
-// Read-shaped tools only — a Bash-invoked DELETE of a guard-*.log file
-// (e.g. `rm guard-command.log`) is a materially different, more severe
+// Read-shaped tools only — a Bash-invoked DELETE of a *-guard.log file
+// (e.g. `rm command-guard.log`) is a materially different, more severe
 // action the guard-log-reads family was never about; see that family's
 // own comment below.
 const READ_SHAPED_TOOLS: ReadonlySet<string> = new Set(['Read', 'Grep', 'Glob']);
@@ -404,7 +414,12 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
       && d.bouncerRuleId === null
       && d.toolName !== null
       && READ_SHAPED_TOOLS.has(d.toolName)
-      && /guard-(command|secret|write-secret|mcp-write)\.log$/.test(d.target),
+      // Exactly the three basenames the personal overlay's hook-log rule
+      // protects (examples/personal-overlay.toml, same provenance
+      // comment) — NOT mcp-write-guard.log, which installing the overlay
+      // would not cover either, so a read of it stays a real, untagged
+      // gap rather than "closed by installing the overlay".
+      && /(secret-guard|command-guard|transcript-backup)\.log$/.test(d.target),
   },
   {
     id: 'transcripts-deny-to-confirm',

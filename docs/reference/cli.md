@@ -248,8 +248,8 @@ bouncer audit --diff [--days <n>] [--ts-logs <dir>]
 - `--diff` — compare bouncer's shadow-mode log entries (`mode:"shadow"`
   only — a non-shadow entry is never part of this comparison) against
   the TS generation's four independent guard logs
-  (`guard-command.log`, `guard-secret.log`, `guard-write-secret.log`,
-  `guard-mcp-write.log`), reporting the three divergence kinds below.
+  (`command-guard.log`, `secret-guard.log`, `mcp-write-guard.log`,
+  `transcript-backup.log`), reporting the three divergence kinds below.
   Read-only — writes nothing, on either side.
 - `--ts-logs <dir>` — the account config dir the four TS guard logs live
   under (same `logs/hooks/<name>.log` layout bouncer's own log uses).

@@ -106,7 +106,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   test('a matched pair (same target/tool/decision-bucket) produces NO divergence', async () => {
     const dir = await freshAccountDir();
     await writeBouncerLog(dir, [shadowVerdict()]);
-    await writeTsLog(dir, 'guard-command.log', [tsDeny()]);
+    await writeTsLog(dir, 'command-guard.log', [tsDeny()]);
 
     const { text, ok } = await runAudit({ days: 30, suggest: false, diff: true });
     expect(ok).toBe(true);
@@ -117,7 +117,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
 
   test('a TS deny with no bouncer counterpart reports "bouncer would allow", naming the TS rule id', async () => {
     const dir = await freshAccountDir();
-    await writeTsLog(dir, 'guard-command.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
+    await writeTsLog(dir, 'command-guard.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
 
     const { text } = await runAudit({ days: 30, suggest: false, diff: true });
     const section = sectionOf(text, 'TS denied/asked, bouncer would allow');
@@ -138,7 +138,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     await writeBouncerLog(dir, [
       shadowVerdict({ verdict: 'confirm', rule_id: 'transcript-backup', target: '/home/user/.claude/transcripts/foo.json' }),
     ]);
-    await writeTsLog(dir, 'guard-secret.log', [
+    await writeTsLog(dir, 'secret-guard.log', [
       tsDeny({ rule_id: 'transcript-backup', target: '/home/user/.claude/transcripts/foo.json' }),
     ]);
 
@@ -164,7 +164,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     const tsDir = await mkdtemp(join(tmpdir(), 'bouncer-audit-diff-ts-'));
     cleanupDirs.push(tsDir);
 
-    await writeTsLog(tsDir, 'guard-command.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
+    await writeTsLog(tsDir, 'command-guard.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
     // Nothing written under bouncerDir's own logs/hooks/ for the TS side —
     // proves the override, not the default, is what got read.
 
@@ -182,7 +182,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   test('the report states the correlation heuristic and never writes anywhere', async () => {
     const dir = await freshAccountDir();
     await writeBouncerLog(dir, [shadowVerdict()]);
-    await writeTsLog(dir, 'guard-command.log', [tsDeny()]);
+    await writeTsLog(dir, 'command-guard.log', [tsDeny()]);
 
     const { text } = await runAudit({ days: 30, suggest: false, diff: true });
     expect(text.toLowerCase()).toContain('heuristic');

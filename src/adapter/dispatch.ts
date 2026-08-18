@@ -57,9 +57,10 @@ const NATIVE_FILE_PATH_FIELD: Readonly<Record<string, string>> = {
   NotebookEdit: 'notebook_path',
 };
 
-// Text about to be written, per tool — mirrors the workstation
+// Text about to be written, per tool — mirrors the catalog's
 // guard-write-secret dispatch (Write.content, Edit.new_string,
-// MultiEdit.edits[].new_string joined).
+// MultiEdit.edits[].new_string joined); the workstation generation
+// never scanned written content, this family is catalog-only ancestry.
 function writeSecretText(tool: string | undefined, ti: Record<string, unknown>): string | null {
   if (tool === 'Write') {
     return readStringField(ti, 'content', HOOK_NAME);
