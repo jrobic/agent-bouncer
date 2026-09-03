@@ -163,7 +163,7 @@ bouncer rules list
 **Output** (first lines, baseline-only account):
 
 ```
-summary: 49 rules, 0 overrides active
+summary: 50 rules, 0 overrides active
 rule command.bash dd-device-write baseline
 rule command.bash mkfs baseline
 ...
@@ -211,7 +211,7 @@ Always printed in full, healthy or not.
 [pass] wiring:PreToolUse — PreToolUse is correctly wired
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
-[pass] policy — baseline only (no overlay configured) (49 effective rules)
+[pass] policy — baseline only (no overlay configured) (50 effective rules)
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
 ```

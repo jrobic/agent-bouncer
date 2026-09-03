@@ -120,6 +120,20 @@ counts as dangerous, never narrow it), `command.privilege_escalation.commands`
 `safe_subcommands` via `[[relax]]` above) for `git-protected`. See
 `docs/reference/policy.md` for each table's shape.
 
+## The self-protection loop: overriding `bouncer-policy`
+
+`bouncer-policy` (`rules.secret.path`) confirms any read or write that
+touches `<configDir>/bouncer/policy.toml` or `<configDir>/bouncer/policy.d/`
+— the policy the binary itself runs on. It is override-able like any other
+regex-table rule, which means an `[[override]]` block that disables it is
+itself a write to a `policy.d/*.toml` file, so the live rule confirms
+*that* write too, before it lands. Once it's on disk (a human approved the
+confirm prompt), the rule is gone from the effective set and further
+edits to the policy overlay go unconfirmed — this is intentional: ordinary,
+override-able protection, not a hard seal. A stronger "sealed rule" that
+can't be turned off through the overlay at all is a tracked backlog idea,
+not built here.
+
 ## Verify
 
 - `bouncer rules lint` exits 0 after every edit.

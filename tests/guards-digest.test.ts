@@ -254,10 +254,12 @@ function pathRuleDigest(
 // ENV_WHITELIST (dotenv) and node_modules (npmrc) exceptions that used to
 // be separate module-level regexes; they are policy data now too, one
 // field on the row they qualify, which is what let this lock stop needing
-// a second "declared outside the block" append step. `transcript-backup`
-// and `bouncer-audit-log` are the two rows with a non-default `verdict`
-// ("confirm" — review round 2's arbitration for transcript-backup, ticket
-// 14's own arbitration for bouncer-audit-log; see policy/secret.toml).
+// a second "declared outside the block" append step. `transcript-backup`,
+// `bouncer-audit-log` and `bouncer-policy` are the three rows with a
+// non-default `verdict` ("confirm" — review round 2's arbitration for
+// transcript-backup, ticket 14's own arbitration for bouncer-audit-log,
+// ticket 19's promotion of the overlay-born self-protection for
+// bouncer-policy; see policy/secret.toml).
 const EXPECTED_PATH_DIGEST: readonly string[] = [
   '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
   '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
@@ -270,13 +272,14 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '8 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
   '9 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
   '10 bouncer-audit-log (^|/)logs/hooks/bouncer\\.log(\\.1)?$ flags= except= verdict=confirm',
-  '11 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
-  '12 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
-  '13 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
+  '11 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=confirm',
+  '12 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
+  '13 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
+  '14 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the fourteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (14 entries + except/verdict fields)', () => {
+describe('guards-digest: tamper lock — secret.path, the fifteen-entry path guard', () => {
+  test('secret.path matches the frozen ordered digest (15 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });

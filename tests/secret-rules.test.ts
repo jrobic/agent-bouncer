@@ -191,6 +191,72 @@ describe('secret-rules: PATH_RULES', () => {
     expect(hit?.verdict).toBe('confirm');
   });
 
+  // Ticket 19: the policy the binary RUNS ON — <configDir>/bouncer/policy.toml
+  // and <configDir>/bouncer/policy.d/ — is the disarmament counterpart of
+  // bouncer-audit-log (reconnaissance). Baseline, not overlay: an invalid
+  // overlay SET falls back to the baseline (docs/reference/policy.md
+  // § Fail-closed behavior), so an overlay-hosted self-protection would be
+  // disarmed exactly in the murky scenarios it exists for. Confirm, not
+  // block: editing one's own policy is legitimate and gets asked about.
+  describe('ruleId bouncer-policy: the policy the binary runs on', () => {
+    test('ruleId bouncer-policy: a relative bouncer/policy.toml is confirmed', () => {
+      const hit = checkPath('bouncer/policy.toml');
+      expect(hit?.ruleId).toBe('bouncer-policy');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    test('a policy.d file under an arbitrary CLAUDE_CONFIG_DIR shape is confirmed', () => {
+      const hit = checkPath('/custom/config/dir/bouncer/policy.d/10-personal.toml');
+      expect(hit?.ruleId).toBe('bouncer-policy');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    test('the policy.d directory itself (a directory-level read or glob root) is confirmed', () => {
+      expect(checkPath('/custom/config/dir/bouncer/policy.d')?.ruleId).toBe('bouncer-policy');
+      expect(checkPath('/custom/config/dir/bouncer/policy.d/')?.ruleId).toBe('bouncer-policy');
+    });
+
+    test('negative: this repository\'s own baseline sources (policy/*.toml, no bouncer/ segment) are not touched', () => {
+      // The baseline lives in `policy/` (a directory, not `policy.toml`),
+      // under a checkout whose name only CONTAINS "bouncer" — the
+      // `(^|/)bouncer/` anchor never sees a segment boundary there.
+      expect(checkPath('/home/user/code/agent-bouncer/policy/secret.toml')).toBeNull();
+      expect(checkPath('/home/user/code/agent-bouncer/policy')).toBeNull();
+      expect(checkPath('/home/user/code/agent-bouncer/policy.toml')).toBeNull();
+    });
+
+    test('negative: a bouncer/ segment without the live policy file or directory does not match', () => {
+      // The rule guards what the loader READS (src/adapter/policy.ts's
+      // overlayPath/overlayDirPath) — a backup directory alongside is a
+      // copy, not the live policy, and stays an ordinary path.
+      expect(checkPath('/custom/config/dir/bouncer/policy.d.pre-mount.bak/10-personal.toml')).toBeNull();
+      expect(checkPath('/custom/config/dir/bouncer/README.md')).toBeNull();
+    });
+
+    // Review round 1: pins the trailing `/`-or-end requirement on the FILE
+    // branch too — `(policy\.toml|policy\.d)(/|$)`, not `policy\.d(/|$)`
+    // alone — same discriminating gesture as the bouncer-audit-log sibling
+    // above pinning `bouncer.log.2` against its own pattern. A `.bak`/`~`
+    // copy or a longer near-miss filename is a copy, not the live file.
+    test('negative: policy.toml near-misses (.bak, ~, a longer name) are NOT matched', () => {
+      expect(checkPath('/custom/config/dir/bouncer/policy.toml.bak')).toBeNull();
+      expect(checkPath('/custom/config/dir/bouncer/policy.toml~')).toBeNull();
+      expect(checkPath('/custom/config/dir/bouncer/policy.tomlx')).toBeNull();
+    });
+
+    test('Bash: appending to a policy.d file propagates the confirm verdict, not a hardcoded block', () => {
+      const hit = checkSecretBash('echo "[[override]]" >> ~/.claude/bouncer/policy.d/10-personal.toml');
+      expect(hit?.ruleId).toBe('bash-bouncer-policy');
+      expect(hit?.verdict).toBe('confirm');
+    });
+
+    test('Bash: a cat of the root overlay is ALSO confirmed — secret.path covers reads and writes alike (assumed, not a gap)', () => {
+      const hit = checkSecretBash('cat ~/.claude-work/bouncer/policy.toml');
+      expect(hit?.ruleId).toBe('bash-bouncer-policy');
+      expect(hit?.verdict).toBe('confirm');
+    });
+  });
+
   test('ruleId secret-dir: secrets/ directory is blocked', () => {
     expect(checkPath('/proj/secrets/db.yaml')?.ruleId).toBe('secret-dir');
   });
