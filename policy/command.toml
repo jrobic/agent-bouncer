@@ -64,7 +64,30 @@ reason = "netcat reading a file via stdin redirection (exfiltration)"
 
 [[rules.command.bash]]
 id = "setuid"
-regex = "\\bchmod\\s+(?:[ugoa]*\\+s|[0-7]?[2-7][0-7]{2,3})\\b"
+# Four forms covered:
+#   - numeric, any number of leading zeros: `0*[2-7][0-7]{3}` — zero or
+#     more leading zeros, then the setuid/setgid digit [2-7], then 3 more
+#     octal digits. GNU coreutils and macOS both accept a zero-padded
+#     mode (`04755`, `004755`) — this is 4 significant digits after the
+#     zeros, not "exactly 4 digits" overall. A plain 3-digit mode
+#     (chmod 755) never has 4 digits after the zeros to match; a mode
+#     with no special bit (chmod 0644, chmod 1755 — sticky only) has its
+#     post-zero leading digit outside [2-7].
+#   - symbolic: `[ugoa]*[+=][rwxXst]*s[rwxXst]*` — an assignment (`+` or
+#     `=`, not `-`: a removal like `a-s` is not a grant) whose permission
+#     letters include `s` anywhere among them, not only adjacent to the
+#     operator or at the end (`u+rws`, `g=rxs`, `u+st`, `u+sx` all grant).
+#   - symbolic, comma-separated clause list: `(?:[ugoa]*[+=-][rwxXst]*,)*`
+#     prefixed onto the symbolic form above, so a grant buried behind
+#     other clauses is still caught (`u+x,g+s`, `a+st,o+r`).
+#   - flags between `chmod` and the mode: `(?:-\S+\s+)*` — short and long
+#     option tokens ahead of the mode argument (`chmod -R u+s dir`,
+#     `chmod -v 4755 f`). This also consumes `--reference=other` as a
+#     flag: `chmod --reference=other f` copies another file's mode, and a
+#     setuid/setgid grant by reference is invisible to a regex on this
+#     command's own text — a known, undetectable limit (see the
+#     known-limit fixture), not a gap this rule closes.
+regex = "\\bchmod\\s+(?:-\\S+\\s+)*(?:(?:[ugoa]*[+=-][rwxXst]*,)*[ugoa]*[+=][rwxXst]*s[rwxXst]*|0*[2-7][0-7]{3})\\b"
 reason = "chmod setting setuid/setgid bit"
 
 [[rules.command.bash]]

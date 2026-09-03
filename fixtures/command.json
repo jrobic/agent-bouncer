@@ -261,6 +261,309 @@
       ]
     },
     {
+      "id": "setuid-symbolic-setgid",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod g+s /usr/bin/foo"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-symbolic-all",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod a+s /usr/bin/foo"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-plain-octal-mode-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 755 /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-plain-symbolic-mode-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod +x /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-leading-zero-mode-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 0644 /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-zero-padded-numeric-setuid",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 04755 /usr/bin/foo"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-zero-padded-numeric-setgid",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 02755 /usr/bin/foo"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-zero-padded-no-special-bit-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 00755 /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-single-leading-zero-no-special-bit-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 0755 /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-sticky-bit-only-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 1755 /usr/bin/foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-flag-before-symbolic-mode",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R u+s dir"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-flag-before-numeric-mode",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -v 4755 f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-flag-before-plain-mode-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R 755 dir"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-combined-perms-s-not-adjacent-to-plus",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+rws f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-assignment-form-s-not-adjacent-to-equals",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod g=rxs f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-combined-perms-no-s-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+rwx f"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-removal-not-a-grant-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod a-s f"
+      },
+      "expected": []
+    },
+    {
+      "id": "setuid-grant-in-comma-separated-clause-list",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+x,g+s f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-symbolic-s-not-last-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+st f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-plain-symbolic-s-not-last-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod +st f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-symbolic-s-before-other-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+sx f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-assignment-s-not-last-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u=rwst f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-symbolic-s-middle-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+rst f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-comma-clause-first-s-not-last-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod a+st,o+r f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-comma-clause-second-s-not-last-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod u+x,g+st f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "setuid-multiple-leading-zeros",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 004755 f"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "setuid"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-setuid-reference-copy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod --reference=other f"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "--reference copies another file's mode; a setuid/setgid grant by reference is invisible to a regex on this command's own text"
+    },
+    {
       "id": "etc-write-redirect",
       "toolName": "Bash",
       "toolInput": {

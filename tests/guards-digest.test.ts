@@ -148,7 +148,7 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '6 curl-file-upload \\bcurl\\b[^|;&\\n]*?\\s(?:(?:-d|--data|--data-binary|--data-raw|--data-urlencode)\\s+@\\S+|(?:-F|--form)\\s+\\S*=@|(?:-T|--upload-file)\\s+\\S+) ',
   '7 wget-post-file \\bwget\\b[^|;&\\n]*--post-(?:file|data)= ',
   '8 nc-file-redirect \\bn(?:c|cat)\\b[^|;&\\n]*<\\s*[^\\s<] ',
-  '9 setuid \\bchmod\\s+(?:[ugoa]*\\+s|[0-7]?[2-7][0-7]{2,3})\\b ',
+  '9 setuid \\bchmod\\s+(?:-\\S+\\s+)*(?:(?:[ugoa]*[+=-][rwxXst]*,)*[ugoa]*[+=][rwxXst]*s[rwxXst]*|0*[2-7][0-7]{3})\\b ',
   '10 etc-write-shell (?:>|>>)\\s*\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b ',
   '11 etc-write-tee \\btee\\s+(?:-a\\s+|--append\\s+)?\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b ',
   '12 kill-init \\bkill(?:all)?\\s+(?:-(?:9|KILL)\\s+)?(?:-?-?\\s*)?(?:1|init)\\b ',

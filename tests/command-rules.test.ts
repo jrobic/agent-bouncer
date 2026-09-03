@@ -99,14 +99,47 @@ describe('command-rules: BASH_RULES', () => {
     expect(deny?.ruleId).toBe('sudo');
   });
 
-  test('ruleId setuid: chmod u+s is denied', () => {
-    const deny = checkBash('chmod u+s /usr/bin/foo');
+  // One case per mechanism class; the full grant/allow matrix (every form,
+  // both directions) lives in fixtures/command.json as the conformance
+  // contract — these engine tests exist so the ruleId coverage lock (see
+  // tests/completeness.test.ts) has a title to read, not to re-carry the
+  // matrix a second time.
+
+  test('ruleId setuid: chmod 4755 (numeric, setuid digit) is denied', () => {
+    const deny = checkBash('chmod 4755 /usr/bin/foo');
     expect(deny?.ruleId).toBe('setuid');
   });
 
-  test('ruleId setuid: chmod 4755 (numeric setuid bit) is denied', () => {
-    const deny = checkBash('chmod 4755 /usr/bin/foo');
+  test('ruleId setuid: chmod 004755 (numeric, multiple leading zeros) is denied', () => {
+    const deny = checkBash('chmod 004755 /usr/bin/foo');
     expect(deny?.ruleId).toBe('setuid');
+  });
+
+  test('ruleId setuid: chmod 1755 (sticky bit only, no setuid/setgid bit) is allowed', () => {
+    expect(checkBash('chmod 1755 /usr/bin/foo')).toBeNull();
+  });
+
+  test('ruleId setuid: chmod -R u+s dir (flag before the mode) is denied', () => {
+    const deny = checkBash('chmod -R u+s dir');
+    expect(deny?.ruleId).toBe('setuid');
+  });
+
+  test('ruleId setuid: chmod u+st f (combined symbolic perms, s not the last letter) is denied', () => {
+    const deny = checkBash('chmod u+st f');
+    expect(deny?.ruleId).toBe('setuid');
+  });
+
+  test('ruleId setuid: chmod u+x,g+s f (grant buried in a comma-separated clause list) is denied', () => {
+    const deny = checkBash('chmod u+x,g+s f');
+    expect(deny?.ruleId).toBe('setuid');
+  });
+
+  test('ruleId setuid: chmod a-s f (removal, not a grant) is allowed', () => {
+    expect(checkBash('chmod a-s f')).toBeNull();
+  });
+
+  test('ruleId setuid: chmod 755 (plain mode, no setuid/setgid bit) is allowed', () => {
+    expect(checkBash('chmod 755 /usr/bin/foo')).toBeNull();
   });
 
   test('ruleId etc-write-shell: redirect into /etc/passwd is denied', () => {
