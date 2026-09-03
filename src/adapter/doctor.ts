@@ -273,6 +273,19 @@ function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): D
   return { id, ok: true, message: `${event} is correctly wired${shadowSuffix}` };
 }
 
+// ADR-0001 § Provenance: "; common: 4 files, profile: 0 files". `absent`
+// specifically means the layer's ROOT DIRECTORY does not exist on disk
+// (LayerInfo.root undefined), never merely "zero files": a root that
+// exists but happens to be empty is a real, distinct, reachable state
+// ("profile: 0 files") and must not collapse into "absent" too. A
+// directly constructed LoadResult fixture with an empty `layers` array
+// (as several doctor tests use, to test other checks in isolation)
+// renders no suffix at all — the pre-ticket-20 message, unchanged.
+function layerCountSuffix(loaded: LoadResult): string {
+  const parts = loaded.layers.map((l) => (l.root === undefined ? `${l.name}: absent` : `${l.name}: ${l.files.length} files`));
+  return parts.length > 0 ? `; ${parts.join(', ')}` : '';
+}
+
 function checkPolicy(loaded: LoadResult): DoctorCheck {
   if (loaded.warnings.length > 0) {
     return {
@@ -285,7 +298,7 @@ function checkPolicy(loaded: LoadResult): DoctorCheck {
   return {
     id: 'policy',
     ok: true,
-    message: `${suffix} (${loaded.effectiveRules.length} effective rules)`,
+    message: `${suffix} (${loaded.effectiveRules.length} effective rules${layerCountSuffix(loaded)})`,
   };
 }
 

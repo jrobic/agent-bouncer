@@ -31,6 +31,13 @@ function cleanLoadResult(overlayApplied = false): LoadResult {
     overlayFiles: overlayApplied ? ['policy.toml'] : [],
     activeOverrides: [],
     activeRelaxations: [],
+    // Empty on purpose: these fixtures test runDoctorChecks' OWN checks in
+    // isolation from loadPolicyFromLayers, not the layer-count suffix
+    // (tests/adapter-policy-layers.test.ts covers that, against the real
+    // loader) — doctor.ts's layerCountSuffix renders no suffix at all for
+    // an empty `layers`, so `checkPolicy`'s message stays exactly what it
+    // was before ticket 20 here.
+    layers: [],
   };
 }
 

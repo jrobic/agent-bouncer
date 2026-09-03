@@ -130,7 +130,7 @@ describe('runRulesList', () => {
       '[[rules.command.bash]]\nid = "block-npm-publish"\nregex = "npm publish"\nreason = "test"\n',
     );
     const { text } = await runRulesList();
-    expect(text).toContain('rule command.bash block-npm-publish overlay [policy.toml]');
+    expect(text).toContain('rule command.bash block-npm-publish overlay [profile:policy.toml]');
   });
 
   test('a policy.d rule\'s provenance names its file, and an override/relax from policy.d does too', async () => {
@@ -144,8 +144,10 @@ describe('runRulesList', () => {
       'utf8',
     );
     const { text } = await runRulesList();
-    expect(text).toContain('rule command.bash block-npm-publish overlay [policy.d/10-npm.toml]');
-    expect(text).toContain('override disable mkfs — test [policy.d/10-npm.toml]');
-    expect(text).toContain('overlay-relax command.git.safe_subcommands push — test [policy.d/10-npm.toml]');
+    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy() always
+    // reads the account's overlay as the "profile" layer now.
+    expect(text).toContain('rule command.bash block-npm-publish overlay [profile:policy.d/10-npm.toml]');
+    expect(text).toContain('override disable mkfs — test [profile:policy.d/10-npm.toml]');
+    expect(text).toContain('overlay-relax command.git.safe_subcommands push — test [profile:policy.d/10-npm.toml]');
   });
 });

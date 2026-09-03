@@ -1,6 +1,6 @@
 # Policy format reference
 
-The policy is TOML, in two layers.
+The policy is TOML, in three layers.
 
 ## Baseline vs. overlay
 
@@ -13,25 +13,42 @@ top-level TOML header (`[[rules.command.bash]]`, `[rules.secret...]`,
 is a plain shallow merge — no file ever contributes to another's key.
 Always present, never edited at runtime. The vetted starting point.
 
-**Overlay** — a SET of files, read from disk on every `bouncer
+**Overlay** — two named layers on top of the baseline (ADR-0001), each a
+SET of files with the same shape, read from disk on every `bouncer
 run`/`check`/`rules`/`doctor`/`audit` invocation (no caching, no restart
 needed after an edit):
 
-1. `<configDir>/bouncer/policy.toml` — the single overlay file, if present.
-2. `<configDir>/bouncer/policy.d/*.toml` — every `.toml` file in that
-   directory, in lexicographic FILENAME order (not write time), merged
-   after `policy.toml`. A conf.d-style split for personal rules by theme
+1. **common** — `~/.agents/bouncer/`, a harness-neutral product
+   convention: no file anywhere names this root, and every adapter reads
+   the same one (today only the Claude Code adapter exists; a future
+   harness's adapter — ticket 15 — reads it unchanged). Meant for rules
+   shared across every profile on a workstation (personal and client
+   seats alike) without a per-profile mount gesture.
+2. **profile** — `<configDir>/bouncer/`, resolved by the calling
+   harness's adapter (for Claude Code: `<configDir>` is `~/.claude`
+   unless the `CLAUDE_CONFIG_DIR` environment variable is set, in which
+   case it's that value — `~` expanded, trailing slash normalized).
+
+Both layers have the identical internal shape:
+
+1. `<root>/policy.toml` — the single overlay file, if present.
+2. `<root>/policy.d/*.toml` — every `.toml` file in that directory, in
+   lexicographic FILENAME order (not write time), merged after
+   `policy.toml`. A conf.d-style split for personal rules by theme
    (`10-npm.toml`, `20-client-x.toml`, ...).
 
-`<configDir>` is `~/.claude` unless the `CLAUDE_CONFIG_DIR` environment
-variable is set, in which case it's that value (`~` expanded, trailing
-slash normalized). No files at all (neither `policy.toml` nor a
-`policy.d/` directory) = baseline only, silently — a fresh account with
-no overlay file is a normal, healthy state, not a warning.
+No files at all, in EITHER layer, is baseline only, silently — a fresh
+account with no overlay file is a normal, healthy state, not a warning.
+An absent common layer specifically (no `~/.agents/` on the machine at
+all) is likewise never a failure — `common: absent` in `doctor`/`rules
+lint` output, never a warning — a fresh install simply has no common
+layer yet.
 
 The effective policy `bouncer` actually runs on is baseline merged with
-every overlay file in that order, per-table (see § Merge order below),
-plus `[[override]]` and `[[relax]]` applied on top.
+the common layer's files, merged with the profile layer's files, in that
+order, per-table (see § Merge order below), plus `[[override]]` and
+`[[relax]]` applied on top — with the profile winning wherever the two
+layers target the same thing (see § Precedence below).
 
 ## The rule row: `{id, regex, reason, flags?, except?, special?, verdict?}`
 
@@ -229,61 +246,106 @@ injected `regex`) is compiled and checked:
 
 ## Fail-closed behavior
 
-Any failure anywhere in the overlay **file set** — invalid TOML in any
-one file, a wrong-shaped table, a lint-failing regex, an unresolvable or
-reason-less `[[override]]`/`[[relax]]`, a malformed declarative
-git-conditional entry, a cross-file conflict (§ below) — rejects the
-**whole set**, not just the broken file. The embedded baseline stays
-fully active, and the rejection is a loud warning naming the specific
-file at fault: in the audit log (`kind: "policy-warning"`, see
-`docs/reference/audit-log.md`), in `bouncer rules lint`'s output, and in
-`bouncer doctor`'s `policy` check. Never partial application (a good
+Any failure anywhere in the overlay — invalid TOML in any one file, a
+wrong-shaped table, a lint-failing regex, an unresolvable or reason-less
+`[[override]]`/`[[relax]]`, a malformed declarative git-conditional
+entry, a cross-file conflict (§ below) — rejects the **whole load**, in
+BOTH layers, not just the broken file or the broken layer. The embedded
+baseline stays fully active, and the rejection is a loud warning naming
+the specific file at fault: in the audit log (`kind: "policy-warning"`,
+see `docs/reference/audit-log.md`), in `bouncer rules lint`'s output, and
+in `bouncer doctor`'s `policy` check. Never partial application (a good
 `policy.d/10-npm.toml` sitting next to a broken `policy.d/20-bad.toml`
-does not apply on its own), never a silent fallback:
+does not apply on its own, and a broken common-layer file drops the
+profile layer too, not just its own), never a silent fallback. Per-layer
+rejection (a broken profile file no longer dropping the common layer's
+hardening) is a later ticket:
 
 ```
 $ bouncer rules lint
-lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
-  - overlay policy rejected — falling back to the embedded baseline: policy.d/30-broken.toml: Failed to parse toml
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - overlay policy rejected — falling back to the embedded baseline: profile:policy.d/30-broken.toml: Failed to parse toml
 ```
 
 ## Merge order
 
 Three different orders, by scope:
 
-- **The file SET itself** — `policy.toml` first (if present), then every
-  `policy.d/*.toml` file in lexicographic filename order. Where this
-  matters observably: two overlay files each adding a regex-table rule
-  that could match the same input — "first match wins"
-  (src/policy/match.ts) means the earlier FILE's rule fires.
+- **The file SET itself, within one layer** — `policy.toml` first (if
+  present), then every `policy.d/*.toml` file in lexicographic filename
+  order. Where this matters observably: two files IN THE SAME LAYER each
+  adding a regex-table rule that could match the same input — "first
+  match wins" (src/policy/match.ts) means the earlier FILE's rule fires.
+- **The layers themselves** — common, then profile. A common-layer file
+  always merges before every profile-layer file, regardless of either
+  layer's own filenames — see § Precedence below for what happens when
+  the two layers target the same thing.
 - **The five regex tables, `rm_rf.dangerous_targets`,
   `privilege_escalation.commands`** — baseline first, then every overlay
-  file's additions, in file order. An overlay addition can only ever add,
-  never shadow a baseline entry by position.
+  file's additions across both layers, in merge order (common's files,
+  then profile's). An overlay addition can only ever add, never shadow a
+  baseline entry by position — UNLESS a later layer's row shares the
+  earlier layer's row's `id` (§ Precedence), in which case the earlier
+  layer's row is dropped rather than both surviving side by side.
 - **`ask_flags` / `safe_first_arg` / `safe_grammar`** — overlay entries
   come first. Every consumer looks a `sub` up by `Array.find()`, so an
   overlay entry for an already-governed `sub` wins over the baseline
   one — this asymmetry is what makes such an entry a substitution
   (§ `[[relax]]` above), not a plain addition.
 
+## Precedence: the profile wins on a shared target (ADR-0001)
+
+The common and profile layers are not merged as two more files in one
+set — the SAME target contributed by both is not a cross-file conflict,
+it is the profile layer replacing the common layer's entry outright. The
+targets this applies to (the four case ADR-0001 names):
+
+- A regex-table row `id` (any of the five families).
+- An `[[override]]`'s `rule`.
+- An `[[relax]]`'s `list` + `value`.
+- An `ask_flags` / `safe_first_arg` / `safe_grammar` entry's `sub`
+  (within its own table — `ask_flags` and `safe_first_arg` sharing a
+  `sub` name is not itself a shared target).
+
+When both layers contribute the same target, the common layer's entry is
+dropped from the effective policy entirely (never chained, never applied
+alongside the profile's) and the profile's entry carries `shadows
+common:<file>` in every provenance line (§ Provenance below) naming the
+file it replaced. The profile row keeps its own position in file merge
+order (after every common row) — overlay rows are hardening additions
+after the baseline, so their mutual order rarely matters, and this shape
+has no special case for it.
+
+The cascade is additive, never subtractive: a profile can add or shadow,
+never *revoke* a common `[[relax]]` — there is no `[[revoke]]` form (a
+backlog idea). A relaxation not wanted on every profile does not belong
+in the common layer.
+
+Two files of the SAME layer sharing a target is still the unconditional
+lint error described next — layering changes nothing about that.
+
 ## Cross-file conflicts: explicit lint error, never last-file-wins
 
-Two DIFFERENT overlay files targeting the SAME thing is ambiguous enough
-to reject outright, rather than silently letting file order decide:
+Two DIFFERENT overlay files, IN THE SAME LAYER, targeting the SAME thing
+is ambiguous enough to reject outright, rather than silently letting
+file order decide (the SAME target across DIFFERENT layers is precedence,
+not a conflict — see § Precedence above):
 
-- Two `[[override]]` entries for the same `rule`, in two different files.
+- Two `[[override]]` entries for the same `rule`, in two different files
+  of the same layer.
 - Two `[[relax]]` entries for the same `list` + `value`, in two different
-  files.
+  files of the same layer.
 - Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
-  `sub`, in two different files.
+  `sub`, in two different files of the same layer.
 - Two regex-table rows (any of the five families) sharing the same `id`,
-  in two different files — ids resolve GLOBALLY, not per-family, so this
-  is checked across all five tables combined, not per-table.
+  in two different files of the same layer — ids resolve GLOBALLY, not
+  per-family, so this is checked across all five tables combined, not
+  per-table.
 
 ```
 $ bouncer rules lint
-lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
-  - overlay policy rejected — falling back to the embedded baseline: conflicting [[override]] for rule "curl-file-upload" in policy.d/20-relax.toml and policy.d/30-conflict.toml
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - overlay policy rejected — falling back to the embedded baseline: conflicting [[override]] for rule "curl-file-upload" in profile:policy.d/20-relax.toml and profile:policy.d/30-conflict.toml
 ```
 
 Multiple entries for the same target WITHIN one file are unaffected —
@@ -298,16 +360,42 @@ applies to BOTH rows, in the same file or not. Stated as the batch
 semantics it is, not a bug: `[[override]]` never resolves to "exactly
 one" row, only to "every row currently carrying this id".
 
-## Provenance: which file a rule came from
+Fail-closed rejection itself stays collective across BOTH layers, not
+just within one — a broken file in EITHER layer rejects the whole
+overlay (baseline alone stays active), exactly like a broken file within
+a single set today. Per-layer rejection (a broken profile file no longer
+dropping the common layer's hardening) is a later ticket.
+
+## Provenance: which layer, and which file, a rule came from
 
 `bouncer rules list` names the source file for every overlay-provenance
 line — an addition, an override, or a relaxation — in a trailing
-`[filename]`:
+`[<layer>:<filename>]`, and marks any entry that won cross-layer
+precedence over an earlier layer's with a trailing `shadows
+<layer>:<filename>`:
 
 ```
-override disable curl-file-upload — our CI legitimately uploads build artifacts via curl in every deploy [policy.d/20-relax.toml]
-overlay-relax command.git.safe_subcommands push — our CI force-pushes to a scratch branch and the confirm prompt blocks the pipeline [policy.d/10-npm.toml]
-rule command.bash block-npm-publish overlay [policy.d/10-npm.toml]
+override disable curl-file-upload — our CI legitimately uploads build artifacts via curl in every deploy [profile:policy.d/20-relax.toml]
+overlay-relax command.git.safe_subcommands push — our CI force-pushes to a scratch branch and the confirm prompt blocks the pipeline [common:policy.d/100-personal.toml]
+rule command.bash block-npm-publish overlay [profile:policy.d/10-npm.toml]
+rule command.bash curl-file-upload overlay [profile:policy.toml] shadows common:policy.d/100-personal.toml
+```
+
+`bouncer rules lint`'s OK line names each layer too, `common/<file>` and
+`profile/<file>` (slash, not colon — the same information, formatted for
+a one-line summary rather than a per-rule tag), and says `<layer>:
+absent` when that layer's ROOT DIRECTORY does not exist on disk at all
+— never a failure. A root that DOES exist but happens to hold no
+overlay files is a distinct, real state (`<layer>: 0 files`, reachable
+in `doctor`'s output — see `docs/reference/cli.md`), never collapsed
+into "absent":
+
+```
+$ bouncer rules lint
+lint: OK (overlay: common: absent, profile/policy.toml)
+
+$ bouncer rules lint
+lint: OK (overlay: common/policy.d/100-personal.toml, profile/policy.toml)
 ```
 
 A `baseline`-provenance line has no file to name (the embedded baseline

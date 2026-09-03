@@ -155,6 +155,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
     overlayFiles: [],
     activeOverrides: [],
     activeRelaxations: [],
+    layers: [], // irrelevant here — this test is about the throwing-check catch path, not layer provenance
   };
 
   test('the catch path logs a policy-warning entry instead of failing silently (round-3 review)', async () => {

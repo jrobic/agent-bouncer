@@ -67,7 +67,7 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
       list: 'command.git.safe_subcommands',
       value: 'my-custom-readonly-subcommand',
       reason: 'our CI treats this alias as read-only',
-      sourceFile: 'policy.toml',
+      sourceFile: 'profile:policy.toml',
     });
   });
 
@@ -148,7 +148,7 @@ describe('loadPolicyFromOverlayText: a git-conditional entry substituting an alr
       list: 'command.git.ask_flags',
       value: 'branch',
       reason: 'our workflow never deletes/renames branches from an agent session',
-      sourceFile: 'policy.toml',
+      sourceFile: 'profile:policy.toml',
     });
   });
 

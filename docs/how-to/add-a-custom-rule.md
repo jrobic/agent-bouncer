@@ -79,10 +79,13 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
    bouncer rules list | grep block-npm-publish
    ```
 
-   Expect: `rule command.bash block-npm-publish overlay [policy.toml]` —
+   Expect: `rule command.bash block-npm-publish overlay [profile:policy.toml]` —
    `overlay` marks it as coming from your account's files (not
-   `baseline`), and `[policy.toml]` names which one — `[policy.d/10-npm.toml]`
-   instead, had the rule been added there.
+   `baseline`), and `[profile:policy.toml]` names the layer and file —
+   `[profile:policy.d/10-npm.toml]` instead, had the rule been added
+   there, or `[common:...]` had it lived in the shared common layer
+   (`~/.agents/bouncer/` — see `docs/reference/policy.md`'s § Baseline
+   vs. overlay) instead of your own profile's.
 
 ## Verify
 

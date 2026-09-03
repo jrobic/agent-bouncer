@@ -175,9 +175,11 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     const loaded = await loadCurrentPolicy();
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(true);
-    expect(loaded.overlayFiles).toEqual(['policy.d/10-npm.toml']);
+    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy() always
+    // reads the account's own overlay as the "profile" layer now.
+    expect(loaded.overlayFiles).toEqual(['profile:policy.d/10-npm.toml']);
     const entry = loaded.effectiveRules.find((r) => r.rule.id === 'block-npm-publish');
-    expect(entry?.sourceFile).toBe('policy.d/10-npm.toml');
+    expect(entry?.sourceFile).toBe('profile:policy.d/10-npm.toml');
   });
 
   test('policy.toml and policy.d files merge together, policy.toml first', async () => {
@@ -195,7 +197,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     );
     const loaded = await loadCurrentPolicy();
     expect(loaded.warnings).toEqual([]);
-    expect(loaded.overlayFiles).toEqual(['policy.toml', 'policy.d/10-extra.toml']);
+    expect(loaded.overlayFiles).toEqual(['profile:policy.toml', 'profile:policy.d/10-extra.toml']);
     const ids = loaded.policy.command.bash.map((r) => r.id);
     expect(ids).toContain('from-policy-toml');
     expect(ids).toContain('from-policy-d');
@@ -217,7 +219,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     );
     const loaded = await loadCurrentPolicy();
     expect(loaded.warnings).toEqual([]);
-    expect(loaded.overlayFiles).toEqual(['policy.d/10-a.toml', 'policy.d/20-b.toml']);
+    expect(loaded.overlayFiles).toEqual(['profile:policy.d/10-a.toml', 'profile:policy.d/20-b.toml']);
     const hit = loaded.policy.command.bash.find((r) => r.regex === 'shared-trigger');
     expect(hit?.id).toBe('rule-from-10-a');
   });

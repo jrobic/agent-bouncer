@@ -19,7 +19,7 @@ import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
 import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
 import { configDir, hookLogPath } from './adapter/log-path.ts';
-import { loadCurrentPolicy, overlayDirPath, overlayPath } from './adapter/policy.ts';
+import { loadCurrentPolicy } from './adapter/policy.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 
@@ -62,18 +62,45 @@ export async function runCheck(command: string): Promise<CommandResult> {
  * actually merged in (ticket 12's "reports per file"); on failure, the
  * warning lines already name the specific offending file.
  */
+// ADR-0001 § Provenance: "lint: OK (overlay: common/policy.d/100-x.toml,
+// profile/policy.toml)" — reads straight off LoadResult.layers, no
+// `startsWith`/`replace` string surgery on `overlayFiles` (that would be
+// re-deriving layer membership from a string this module didn't build).
+// `<layer>: absent` when the root doesn't exist at all; `<layer>: 0
+// files` when it exists but is empty — see LayerInfo's own comment for
+// why those must stay two distinct states.
+function overlayFileList(loaded: LoadResult): string {
+  return loaded.layers
+    .map((layer) => {
+      if (layer.root === undefined) return `${layer.name}: absent`;
+      if (layer.files.length === 0) return `${layer.name}: 0 files`;
+      return layer.files.map((f) => `${layer.name}/${f}`).join(', ');
+    })
+    .join(', ');
+}
+
 export async function runRulesLint(): Promise<CommandResult> {
   const loaded = await loadCurrentPolicy();
   if (loaded.warnings.length === 0) {
-    const suffix = loaded.overlayApplied
-      ? `overlay: ${loaded.overlayFiles.join(', ')}`
-      : 'no overlay present — baseline only';
+    const suffix = loaded.overlayApplied ? `overlay: ${overlayFileList(loaded)}` : 'no overlay present — baseline only';
     return { text: `lint: OK (${suffix})`, ok: true };
   }
+  // Names EVERY layer's root (not just the profile's) — a broken common-
+  // layer file used to point the user at the profile paths only.
+  const roots = loaded.layers.map((l) => `${l.name}: ${l.root ?? 'absent'}`).join(', ');
   return {
-    text: [`lint: FAILED (${overlayPath()}, ${overlayDirPath()})`, ...loaded.warnings.map((w) => `  - ${w}`)].join('\n'),
+    text: [`lint: FAILED (${roots})`, ...loaded.warnings.map((w) => `  - ${w}`)].join('\n'),
     ok: false,
   };
+}
+
+// ADR-0001 § Provenance: an entry that won cross-layer precedence over an
+// earlier layer's carries `shadows <earlier-layer-file>` — absent (and
+// this suffix empty) for every other line, including every line loaded
+// through loadPolicyFromOverlayFiles's one-layer case (nothing to shadow
+// with only one layer in play).
+function shadowsSuffix(shadows: string | undefined): string {
+  return shadows !== undefined ? ` shadows ${shadows}` : '';
 }
 
 function ruleLine(entry: EffectiveRule): string {
@@ -84,11 +111,13 @@ function ruleLine(entry: EffectiveRule): string {
   // baseline rule has no file on disk to name, so `sourceFile` stays
   // absent and this suffix stays empty, leaving baseline lines unchanged.
   const fileSuffix = entry.sourceFile !== undefined ? ` [${entry.sourceFile}]` : '';
-  return `rule ${entry.family} ${entry.rule.id} ${suffix}${fileSuffix}`;
+  return `rule ${entry.family} ${entry.rule.id} ${suffix}${fileSuffix}${shadowsSuffix(entry.shadows)}`;
 }
 
 function overrideLine(loaded: LoadResult): string[] {
-  return loaded.activeOverrides.map((o) => `override ${o.action} ${o.rule} — ${o.reason} [${o.sourceFile}]`);
+  return loaded.activeOverrides.map(
+    (o) => `override ${o.action} ${o.rule} — ${o.reason} [${o.sourceFile}]${shadowsSuffix(o.shadows)}`,
+  );
 }
 
 // `[[relax]]` entries and a governed-sub git-conditional substitution both
@@ -97,7 +126,9 @@ function overrideLine(loaded: LoadResult): string[] {
 // disable/replace/relax an EXISTING rule) so a relaxed allowlist is exactly
 // as impossible to overlook as an active override.
 function relaxationLine(loaded: LoadResult): string[] {
-  return loaded.activeRelaxations.map((r) => `overlay-relax ${r.list} ${r.value} — ${r.reason} [${r.sourceFile}]`);
+  return loaded.activeRelaxations.map(
+    (r) => `overlay-relax ${r.list} ${r.value} — ${r.reason} [${r.sourceFile}]${shadowsSuffix(r.shadows)}`,
+  );
 }
 
 /**

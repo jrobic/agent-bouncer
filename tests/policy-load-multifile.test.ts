@@ -51,7 +51,7 @@ describe('loadPolicyFromOverlayFiles: multiple files merge additively', () => {
     const ids = result.policy.command.bash.map((r) => r.id);
     expect(ids).toContain('from-policy-toml');
     expect(ids).toContain('from-policy-d');
-    expect(result.overlayFiles).toEqual(['policy.toml', 'policy.d/10-extra.toml']);
+    expect(result.overlayFiles).toEqual(['profile:policy.toml', 'profile:policy.d/10-extra.toml']);
   });
 
   test('policy.d files alone (no policy.toml in the set) still merge onto the baseline', () => {
@@ -491,7 +491,7 @@ describe('loadPolicyFromOverlayFiles: provenance names the source file', () => {
     const result = loadPolicyFromOverlayFiles(files);
     const entry = result.effectiveRules.find((r) => r.rule.id === 'block-npm-publish');
     expect(entry?.provenance).toBe('overlay');
-    expect(entry?.sourceFile).toBe('policy.d/10-npm.toml');
+    expect(entry?.sourceFile).toBe('profile:policy.d/10-npm.toml');
   });
 
   test('a baseline rule\'s effectiveRules entry has no sourceFile', () => {
@@ -515,7 +515,7 @@ describe('loadPolicyFromOverlayFiles: provenance names the source file', () => {
     ];
     const result = loadPolicyFromOverlayFiles(files);
     expect(result.activeOverrides).toHaveLength(1);
-    expect(result.activeOverrides[0]?.sourceFile).toBe('policy.d/10-relax.toml');
+    expect(result.activeOverrides[0]?.sourceFile).toBe('profile:policy.d/10-relax.toml');
     const entry = result.effectiveRules.find((r) => r.rule.id === 'curl-file-upload');
     expect(entry).toBeUndefined(); // disabled — expect no override entry, no rule entry
   });
@@ -534,6 +534,6 @@ describe('loadPolicyFromOverlayFiles: provenance names the source file', () => {
     ];
     const result = loadPolicyFromOverlayFiles(files);
     expect(result.activeRelaxations).toHaveLength(1);
-    expect(result.activeRelaxations[0]?.sourceFile).toBe('policy.d/10-relax.toml');
+    expect(result.activeRelaxations[0]?.sourceFile).toBe('profile:policy.d/10-relax.toml');
   });
 });

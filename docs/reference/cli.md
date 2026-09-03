@@ -113,12 +113,14 @@ reports what would happen, it never fails because the answer was
 
 ## `rules lint`
 
-Validates the account's current overlay file SET (`policy.toml` plus
-every `policy.d/*.toml` file, if any) against the RE2-like regex dialect
-and the `[[override]]`/`[[relax]]` resolution, shape, and cross-file
-conflict rules — see `docs/reference/policy.md`. On success, names every
-file that was actually merged in; on failure, the warning line names the
-one file that broke the whole set.
+Validates the account's current, layered overlay (ADR-0001: the common
+layer, `~/.agents/bouncer/`, then the profile layer, `<configDir>/bouncer/`
+— each `policy.toml` plus every `policy.d/*.toml` file, if any) against
+the RE2-like regex dialect and the `[[override]]`/`[[relax]]` resolution,
+shape, precedence, and cross-file conflict rules — see
+`docs/reference/policy.md`. On success, names every file that was
+actually merged in, per layer; on failure, the warning line names the
+one file that broke the whole load (either layer).
 
 ```sh
 bouncer rules lint
@@ -133,26 +135,38 @@ $ bouncer rules lint
 lint: OK (no overlay present — baseline only)
 
 $ bouncer rules lint
-lint: OK (overlay: policy.toml)
+lint: OK (overlay: common: absent, profile/policy.toml)
 
 $ bouncer rules lint
-lint: OK (overlay: policy.toml, policy.d/10-yarn.toml)
+lint: OK (overlay: common/policy.d/100-personal.toml, profile/policy.toml, profile/policy.d/10-yarn.toml)
 
 $ bouncer rules lint
-lint: FAILED (/path/to/policy.toml, /path/to/policy.d)
-  - overlay policy rejected — falling back to the embedded baseline: policy.d/20-broken.toml: Failed to parse toml
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - overlay policy rejected — falling back to the embedded baseline: profile:policy.d/20-broken.toml: Failed to parse toml
 ```
 
-**Exit code:** 0 when the overlay set (or its absence) is clean; 1 when
-it was rejected. Unlike `run`, this command is meant to be scripted
-against (a pre-commit hook, CI) — a rejected overlay must be visible in
-the exit code, not just in text.
+The `FAILED` line names BOTH layers' roots (`common: <root>` is `absent`
+when that directory does not exist at all) — a broken file in the common
+layer used to only ever point the user at the profile's paths; now
+either layer's root is visible regardless of which one broke.
+
+An absent common layer (no `~/.agents/bouncer/` at all — a fresh install,
+or a workstation not opted into the shared common convention) is never a
+failure: `common: absent` stands in for its file list. Only shown once
+there is at least one overlay file somewhere — a fully unconfigured
+account (both layers empty) still reads the plain `no overlay present —
+baseline only` line.
+
+**Exit code:** 0 when the load (or its total absence) is clean; 1 when it
+was rejected. Unlike `run`, this command is meant to be scripted against
+(a pre-commit hook, CI) — a rejected overlay must be visible in the exit
+code, not just in text.
 
 ## `rules list`
 
 Prints one line per effective rule (family, id, provenance, source
-file), active overrides and relaxations listed first and counted in a
-summary line.
+layer and file), active overrides and relaxations listed first and
+counted in a summary line.
 
 ```sh
 bouncer rules list
@@ -170,14 +184,22 @@ rule command.bash mkfs baseline
 ```
 
 With an active override: an extra
-`override <action> <rule> — <reason> [<file>]` line, and the rule's own
-line reads `rule command.bash <id> override(<action>) — <reason> [<file>]`
+`override <action> <rule> — <reason> [<layer>:<file>]` line, and the
+rule's own line reads
+`rule command.bash <id> override(<action>) — <reason> [<layer>:<file>]`
 instead of `... baseline`. With an active relaxation: an extra
-`overlay-relax <list> <value> — <reason> [<file>]` line. A rejected
-overlay adds `warning: <message>` lines and the summary's count reflects
-the baseline it fell back to. `[<file>]` is `policy.toml` or
-`policy.d/<name>.toml` — whichever file contributed that line; a
-`baseline`-provenance rule has no file to name and carries no suffix.
+`overlay-relax <list> <value> — <reason> [<layer>:<file>]` line. A
+rejected overlay adds `warning: <message>` lines and the summary's count
+reflects the baseline it fell back to. `[<layer>:<file>]` is
+`common:policy.toml`, `profile:policy.d/<name>.toml`, etc. — whichever
+layer and file contributed that line; a `baseline`-provenance rule has no
+file to name and carries no suffix. An entry that won cross-layer
+precedence over an earlier layer's (ADR-0001 § Precedence) carries a
+trailing `shadows <layer>:<file>` naming the entry it replaced:
+
+```
+rule command.bash curl-file-upload overlay [profile:policy.toml] shadows common:policy.d/100-personal.toml
+```
 
 Provenance values: `baseline`, `overlay` (an overlay addition),
 `override(disable|replace|relax)`.
@@ -211,10 +233,16 @@ Always printed in full, healthy or not.
 [pass] wiring:PreToolUse — PreToolUse is correctly wired
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
-[pass] policy — baseline only (no overlay configured) (50 effective rules)
+[pass] policy — overlay active (51 effective rules; common: 4 files, profile: 0 files)
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
 ```
+
+The `policy` line's trailing `; common: N files, profile: M files`
+(ADR-0001) names each layer's file count — `common: absent` in place of
+a count when the common layer contributed zero files (a fresh install
+with no `~/.agents/bouncer/`, or a workstation not opted into it). Never
+a failure either way.
 
 **Exit code:** 0 when every check passes; 1 when any fails. An active
 override/relaxation alone does not fail the exit code — it's sovereign,

@@ -200,7 +200,7 @@ function groupIntoTsEvents(entries: readonly TsLogEntry[]): TsEvent[] {
     // JSON-encoded, not space-joined: `target` is an arbitrary shell
     // command or path and can itself contain spaces — a plain join risks
     // exactly the lossy-key collision ticket 12's review caught in
-    // src/policy/load.ts's crossFileConflicts (`${list} ${value}`).
+    // src/policy/load.ts's resolvePrecedence (`${list} ${value}`).
     const key = JSON.stringify([e.toolName, e.target]);
     const group = byTarget.get(key) ?? [];
     group.push(e);
