@@ -56,7 +56,7 @@ Every entry in the five regex tables below shares this shape:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | string | yes | Unique within its table (not enforced by lint — a shared id makes an `[[override]]` targeting either entry apply to both). |
+| `id` | string | yes | Unique across ALL FIVE tables combined (ids resolve globally, not per-table). Lint-enforced against two things: an id already owned by an embedded BASELINE rule, in either overlay layer, is rejected — use `[[override]]` (§ below) to touch a baseline rule instead of shadowing it; an id shared between two DIFFERENT FILES of the SAME layer is rejected too (§ Cross-file conflicts). The same id repeated twice WITHIN one file is not a lint error — it stays the existing `[[override]]` batch semantics, an override naming that id applies to every row carrying it. |
 | `regex` | string | yes | Must compile and stay inside the RE2-like dialect (§ below). |
 | `reason` | string | yes | Shown in `bouncer check`/`rules list` output and in the degraded Claude Code verdict text. |
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
@@ -377,9 +377,12 @@ lint error described next — layering changes nothing about that.
 ## Cross-file conflicts: explicit lint error, never last-file-wins
 
 Two DIFFERENT overlay files, IN THE SAME LAYER, targeting the SAME thing
-is ambiguous enough to reject outright, rather than silently letting
-file order decide (the SAME target across DIFFERENT layers is precedence,
-not a conflict — see § Precedence above):
+is ambiguous enough to reject outright, rather than silently letting file
+order decide (the SAME target across DIFFERENT layers is precedence, not
+a conflict — see § Precedence above); a regex-table row whose `id` already
+names an embedded BASELINE rule is rejected on the same footing, but
+regardless of how many files are involved — even a single file, alone,
+carrying the row is enough:
 
 - Two `[[override]]` entries for the same `rule`, in two different files
   of the same layer.
@@ -391,12 +394,25 @@ not a conflict — see § Precedence above):
   in two different files of the same layer — ids resolve GLOBALLY, not
   per-family, so this is checked across all five tables combined, not
   per-table.
+- A regex-table row whose `id` already names an embedded BASELINE rule
+  (ADR-0001 § Precedence) — in EITHER layer, and regardless of whether any
+  other file is involved at all: without this check, the row would
+  silently get appended after the baseline row it collides with
+  (first-match-wins never lets it fire), while an `[[override]]` naming
+  that id would apply to both rows at once. Use `[[override]] action =
+  "replace"` on the existing baseline rule instead of adding a same-id
+  row.
 
 ```
 $ bouncer rules lint
 lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
   - profile layer rejected — conflicting [[override]] for rule "curl-file-upload" in profile:policy.d/20-relax.toml and profile:policy.d/30-conflict.toml
   layers: common: active (4 files), profile: rejected (profile)
+
+$ bouncer rules lint
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - profile layer rejected — policy.toml: regex rule id "curl-file-upload" reuses a baseline rule id — use [[override]] action = "replace"
+  layers: common: active (1 files), profile: rejected (policy.toml)
 ```
 
 A same-layer conflict names two files, not one — the layer as a whole is
@@ -404,17 +420,21 @@ what's at fault, so `layers:`'s per-layer file pointer falls back to
 naming the layer itself; the full conflict message (both filenames) still
 appears in the warning line above.
 
-Multiple entries for the same target WITHIN one file are unaffected —
-that's existing, single-file behavior (sequential override chaining,
-e.g. `replace` then `relax` on the same rule; first-entry-wins table
-lookup), unchanged by this rule. This includes two regex-table rows
-sharing the same `id` inside ONE file: not a lint error (id uniqueness is
-only checked cross-file, per the table above, and per the rule row's own
-`id` field note), and — because `[[override]]` matches by id alone,
-across every entry that carries it — an override targeting that id
+Multiple entries for the same target WITHIN one file are unaffected by
+the cross-file check specifically — that's existing, single-file behavior
+(sequential override chaining, e.g. `replace` then `relax` on the same
+rule; first-entry-wins table lookup), unchanged by this rule. This
+includes two regex-table rows sharing the same `id` inside ONE file: not
+a CROSS-FILE lint error (id uniqueness across files/layers is what the
+bullets above check), and — because `[[override]]` matches by id alone,
+across every entry that carries it — an override targeting that shared id
 applies to BOTH rows, in the same file or not. Stated as the batch
 semantics it is, not a bug: `[[override]]` never resolves to "exactly
-one" row, only to "every row currently carrying this id".
+one" row, only to "every row currently carrying this id". The
+baseline-id check above is independent of this and applies per-ROW: a row
+inside a multi-row file is rejected on its own merits the moment its `id`
+equals a baseline one, whether or not any sibling row in that same file
+shares it.
 
 Fail-closed rejection is per LAYER (ADR-0001 § Rejection): a broken file
 in one layer rejects that layer alone, exactly like a broken file within

@@ -338,6 +338,81 @@ describe('loadPolicyFromLayers: per-layer rejection matrix (ticket 21, ADR-0001 
   });
 });
 
+describe('loadPolicyFromLayers: an overlay id reusing a BASELINE id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+  test('a baseline id in the common layer rejects common, the profile layer keeps running', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "another-shape"\nreason = "test"\n')]),
+      layer('profile', [file('policy.toml', '[[rules.command.bash]]\nid = "fine"\nregex = "fine"\nreason = "test"\n')]),
+    ]);
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.command.bash.map((r) => r.id)).toContain('fine');
+    expect(result.effectiveRules.filter((r) => r.rule.id === 'curl-file-upload')).toHaveLength(1); // the baseline row alone
+    expect(result.warnings).toHaveLength(1);
+    const warning = result.warnings[0]!;
+    expect(warning).toContain('common layer rejected');
+    expect(warning).toContain('reuses a baseline rule id');
+    expect(warning).toContain('use [[override]] action = "replace"');
+    expect(result.layers.find((l) => l.name === 'common')?.rejected).toBeDefined();
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected).toBeUndefined();
+  });
+
+  test('a baseline id in the profile layer rejects profile, the common layer (and its relaxations) keep running', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "test"\n')]),
+      layer('profile', [
+        file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "another-shape"\nreason = "test"\n'),
+      ]),
+    ]);
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.command.git.safe_subcommands).toContain('push');
+    expect(result.effectiveRules.filter((r) => r.rule.id === 'curl-file-upload')).toHaveLength(1); // the baseline row alone
+    expect(result.warnings).toHaveLength(1);
+    const warning = result.warnings[0]!;
+    expect(warning).toContain('profile layer rejected');
+    expect(warning).toContain('reuses a baseline rule id');
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected).toBeDefined();
+    expect(result.layers.find((l) => l.name === 'common')?.rejected).toBeUndefined();
+  });
+
+  test('both layers reusing the same baseline id: both rejected, the baseline runs alone', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "common-shape"\nreason = "test"\n')]),
+      layer('profile', [
+        file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "profile-shape"\nreason = "test"\n'),
+      ]),
+    ]);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings).toHaveLength(2);
+    expect(result.effectiveRules.filter((r) => r.rule.id === 'curl-file-upload')).toHaveLength(1); // the baseline row alone
+    expect(result.layers.find((l) => l.name === 'common')?.rejected).toBeDefined();
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected).toBeDefined();
+  });
+
+  test('a baseline id from a DIFFERENT family is caught too — ids resolve globally, not per-table', () => {
+    // "curl-file-upload" is a command.bash baseline id — reused here in
+    // the prompt family, a completely different table. Ids resolve
+    // globally across all five regex families (same reason the pre-
+    // layering idConflicts check spanned all five, not per-table).
+    const result = loadPolicyFromLayers([
+      layer('common', []),
+      layer('profile', [file('policy.toml', '[[rules.prompt]]\nid = "curl-file-upload"\nregex = "unrelated-shape"\nreason = "test"\n')]),
+    ]);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings[0]).toContain('reuses a baseline rule id');
+    expect(result.effectiveRules.filter((r) => r.rule.id === 'curl-file-upload')).toHaveLength(1); // the baseline row alone
+  });
+
+  test('a baseline id never appears twice in effectiveRules — the baseline row alone survives, tagged "baseline"', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "common-shape"\nreason = "test"\n')]),
+      layer('profile', [file('policy.toml', '[[rules.command.bash]]\nid = "fine"\nregex = "fine"\nreason = "test"\n')]),
+    ]);
+    const ids = result.effectiveRules.filter((r) => r.rule.id === 'curl-file-upload');
+    expect(ids).toHaveLength(1);
+    expect(ids[0]?.provenance).toBe('baseline');
+  });
+});
+
 describe('loadPolicyFromLayers: ticket-19 regression — same target repeated within one file, unaffected', () => {
   test('the same regex id twice within one profile file still chains (existing single-file semantics)', () => {
     const result = loadPolicyFromLayers([

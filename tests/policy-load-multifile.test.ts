@@ -453,11 +453,13 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
     expect(survivors).toHaveLength(0);
   });
 
-  test('an overlay id colliding with a BASELINE id is not this check\'s concern (different, pre-existing behavior)', () => {
-    // Baseline vs overlay id collisions are not what this check targets —
-    // only overlay-vs-overlay, cross-FILE collisions. An overlay id that
-    // happens to match a baseline id resolves an override to both by
-    // design (unaffected here).
+  test('an overlay id colliding with a BASELINE id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+    // An overlay row at a baseline id never fires on its own terms
+    // (first-match-wins always picks the baseline row first, so the
+    // overlay row is dead weight), while an `[[override]]` naming that id
+    // would apply to both rows at once — an unconditional lint error, not
+    // a "widening" the way a fresh, distinct id would be. See
+    // docs/reference/policy.md § Cross-file conflicts.
     const files = [
       file(
         'policy.d/10-a.toml',
@@ -470,8 +472,9 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
       ),
     ];
     const result = loadPolicyFromOverlayFiles(files);
-    expect(result.warnings).toEqual([]);
-    expect(result.overlayApplied).toBe(true);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('reuses a baseline rule id');
+    expect(result.warnings.join(' ')).toContain('use [[override]] action = "replace"');
   });
 });
 

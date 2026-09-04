@@ -62,6 +62,11 @@ import type {
   SafeGrammarRule,
 } from './schema.ts';
 
+// Every regex-table id the embedded baseline already owns, across all five
+// families combined — computed once at module load (the baseline never
+// changes at runtime), see attemptCompose's use for the rationale.
+const BASELINE_RULE_IDS = resolvableRuleIds(BASELINE.rules);
+
 export type Provenance = 'baseline' | 'overlay' | 'override';
 
 export interface EffectiveRule {
@@ -1087,6 +1092,31 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   );
 
   const regexCandidates = regexIdCandidates(rawCommandBash, rawSecretPath, rawSecretBash, rawWriteSecret, rawPrompt);
+
+  // ADR-0001 § Precedence: an overlay row reusing a BASELINE rule id is
+  // rejected outright, before cross-layer precedence ever runs — checked
+  // first so a profile row at a baseline id can never "shadow" a common
+  // row at the same id and let the common layer survive carrying the
+  // fault (precedence would silently keep the common entry's provenance
+  // lying about what's actually in effect). Without this check the row
+  // would get silently appended after the baseline row it collides with
+  // (first-match-wins never lets it fire) while an `[[override]]` naming
+  // that id would apply to BOTH rows at once. One issue per faulty row,
+  // attributed to its own layer and file (`file` carries the attribution
+  // — never repeated into `detail`, same convention every other throw
+  // site in this function follows), so two independently-faulty layers
+  // each get rejected by the retry loop below (see loadPolicyFromLayers)
+  // exactly like any other per-layer fault.
+  const baselineIdIssues: RejectionIssue[] = regexCandidates
+    .filter((c) => BASELINE_RULE_IDS.has(c.raw.id))
+    .map((c) => ({
+      layer: c.layer,
+      file: plainFile(c.layer, c.filename),
+      detail: `regex rule id ${JSON.stringify(c.raw.id)} reuses a baseline rule id `
+        + `— use [[override]] action = "replace"`,
+    }));
+  if (baselineIdIssues.length > 0) throw new PolicyRejected(baselineIdIssues);
+
   const regexKept = resolvePrecedence(
     regexCandidates,
     (c) => c.raw.id,

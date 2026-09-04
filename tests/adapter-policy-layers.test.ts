@@ -320,6 +320,48 @@ describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejec
   });
 });
 
+describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+  test('a profile row reusing curl-file-upload: lint FAILED, doctor fails, the common layer stays active', async () => {
+    const box = await sandbox();
+    await writeCommon(
+      box,
+      'policy.d/100-personal.toml',
+      '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "shared across every profile"\n',
+    );
+    await writeProfile(
+      box,
+      'policy.toml',
+      '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "another-shape"\nreason = "test"\n',
+    );
+
+    const loaded = await loadCurrentPolicy();
+    // The common layer never contained the fault — it stays fully live,
+    // per-layer rejection (ADR-0001 § Rejection), exactly as ticket 21.
+    expect(loaded.overlayApplied).toBe(true);
+    expect(loaded.policy.command.git.safe_subcommands).toContain('push');
+    expect(loaded.warnings).toHaveLength(1);
+    const warning = loaded.warnings[0]!;
+    expect(warning).toContain('profile layer rejected');
+    expect(warning).toContain('reuses a baseline rule id');
+    expect(warning).toContain('use [[override]] action = "replace"');
+    expect(loaded.layers.find((l) => l.name === 'common')?.rejected).toBeUndefined();
+    expect(loaded.layers.find((l) => l.name === 'profile')?.rejected).toBeDefined();
+
+    const lint = await runRulesLint();
+    expect(lint.ok).toBe(false);
+    expect(lint.text).toContain('lint: FAILED');
+    expect(lint.text).toContain('reuses a baseline rule id');
+    expect(lint.text).toContain('use [[override]] action = "replace"');
+    expect(lint.text).toContain('profile: rejected (policy.toml)');
+    expect(lint.text).toContain('common: active');
+
+    const { text: doctorText, ok } = await runDoctor();
+    expect(ok).toBe(false);
+    expect(doctorText).toContain('[fail] policy');
+    expect(doctorText).toContain('reuses a baseline rule id');
+  });
+});
+
 describe('loadCurrentPolicy(): migration guard — the interim profile→common symlink, any of its three forms (ADR-0001 § Rejection)', () => {
   // Lead decision, review round 1: the guard checks BOTH the profile
   // ROOT's realpath and its policy.d's realpath against the common

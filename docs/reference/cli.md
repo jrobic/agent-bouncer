@@ -151,6 +151,11 @@ lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bounce
   - common layer rejected — policy.toml: Failed to parse toml
   - profile layer rejected — policy.toml: Failed to parse toml
   layers: common: rejected (policy.toml), profile: rejected (policy.toml)
+
+$ bouncer rules lint
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - profile layer rejected — policy.toml: regex rule id "curl-file-upload" reuses a baseline rule id — use [[override]] action = "replace"
+  layers: common: active (1 files), profile: rejected (policy.toml)
 ```
 
 The `FAILED` line names BOTH layers' roots (`common: <root>` is `absent`
@@ -160,7 +165,9 @@ visible regardless of which one broke. Rejection is per layer (ADR-0001
 a fully healthy common layer — common's 4 files stay effective, only the
 `layers:` line's `profile: rejected` changes anything. The second
 example is both layers independently broken, one warning each, and the
-embedded baseline runs alone.
+embedded baseline runs alone. The third is a regex-table row reusing a
+baseline rule id (`docs/reference/policy.md` § Cross-file conflicts) —
+rejected the same way as any other per-layer fault, common stays active.
 
 An absent common layer (no `~/.agents/bouncer/` at all — a fresh install,
 or a workstation not opted into the shared common convention) is never a
