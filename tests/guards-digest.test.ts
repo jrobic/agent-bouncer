@@ -156,6 +156,10 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '14 download-exec (?:curl|wget)\\b[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|ksh|fish|sudo)\\b ',
   '15 eval-download \\beval\\s+["\']?(?:\\$\\(|`)\\s*(?:curl|wget)\\b ',
   '16 process-substitution-download \\b(?:bash|sh|zsh|ksh)\\s+<\\s*\\(\\s*(?:curl|wget)\\b ',
+  '17 fd-exec-destructive \\bfd\\b[^|;&\\n]*\\s(?:-x|-X|--exec|--exec-batch)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b ',
+  '18 find-exec-destructive \\bfind\\b[^|;&\\n]*\\s(?:-delete\\b|(?:-exec|-execdir|-ok)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b) ',
+  '19 xargs-destructive \\b(?:xargs|parallel)\\b[^|;&\\n]*\\s(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b ',
+  '20 rg-pre-exec \\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+ ',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Five entries, each with its own

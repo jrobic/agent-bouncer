@@ -68,7 +68,7 @@ Every entry in the five regex tables below shares this shape:
 
 | Table | Family | Guards |
 |---|---|---|
-| `rules.command.bash` | command | destructive/exfiltration/escalation shell patterns |
+| `rules.command.bash` | command | destructive/exfiltration/escalation shell patterns; proxy execution through file finders, pipeline executors, and preprocessors |
 | `rules.secret.path` | secret | file paths that read as secret-bearing |
 | `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
@@ -83,6 +83,8 @@ Every entry in the five regex tables below shares this shape:
   guard's scope.
 - A non-default `SOPS_AGE_KEY_FILE` is a human choice and needs a personal
   overlay row.
+- A command hidden inside a finder or pipeline executor's `sh -c` argument is
+  not inspected; the guard does not parse shell command strings.
 - A pattern-only hidden-file search such as `rg --hidden -i env` can print
   matching dotenv lines. The path scan guards command arguments, not command
   output; `grep -r env .` has the same residual behavior.

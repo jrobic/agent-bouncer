@@ -1479,6 +1479,365 @@
       ]
     },
     {
+      "id": "fd-exec-destructive-short",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -e log -x rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-destructive-batch-short",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -e log -X rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-destructive-long",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd . --exec rm {}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-destructive-long-batch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -e orig --exec-batch mv"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "find-exec-destructive-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -name '*.orig' -delete"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "find-exec-destructive-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -name x -exec rm {} \\;"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "find-exec-destructive-execdir",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -execdir chmod 600 {} +"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "find-exec-destructive-ok",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -ok rm {} \\;"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-rm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -e log | xargs rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-sed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg -l foo | xargs sed -i 's/a/b/'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-git",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ls | xargs git rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-parallel",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "parallel rm ::: a b"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-nice-wrapper",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice xargs rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "xargs-destructive-git-push",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-destructive-git-push",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -x git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "rg-pre-exec-separated",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg --pre cat foo src"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "rg-pre-exec"
+        }
+      ]
+    },
+    {
+      "id": "rg-pre-exec-attached",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg --pre=cat foo"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "rg-pre-exec"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-destructive-rtk-wrapper",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk fd -e log -x rm"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "fd-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "find-exec-destructive-command-segment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cd x && find . -delete"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ]
+    },
+    {
+      "id": "fd-exec-read-only-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -e log"
+      },
+      "expected": []
+    },
+    {
+      "id": "fd-exec-cat-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -x cat"
+      },
+      "expected": []
+    },
+    {
+      "id": "find-exec-print-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -name x -print"
+      },
+      "expected": []
+    },
+    {
+      "id": "find-exec-ls-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -exec ls {} +"
+      },
+      "expected": []
+    },
+    {
+      "id": "fd-exec-git-add-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -x git add"
+      },
+      "expected": []
+    },
+    {
+      "id": "xargs-echo-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs echo"
+      },
+      "expected": []
+    },
+    {
+      "id": "rg-search-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg foo src"
+      },
+      "expected": []
+    },
+    {
+      "id": "parallel-echo-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "parallel echo ::: a b"
+      },
+      "expected": []
+    },
+    {
+      "id": "fd-exec-secret-path-blocks-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -x rm ~/.ssh"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "bash-ssh-dir"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-find-exec-shell-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find . -exec sh -c \"rm -rf /tmp/x\" \\;"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the proxy rules do not parse a shell command string"
+    },
+    {
+      "id": "known-limit-fd-exec-shell-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd -x sh -c \"rm x\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the proxy rules do not parse a shell command string"
+    },
+    {
+      "id": "known-limit-proxy-execution-prose",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git commit -m \"ran find . -delete\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "find-exec-destructive"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "accepted prose false positive of the raw-string command table"
+    },
+    {
       "id": "known-limit-rm-rf-double-quoted-target",
       "toolName": "Bash",
       "toolInput": {

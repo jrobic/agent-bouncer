@@ -126,6 +126,35 @@ id = "process-substitution-download"
 regex = "\\b(?:bash|sh|zsh|ksh)\\s+<\\s*\\(\\s*(?:curl|wget)\\b"
 reason = "Process substitution feeding curl/wget output to a shell (download-and-execute)"
 
+# The verb list is repeated on purpose: policy rows are literal regexes, no templating at load.
+# Ticket 29: confirm rather than block — `fd -e orig -x rm` can be legitimate.
+[[rules.command.bash]]
+id = "fd-exec-destructive"
+regex = "\\bfd\\b[^|;&\\n]*\\s(?:-x|-X|--exec|--exec-batch)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b"
+reason = "fd exec form runs a destructive command once per match"
+verdict = "confirm"
+
+# Ticket 29: confirm rather than block — `-ok` is indistinguishable from `-exec` for an agent.
+[[rules.command.bash]]
+id = "find-exec-destructive"
+regex = "\\bfind\\b[^|;&\\n]*\\s(?:-delete\\b|(?:-exec|-execdir|-ok)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b)"
+reason = "find exec form runs a destructive command once per match"
+verdict = "confirm"
+
+# Ticket 29: confirm rather than block — bulk proxy execution can be legitimate.
+[[rules.command.bash]]
+id = "xargs-destructive"
+regex = "\\b(?:xargs|parallel)\\b[^|;&\\n]*\\s(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b"
+reason = "xargs or parallel runs a destructive command for each input"
+verdict = "confirm"
+
+# Ticket 29: confirm rather than block — a deliberate per-file preprocessor can be legitimate.
+[[rules.command.bash]]
+id = "rg-pre-exec"
+regex = "\\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+"
+reason = "rg preprocessor runs an arbitrary command for each searched file"
+verdict = "confirm"
+
 [rules.command.rm_rf]
 # The `rm -rf` blocklist: each entry is a regex the rm target must NOT
 # match. A target that matches none of them (node_modules, dist, .next,
