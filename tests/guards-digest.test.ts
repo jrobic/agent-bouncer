@@ -158,19 +158,21 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '16 process-substitution-download \\b(?:bash|sh|zsh|ksh)\\s+<\\s*\\(\\s*(?:curl|wget)\\b ',
 ];
 
-// policy/secret.toml `rules.secret.bash`. 3 entries, each with its own
+// policy/secret.toml `rules.secret.bash`. Five entries, each with its own
 // id (round-3 review: `bash-git-leak` used to be shared by index 0 and
 // index 1 — a `disable` override on that shared id would have silently
 // taken out both, including the `special = "git_remote_url"` marked
-// entry, so they were split into `bash-git-leak-credential` (index 0:
+// entry, so they were split into `bash-git-leak-credential` (index 2:
 // credential/signingkey, unconditional) and `bash-git-leak-remote-url`
-// (index 1: remote.*.url, read-excepted, marked `special`)). The pair
+// (index 3: remote.*.url, read-excepted, marked `special`)). The pair
 // still shares a POSITION-adjacency lock: removing one must still redden
 // this digest even though the other survives with its own distinct id.
 const EXPECTED_SECRET_DIGEST: readonly string[] = [
-  '0 bash-git-leak-credential \\bgit\\s+config\\b[^\\n]*\\b(credential|user\\.signingkey)\\b ',
-  '1 bash-git-leak-remote-url \\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b ',
-  '2 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
+  '0 sops-decrypt \\bsops(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt|decrypt|exec-env|exec-file|edit)(?:\\s|$)|(?:^|[;&|(]\\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=\\S*|rtk|command|exec|env|nice|time|builtin|proxy)\\s+)*sops\\s+[^\\s;&|\\-][^\\s;&|]*\\s*(?:$|[;&|)]) ',
+  '1 age-decrypt \\b(?:age|rage)(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt)(?:\\s|$) ',
+  '2 bash-git-leak-credential \\bgit\\s+config\\b[^\\n]*\\b(credential|user\\.signingkey)\\b ',
+  '3 bash-git-leak-remote-url \\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b ',
+  '4 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
 ];
 
 // policy/write-secret.toml `rules.write_secret` — an identity control: 8
@@ -208,7 +210,7 @@ describe('guards-digest: tamper lock — the four tabular guards', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 
-  test('secret.bash matches the frozen ordered digest (3 entries, distinct ids)', () => {
+  test('secret.bash matches the frozen ordered digest (5 entries, distinct ids)', () => {
     expect(ruleDigest(BASELINE.rules.secret.bash)).toEqual([...EXPECTED_SECRET_DIGEST]);
   });
 
@@ -263,23 +265,24 @@ function pathRuleDigest(
 const EXPECTED_PATH_DIGEST: readonly string[] = [
   '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
   '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
-  '2 ssh-key (^|/)id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$ flags= except= verdict=',
-  '3 aws-creds (^|/)\\.aws/(credentials|config)$ flags= except= verdict=',
-  '4 netrc-pgpass (^|/)\\.(netrc|pgpass)$ flags= except= verdict=',
-  '5 cloud-sa (service-account|firebase-adminsdk|gcp-key)[^/]*\\.json$ flags=i except= verdict=',
-  '6 tfstate \\.tfstate(\\.backup)?$|\\.terraform\\.tfstate\\.lock\\.info$ flags= except= verdict=',
-  '7 npmrc (^|/)\\.npmrc$ flags= except=/node_modules/ verdict=',
-  '8 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
-  '9 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
-  '10 bouncer-audit-log (^|/)logs/hooks/bouncer\\.log(\\.1)?$ flags= except= verdict=confirm',
-  '11 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=confirm',
-  '12 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
-  '13 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
-  '14 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
+  '2 age-identity (^|/)sops/age/[^/]+$|(^|/)age/keys\\.txt$ flags= except= verdict=',
+  '3 ssh-key (^|/)id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$ flags= except= verdict=',
+  '4 aws-creds (^|/)\\.aws(/|$) flags= except= verdict=',
+  '5 netrc-pgpass (^|/)\\.(netrc|pgpass)$ flags= except= verdict=',
+  '6 cloud-sa (service-account|firebase-adminsdk|gcp-key)[^/]*\\.json$ flags=i except= verdict=',
+  '7 tfstate \\.tfstate(\\.backup)?$|\\.terraform\\.tfstate\\.lock\\.info$ flags= except= verdict=',
+  '8 npmrc (^|/)\\.npmrc$ flags= except=/node_modules/ verdict=',
+  '9 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
+  '10 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
+  '11 bouncer-audit-log (^|/)logs/hooks/bouncer\\.log(\\.1)?$ flags= except= verdict=confirm',
+  '12 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=confirm',
+  '13 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
+  '14 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
+  '15 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the fifteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (15 entries + except/verdict fields)', () => {
+describe('guards-digest: tamper lock — secret.path, the sixteen-entry path guard', () => {
+  test('secret.path matches the frozen ordered digest (16 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });

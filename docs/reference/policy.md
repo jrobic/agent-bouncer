@@ -70,9 +70,18 @@ Every entry in the five regex tables below shares this shape:
 |---|---|---|
 | `rules.command.bash` | command | destructive/exfiltration/escalation shell patterns |
 | `rules.secret.path` | secret | file paths that read as secret-bearing |
-| `rules.secret.bash` | secret | shell commands that leak a secret (git config, embedded URL credentials) |
+| `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
+
+### Known limits
+
+- A sops command hidden behind a package script or launched by direnv is not
+  seen; production-decryption scripts remain human-run.
+- Plaintext inherited from the agent's launch environment is outside this
+  guard's scope.
+- A non-default `SOPS_AGE_KEY_FILE` is a human choice and needs a personal
+  overlay row.
 
 Example row (from the baseline):
 

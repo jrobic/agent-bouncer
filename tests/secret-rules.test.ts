@@ -78,6 +78,61 @@ describe('secret-rules: PATH_RULES', () => {
     expect(checkPath('/home/user/.aws/credentials')?.ruleId).toBe('aws-creds');
   });
 
+  describe('ruleId age-identity: every default sops and age identity location', () => {
+    test('ruleId age-identity: the macOS default identity location is blocked', () => {
+      expect(checkPath('/Users/user/Library/Application Support/sops/age/keys.txt')).toMatchObject({
+        verdict: 'block',
+        ruleId: 'age-identity',
+      });
+    });
+
+    test.each([
+      '/home/user/.config/sops/age/keys.txt',
+      '/srv/age/keys.txt',
+    ])('%s is blocked', (path) => {
+      expect(checkPath(path)).toMatchObject({ verdict: 'block', ruleId: 'age-identity' });
+    });
+
+    test.each([
+      '/repo/.sops.yaml',
+      '/home/user/.config/sops/config.yaml',
+    ])('%s is allowed', (path) => {
+      expect(checkPath(path)).toBeNull();
+    });
+
+    test('Bash: a configured age identity reference is blocked by the path scan', () => {
+      expect(checkSecretBash('cat ~/.config/sops/age/keys.txt')).toMatchObject({
+        verdict: 'block',
+        ruleId: 'bash-age-identity',
+      });
+    });
+  });
+
+  describe('ruleId aws-creds: the whole AWS home directory', () => {
+    test.each([
+      '/home/user/.aws/config',
+      '/home/user/.aws/sso/cache/x.json',
+      '/home/user/.aws/cli/cache/x.json',
+      '/home/user/.aws/',
+    ])('%s is blocked', (path) => {
+      expect(checkPath(path)).toMatchObject({ verdict: 'block', ruleId: 'aws-creds' });
+    });
+
+    test.each([
+      '/home/user/.aws-sam/template.yaml',
+      '/opt/aws/bin/x',
+    ])('%s is allowed', (path) => {
+      expect(checkPath(path)).toBeNull();
+    });
+  });
+
+  test('Bash: an AWS SSO cache reference is blocked by the path scan', () => {
+    expect(checkSecretBash('cat ~/.aws/sso/cache/x.json')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'bash-aws-creds',
+    });
+  });
+
   test('ruleId netrc-pgpass: .netrc is blocked', () => {
     expect(checkPath('/home/user/.netrc')?.ruleId).toBe('netrc-pgpass');
   });
@@ -277,6 +332,74 @@ describe('secret-rules: PATH_RULES', () => {
 
   test('benign: an ordinary source file passes', () => {
     expect(checkPath('/proj/src/index.ts')).toBeNull();
+  });
+});
+
+describe('secret-rules: sops and age decryption', () => {
+  test('ruleId sops-decrypt: sops -d f is blocked', () => {
+    expect(checkSecretBash('sops -d f')).toMatchObject({ verdict: 'block', ruleId: 'sops-decrypt' });
+  });
+
+  test.each([
+    'sops --decrypt f',
+    'sops decrypt f',
+    'sops exec-env f \'pnpm start\'',
+    'sops exec-file f \'cmd\'',
+    'sops edit f',
+    'sops f.yaml',
+    'sops --input-type dotenv --output-type dotenv -d f',
+    'sops -d f > out',
+    'rtk sops -d f',
+    'cd x && sops -d f',
+    'sops my-app.enc.yaml',
+    'SOPS_AGE_KEY_FILE=k sops prod.enc.yaml',
+    'env SOPS_AGE_KEY_FILE=k sops prod.enc.yaml',
+    'rtk sops prod.enc.yaml',
+    'sops ./cfg/prod.enc.yaml',
+    'cd x && sops f.yaml',
+  ])('%s is blocked', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'sops-decrypt' });
+  });
+
+  test.each([
+    'sops -e f',
+    'sops encrypt f',
+    'sops -e -i f',
+    `sops set f '["k"]' '"v"'`,
+    'sops rotate -i f',
+    'sops updatekeys f',
+    'sops filestatus f',
+    'sops --version',
+    'sops --help',
+    'echo sops',
+    'which sops',
+    'brew install sops',
+    'brew install sops age',
+    'rg sops docs/',
+    'git commit -m "add sops config"',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId age-decrypt: age -d f.age is blocked', () => {
+    expect(checkSecretBash('age -d f.age')).toMatchObject({ verdict: 'block', ruleId: 'age-decrypt' });
+  });
+
+  test.each([
+    'age --decrypt -i k f.age',
+    'age -d -o out f.age',
+    'rage -d f.age',
+  ])('%s is blocked', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'age-decrypt' });
+  });
+
+  test.each([
+    'age -r recipient -o f.age f',
+    'age -e f',
+    'age-keygen -o k',
+    'age --version',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
   });
 });
 
