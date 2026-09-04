@@ -9,10 +9,11 @@
 //
 // Two git subcommands stay engine code under their own named functions
 // (checkGitCheckoutNeedsConfirm / checkGitRestoreNeedsConfirm) rather than
-// TOML: `checkout`'s pathspec detection and `restore`'s staged-only form
-// both need real structural parsing (arbitrary positional counts, ref vs.
-// pathspec shape) that none of the three declarative forms — ask_flags,
-// safe_first_arg, safe_grammar — can express as data.
+// TOML: `checkout`'s pathspec detection and `restore`'s index-only form
+// (`--staged` plus one or more pathspecs) both need real structural parsing
+// (arbitrary positional counts, ref vs. pathspec shape) that none of the
+// three declarative forms — ask_flags, safe_first_arg, safe_grammar — can
+// express as data.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
 // The Bash matcher operates on the literal command STRING. Anything that
@@ -409,13 +410,19 @@ function checkGitCheckoutNeedsConfirm(rest: readonly string[]): boolean {
 }
 
 function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
-  // Only the ratified index-only form is silent. A preceding option can
-  // consume `--staged`, and any additional option needs explicit review.
-  return !(
-    rest.length === 2
-    && rest[0] === '--staged'
-    && !rest[1]?.startsWith('-')
-  );
+  // The ratified index-only form is `--staged` followed by one or more
+  // pathspecs: it only ever touches the index (unstage), never the
+  // working tree, and is trivially reversible with `git add` — N explicit
+  // paths is no riskier than the single-path form. A preceding option can
+  // consume `--staged` (so it must be rest[0]), a lone `--` separator right
+  // after it is allowed (bash-faithful), and any other option among the
+  // pathspecs needs explicit review.
+  if (rest[0] !== '--staged') return true;
+  const pathspecs = rest[1] === '--' ? rest.slice(2) : rest.slice(1);
+  // Not positionalArgs(): that filter DROPS `-`-prefixed tokens before
+  // counting; here a `-`-prefixed token among the pathspecs is exactly
+  // what must trip confirm, so every token counts.
+  return pathspecs.length === 0 || pathspecs.some((t) => t.startsWith('-'));
 }
 
 // The interpreter for the three declarative git-conditional forms (see

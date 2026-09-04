@@ -1416,6 +1416,43 @@
       ]
     },
     {
+      "id": "git-restore-staged-multi-pathspec-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore --staged a.ts b.ts c.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-restore-staged-backslash-continuation-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore --staged \\\n  a.ts \\\n  b.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-restore-staged-double-dash-separator-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore --staged -- a.ts b.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-restore-staged-worktree-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore --staged a.ts --worktree"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "known-limit-rm-rf-double-quoted-target",
       "toolName": "Bash",
       "toolInput": {

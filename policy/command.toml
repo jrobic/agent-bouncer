@@ -10,9 +10,10 @@
 # safe_grammar).
 #
 # Two git subcommands are outside this file entirely: `checkout` (pathspec
-# detection) and `restore` (staged-only form) need real parsing beyond any
-# of the three declarative forms below, and stay in src/command-rules.ts
-# under their own named rule ids (see checkGitCheckout/checkGitRestore).
+# detection) and `restore` (index-only form — `--staged` plus one or more
+# pathspecs) need real parsing beyond any of the three declarative forms
+# below, and stay in src/command-rules.ts under their own named rule ids
+# (see checkGitCheckout/checkGitRestore).
 
 [[rules.command.bash]]
 id = "dd-device-write"

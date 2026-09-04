@@ -455,7 +455,7 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 // policy/command.toml data (ask_flags / safe_first_arg / safe_grammar),
 // digested directly, the same discipline as every other table in this file.
 // `checkout` and `restore` are the two that stay engine code (pathspec
-// detection, staged-only form — beyond what any of the three declarative
+// detection, index-only form — beyond what any of the three declarative
 // forms can express as data); their behaviour is already covered by the
 // matrix above, so this section's own job is narrower: prove the
 // declarative tables plus those two names together account for EXACTLY

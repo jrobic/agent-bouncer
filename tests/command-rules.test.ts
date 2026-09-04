@@ -313,6 +313,27 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
     test('git restore --staged f.ts', () => {
       expect(checkGit('git restore --staged f.ts')).toBeNull();
     });
+
+    // The ratified index-only form is `--staged` plus one or more pathspecs.
+    test('git restore --staged a b c', () => {
+      expect(checkGit('git restore --staged a b c')).toBeNull();
+    });
+
+    test('git -C <worktree> restore --staged a b', () => {
+      expect(checkGit('git -C /tmp/wt restore --staged a b')).toBeNull();
+    });
+
+    test('git restore --staged -- a b (separator then pathspecs)', () => {
+      expect(checkGit('git restore --staged -- a b')).toBeNull();
+    });
+
+    // A continuation `\`+newline verdicts like the one-line equivalent.
+    test('backslash-newline continuation verdicts like the one-line equivalent', () => {
+      const continued = 'git -C /tmp/wt restore --staged \\\n'
+        + '  apps/data/src/myordo/service/myordo-trains-referentiels.service.spec.ts \\\n'
+        + '  apps/data/src/myordo/service/myordo-trains-referentiels.controller.spec.ts';
+      expect(checkGit(continued)).toBeNull();
+    });
   });
 
   describe('mutating forms still ask', () => {
@@ -367,6 +388,23 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
 
     test('git restore f.ts', () => {
       expect(checkGit('git restore f.ts')?.ruleId).toBe('git-protected');
+    });
+
+    test('git restore a b', () => {
+      expect(checkGit('git restore a b')?.ruleId).toBe('git-protected');
+    });
+
+    test.each([
+      'git restore --staged',
+      'git restore --staged --',
+    ])('%s asks — no pathspec after --staged', (cmd) => {
+      expect(checkGit(cmd)?.ruleId).toBe('git-protected');
+    });
+
+    // `--` is only tolerated right after --staged (position 1); here it's
+    // a positional among the pathspecs, so fail-closed: still asks.
+    test('git restore --staged a -- b', () => {
+      expect(checkGit('git restore --staged a -- b')?.ruleId).toBe('git-protected');
     });
   });
 });
@@ -683,6 +721,18 @@ describe('command-rules: read-only mode markers are positional', () => {
 
   test('git restore --source --staged f.ts asks because --source consumes the marker', () => {
     expect(checkGit('git restore --source --staged f.ts')?.ruleId).toBe('git-protected');
+  });
+
+  test('git restore --source=HEAD --staged a b asks because --source consumes the marker', () => {
+    expect(checkGit('git restore --source=HEAD --staged a b')?.ruleId).toBe('git-protected');
+  });
+
+  // Any option among the pathspecs (not just before --staged) still asks.
+  test.each([
+    'git restore --staged a -W',
+    'git restore --staged a --worktree',
+  ])('%s asks because the last token is not a pathspec', (cmd) => {
+    expect(checkGit(cmd)?.ruleId).toBe('git-protected');
   });
 
   test.each([

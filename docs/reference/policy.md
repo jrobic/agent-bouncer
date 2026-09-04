@@ -94,7 +94,8 @@ Below `rules.command.git`, two plain lists (`safe_subcommands`,
 whose safety depends on their arguments — everything else falls through
 to `git-protected` (always confirm). `checkout` and `restore` are the
 two subcommands these three forms can't express (pathspec detection,
-staged-only form) — they stay engine code under their own names.
+index-only form — `--staged` plus one or more pathspecs) — they stay
+engine code under their own names.
 
 **`ask_flags`** — safe unless one of `flags` is present, or (with
 `max_positionals`) too many non-flag arguments are given. This is
