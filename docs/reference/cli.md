@@ -277,7 +277,7 @@ override/relaxation. Always printed in full, healthy or not.
 [pass] wiring:canary — PreToolUse canary is correctly wired
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
-[pass] policy — overlay active (51 effective rules; common: 4 files, profile: 0 files)
+[pass] policy — overlay active (54 effective rules; common: 4 files, profile: 0 files)
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
 ```
