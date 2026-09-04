@@ -15,6 +15,15 @@
 //            IS allow, silently, by contract)
 export type VerdictKind = 'block' | 'confirm' | 'flag' | 'observe';
 
+// Total over VerdictKind: adding a verdict kind requires defining where it
+// falls in the severity order instead of silently producing undefined.
+export const VERDICT_SEVERITY: Readonly<Record<VerdictKind, number>> = {
+  block: 3,
+  confirm: 2,
+  observe: 1,
+  flag: 0,
+};
+
 export interface Verdict {
   readonly verdict: VerdictKind;
   readonly ruleId: string;

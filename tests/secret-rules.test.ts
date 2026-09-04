@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkPath, checkSecretBash, checkUrl } from '../src/secret-rules.ts';
+import { checkPath, checkSecretBash, checkUrl, createSecretChecker } from '../src/secret-rules.ts';
 
 // One test per PATH_RULES id (nominal) + the two ENV_WHITELIST counter-examples
 // and the node_modules/.npmrc counter-example called out in the task.
@@ -571,6 +571,42 @@ describe('secret-rules: BASH_RULES (secret)', () => {
 
   test('benign: git status passes', () => {
     expect(checkSecretBash('git status')).toBeNull();
+  });
+});
+
+describe('secret-rules: glob path readings', () => {
+  test('Bash: captures a token with multiple glob metacharacters', () => {
+    expect(checkSecretBash('cat **/*.pem')?.ruleId).toBe('bash-crypto-key');
+  });
+
+  test('Bash: any-name reading replaces every glob metacharacter', () => {
+    const checker = createSecretChecker({
+      path: [{ id: 'glob-name', regex: '(^|/)xx/x\\.glob$', reason: 'glob name', verdict: 'block' }],
+      bash: [],
+    }, []);
+    expect(checker.checkSecretBash('cat **/*.glob')?.ruleId).toBe('bash-glob-name');
+  });
+
+  test('Bash: empty-name reading removes every glob metacharacter', () => {
+    const checker = createSecretChecker({
+      path: [{ id: 'glob-empty', regex: '(^|/)\\.glob$', reason: 'glob empty', verdict: 'block' }],
+      bash: [],
+    }, []);
+    expect(checker.checkSecretBash('cat ?*.glob')?.ruleId).toBe('bash-glob-empty');
+  });
+
+  test('Bash: keeps the strictest verdict across glob readings', () => {
+    const checker = createSecretChecker({
+      path: [
+        { id: 'glob-name', regex: '(^|/)x\\.glob$', reason: 'glob name', verdict: 'confirm' },
+        { id: 'glob-empty', regex: '(^|/)\\.glob$', reason: 'glob empty', verdict: 'block' },
+      ],
+      bash: [],
+    }, []);
+    expect(checker.checkSecretBash('cat *.glob')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'bash-glob-empty',
+    });
   });
 });
 

@@ -90,6 +90,16 @@ Every entry in the five regex tables below shares this shape:
   scanned: this layer cannot distinguish source code from a filesystem target.
 - A guarded directory name written with whitespace and no separator inside a
   quoted string, such as `cat "my secrets"`, is not a path candidate.
+- A bare glob `*` is not expanded because it can name every path or no path.
+- A metacharacter inside an extension, such as `*.p*m` or `*.p*`, has no
+  faithful witness: the two readings cover names and prefixes, not extensions.
+- A character class such as `*.[pk]em` is not interpreted by the path scan.
+- A comma-brace expansion such as `*.{pem,key}` is not interpreted by the
+  path scan.
+- A variable-expanded glob such as `$KEY*.pem` is not resolved before scanning.
+- A command substitution such as `$(ls *.pem)` is not evaluated before scanning.
+- An escaped metacharacter such as `\\*.pem` is literal shell syntax, not a
+  glob expansion.
 
 Example row (from the baseline):
 
@@ -210,11 +220,16 @@ leading `~` remains scanned. Quoted tokens without whitespace and unquoted
 tokens retain the full scan. Shell interpreter and `eval` command strings
 retain the full scan.
 
+A token containing `*` or `?` is checked with every metacharacter read as
+`x`, then with every metacharacter empty. The stricter matching path verdict
+wins. Tokens without either metacharacter keep the literal scan unchanged.
+
 The parser shares the command guard's structural tokenizer and wrapper-prefix
 handling; see the header of `src/command-rules.ts`. Pattern files and
 file-targeting values (`-f`/`--file`, `-g`/`--glob`/`--iglob`, `--pre`) remain
 scanned. An unknown tool, option, argument form, unterminated heredoc, or
 unterminated quote retains the full scan.
+
 
 ## `mcp_write.read_prefixes`
 

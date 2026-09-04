@@ -21,7 +21,7 @@ import type { RulesPolicy } from '../policy/schema.ts';
 import { createScanPrompt } from '../prompt-rules.ts';
 import { createSecretChecker } from '../secret-rules.ts';
 import { extractTargets, type GuardedToolCall, isGuardedToolName, readStringField } from '../targets.ts';
-import type { Family, Verdict, VerdictKind } from '../types.ts';
+import { type Family, type Verdict, VERDICT_SEVERITY } from '../types.ts';
 import { createScanSecrets } from '../write-secret-rules.ts';
 import { HOOK_NAME } from './constants.ts';
 import { canonicalizePath } from './paths.ts';
@@ -91,12 +91,8 @@ function writeSecretText(tool: string | undefined, ti: Record<string, unknown>):
 // Unifying five families into one dispatch must preserve that property:
 // checking command before secret must never let a stricter secret-family
 // block go unheard just because command found a milder confirm first.
-//
-// Typed as a total map over VerdictKind (not `Record<string, number>`): a
-// future fifth verdict kind added to the union without a line here becomes
-// a tsc error, not a silent `undefined` at runtime.
-const SEVERITY: Record<VerdictKind, number> = { block: 3, confirm: 2, observe: 1, flag: 0 };
-
+// VERDICT_SEVERITY lives in src/types.ts so every engine family ranks the
+// shared VerdictKind vocabulary identically.
 // `flag` is not part of this ordering at all — a PreToolUse family that
 // emits `flag` is a routing bug (flag belongs to UserPromptSubmit only; see
 // degradeToClaudeCode's own guard). Giving it severity 0 and letting the
@@ -116,7 +112,9 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
     );
   }
   if (hits.length === 0) return null;
-  return hits.reduce((strictest, hit) => SEVERITY[hit.verdict.verdict] > SEVERITY[strictest.verdict.verdict] ? hit : strictest);
+  return hits.reduce((strictest, hit) =>
+    VERDICT_SEVERITY[hit.verdict.verdict] > VERDICT_SEVERITY[strictest.verdict.verdict] ? hit : strictest
+  );
 }
 
 /**

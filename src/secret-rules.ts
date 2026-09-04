@@ -5,25 +5,59 @@
 // scanning algorithms, parameterized over whichever tables are loaded.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
-// The Bash matcher scans literal path-like tokens and is trivially defeated
-// by hex/base64/quote-splitting tricks (e.g. `printf '\x2eenv' | xargs
-// cat`). Search-pattern exclusions are opt-in per tool and declared argument
-// shape; unknown commands or options, unterminated quotes, and unterminated
-// heredocs retain the full scan. Whitespace-bearing quoted strings and
-// heredoc bodies mask only individual tokens without `/` or a leading `~`,
-// so source literals carrying a guarded path stay scanned. `rg --hidden -i
-// env` can still print dotenv lines, as `grep -r env .` already can. Treat
-// this as protection against accidental leaks, not against an adversarial
-// agent.
+// The Bash matcher scans literal path-like tokens. A token containing `*` or
+// `?` is checked with every metacharacter read as `x` and with every
+// metacharacter empty; the stricter verdict wins. A metacharacter inside the
+// extension has no faithful witness: the two readings cover names and prefixes,
+// not extensions. Character classes, comma-brace expansion, a bare `*`,
+// variables, command substitutions, and escaped metacharacters stay out of
+// that expansion.
+// Search-pattern exclusions are opt-in per tool and declared argument shape;
+// unknown commands or options, unterminated quotes, and unterminated heredocs
+// retain the full scan. Whitespace-bearing quoted strings and heredoc bodies
+// mask only individual tokens without `/` or a leading `~`, so source literals
+// carrying a guarded path stay scanned. `rg --hidden -i env` can still print
+// dotenv lines, as `grep -r env .` already can. Treat this as protection
+// against accidental leaks, not against an adversarial agent.
 
 import { hasUnsafeGitConfigRemoteUrl, maskSearchPatternArguments } from './command-rules.ts';
 import { BASELINE } from './policy/baseline.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
 import type { RegexRule } from './policy/schema.ts';
-import type { Verdict } from './types.ts';
+import { type Verdict, VERDICT_SEVERITY } from './types.ts';
 
 // Path-like token: contiguous run covering absolute, relative, and ~/ paths.
 export const BASH_PATH_TOKEN = /[\w./~-]+/g;
+
+const BASH_SHELL_TOKEN = /(?:^|[\s;|&])(\$\([^)]*\)|\S+)/g;
+const BASH_GLOB_PATH_TOKEN = /[-\w./~?*]*[?*][-\w./~?*]*/;
+const UNSUPPORTED_GLOB_SYNTAX = /[[\]$\\]|\{[^}]*,[^}]*\}/;
+
+function globPathReadings(shellToken: string): readonly string[] | null {
+  if (shellToken === '*' || UNSUPPORTED_GLOB_SYNTAX.test(shellToken)) return null;
+  const glob = shellToken.match(BASH_GLOB_PATH_TOKEN)?.[0];
+  if (glob === undefined) return null;
+  const anyNameReading = glob.replaceAll(/[?*]/g, 'x');
+  const emptyNameReading = glob.replaceAll(/[?*]/g, '');
+  return [anyNameReading, emptyNameReading];
+}
+
+function strictestPathHit(first: Verdict | null, second: Verdict | null): Verdict | null {
+  if (first === null) return second;
+  if (second === null) return first;
+  return VERDICT_SEVERITY[second.verdict] > VERDICT_SEVERITY[first.verdict] ? second : first;
+}
+
+function bashPathHit(pathHit: Verdict, cmd: string): Verdict {
+  return {
+    // The underlying path rule's OWN verdict, not a hardcoded "block" —
+    // confirm rules must retain their verdict when reached from Bash.
+    verdict: pathHit.verdict,
+    ruleId: `bash-${pathHit.ruleId}`,
+    reason: `Bash command references sensitive path: ${pathHit.reason}`,
+    target: cmd,
+  };
+}
 
 export interface SecretChecker {
   readonly checkPath: (path: string) => Verdict | null;
@@ -63,24 +97,19 @@ export function createSecretChecker(
     const hit = firstMatch(compiledBash, cmd, 'block', specials);
     if (hit) return hit;
 
-    const tokens = maskSearchPatternArguments(cmd, BASH_PATH_TOKEN).match(BASH_PATH_TOKEN) ?? [];
-    for (const tok of tokens) {
-      const normalized = tok.replace(/^~\//, '/');
-      const pathHit = checkPath(normalized);
-      if (pathHit) {
-        return {
-          // The underlying path rule's OWN verdict, not a hardcoded
-          // "block" — a confirm-verdict rule (transcript-backup, ticket
-          // 13; bouncer-audit-log, ticket 14) must stay confirm whether
-          // it's reached via Read/Grep or via a Bash command referencing
-          // the same path; only the ruleId/reason get the `bash-`
-          // wrapping treatment.
-          verdict: pathHit.verdict,
-          ruleId: `bash-${pathHit.ruleId}`,
-          reason: `Bash command references sensitive path: ${pathHit.reason}`,
-          target: cmd,
-        };
-      }
+    const masked = maskSearchPatternArguments(cmd, BASH_PATH_TOKEN);
+    for (const match of masked.matchAll(BASH_SHELL_TOKEN)) {
+      const shellToken = match[1]!;
+      const candidates = globPathReadings(shellToken) ?? shellToken.match(BASH_PATH_TOKEN) ?? [];
+      const pathHit = candidates.reduce<Verdict | null>(
+        (strictest, candidate) =>
+          strictestPathHit(
+            strictest,
+            checkPath(candidate.replace(/^~\//, '/')),
+          ),
+        null,
+      );
+      if (pathHit) return bashPathHit(pathHit, cmd);
     }
     return null;
   };
