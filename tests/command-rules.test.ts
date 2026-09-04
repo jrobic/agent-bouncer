@@ -229,6 +229,21 @@ describe('command-rules: BASH_RULES', () => {
     expect(confirm?.ruleId).toBe('persistence-scheduler');
   });
 
+  test('ruleId persistence-scheduler: launchctl load asks', () => {
+    const confirm = checkBash('launchctl load ~/Library/LaunchAgents/x.plist');
+    expect(confirm?.ruleId).toBe('persistence-scheduler');
+  });
+
+  test('ruleId persistence-scheduler: systemctl user start asks', () => {
+    const confirm = checkBash('systemctl --user start x.service');
+    expect(confirm?.ruleId).toBe('persistence-scheduler');
+  });
+
+  test('ruleId persistence-scheduler: at now asks', () => {
+    const confirm = checkBash('at now + 1 hour');
+    expect(confirm?.ruleId).toBe('persistence-scheduler');
+  });
+
   test('ruleId terraform-mutating: terraform apply asks', () => {
     const confirm = checkBash('terraform apply');
     expect(confirm?.ruleId).toBe('terraform-mutating');

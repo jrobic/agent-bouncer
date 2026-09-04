@@ -3419,6 +3419,90 @@
           "ruleId": "etc-write-shell"
         }
       ]
+    },
+    {
+      "id": "persistence-scheduler-at-preposition-git-commit-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git commit -m 'look at this'"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-at-preposition-grep-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "grep -n foo at src"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-at-preposition-echo-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"look at this\""
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-at-file-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "at -f job.sh now"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-user-edit-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -u bob -e"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-bundled-remove-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -ri"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-list-redirect-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -l > backup"
+      },
+      "expected": []
+    },
+    {
+      "id": "direnv-trust-envrc-strictest-blocked",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv allow .envrc"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "bash-dotenv"
+        }
+      ]
     }
   ]
 }

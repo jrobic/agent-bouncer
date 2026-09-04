@@ -185,7 +185,7 @@ verdict = "confirm"
 # Ticket 32: scheduled jobs and services run later with the human's rights.
 [[rules.command.bash]]
 id = "persistence-scheduler"
-regex = "\\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+"
+regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|(?:^|[|;&]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)"
 reason = "installs a schedule or service that can run later outside this session"
 verdict = "confirm"
 [[rules.command.bash]]

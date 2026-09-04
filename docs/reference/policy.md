@@ -89,6 +89,8 @@ part of the baseline.
 `direnv-trust` confirms before trusting a project `.envrc` to run on later
 directory changes. `persistence-scheduler` confirms before `crontab`,
 launchd, user-systemd, or `at` can schedule or start work beyond the session.
+When `direnv allow` names a guarded path such as `.envrc`, the secret family
+judges that path first; its block verdict wins over `direnv-trust`'s confirm.
 
 
 ### Infrastructure mutation rows

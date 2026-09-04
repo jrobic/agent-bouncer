@@ -164,7 +164,7 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '22 forge-api-write \\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b ',
   '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
   '24 direnv-trust \\bdirenv\\s+(?:allow|permit|grant)\\b ',
-  '25 persistence-scheduler \\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+ ',
+  '25 persistence-scheduler \\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|(?:^|[|;&]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d) ',
   '26 terraform-mutating \\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b ',
   '27 kubectl-mutating \\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b ',
   '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b ',
