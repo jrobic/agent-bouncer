@@ -552,6 +552,42 @@ describe('secret-rules: BASH_RULES (secret)', () => {
   });
 });
 
+describe('secret-rules: path scan exclusions for search patterns', () => {
+  test('benign: explicit pattern argument is allowed', () => {
+    expect(checkSecretBash('rg -e \'\\.env|dotenv\' src')).toBeNull();
+  });
+
+  test('benign: positional pattern after combined search flags is allowed', () => {
+    expect(checkSecretBash('grep -ril \'\\.env\' src')).toBeNull();
+  });
+
+  test('benign: wrapper-prefixed pattern argument is allowed', () => {
+    expect(checkSecretBash('command grep -e \'\\.env\' src')).toBeNull();
+  });
+
+  test('benign: pattern in a later command segment is allowed', () => {
+    expect(checkSecretBash('cd src && rg -e \'\\.env\' .')).toBeNull();
+  });
+
+  test('ruleId dotenv: undeclared option retains the full path scan', () => {
+    expect(checkSecretBash('rg --future-option \'\\.env\' src')?.ruleId).toBe('bash-dotenv');
+  });
+
+  test('ruleId dotenv: pattern file remains scanned', () => {
+    expect(checkSecretBash('grep -f .env x')?.ruleId).toBe('bash-dotenv');
+  });
+
+  test('ruleId dotenv: file-selection glob remains scanned', () => {
+    expect(checkSecretBash('rg -e \'\\.env\' -g \'*.env\' src')?.ruleId).toBe('bash-dotenv');
+  });
+
+  test('benign: Object.prototype tool name falls back to the full path scan', () => {
+    const check = () => checkSecretBash('valueOf -n foo');
+    expect(check).not.toThrow();
+    expect(check()).toBeNull();
+  });
+});
+
 // Workstation delta: checkUrl gives extractTargets()'s `urls` bucket
 // (ctx_fetch_and_index) a matching check function. Unlike checkSecretBash, it
 // skips the PATH_RULES path-token scan — a URL's path segment names a web

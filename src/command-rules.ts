@@ -100,6 +100,278 @@ export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolic
   builtin: { flags: new Set(), optionsWithArg: new Set() },
 };
 
+type PatternOptionKind = 'pattern' | 'pattern-file' | 'scanned';
+
+type PatternArgumentPolicy = {
+  readonly flags: ReadonlySet<string>;
+  readonly optionsWithArg: ReadonlySet<string>;
+  readonly patternOptions: ReadonlySet<string>;
+  readonly patternFileOptions: ReadonlySet<string>;
+  readonly positionalPattern?: true;
+};
+
+const GREP_PATTERN_ARGUMENT_POLICY: PatternArgumentPolicy = {
+  flags: new Set([
+    '-r',
+    '-R',
+    '-i',
+    '-l',
+    '-L',
+    '-c',
+    '-v',
+    '-w',
+    '-x',
+    '-n',
+    '-h',
+    '-H',
+    '-o',
+    '-q',
+    '-s',
+    '-E',
+    '-F',
+    '-P',
+    '-G',
+    '-a',
+    '-z',
+    '-I',
+    '-b',
+    '-T',
+    '-U',
+    '--color',
+    '--line-buffered',
+    '--null',
+  ]),
+  optionsWithArg: new Set([
+    '-e',
+    '--regexp',
+    '--expression',
+    '-f',
+    '--file',
+    '-A',
+    '-B',
+    '-C',
+    '-m',
+    '-d',
+    '-D',
+    '--color',
+    '--include',
+    '--exclude',
+    '--exclude-dir',
+  ]),
+  patternOptions: new Set(['-e', '--regexp', '--expression']),
+  patternFileOptions: new Set(['-f', '--file']),
+  positionalPattern: true,
+};
+
+const SEARCH_PATTERN_ARGUMENT_POLICIES: Readonly<Record<string, PatternArgumentPolicy>> = {
+  grep: GREP_PATTERN_ARGUMENT_POLICY,
+  egrep: GREP_PATTERN_ARGUMENT_POLICY,
+  fgrep: GREP_PATTERN_ARGUMENT_POLICY,
+  rg: {
+    flags: new Set([
+      '-i',
+      '-S',
+      '-s',
+      '-F',
+      '-P',
+      '-U',
+      '-z',
+      '-a',
+      '-v',
+      '-w',
+      '-x',
+      '-l',
+      '-L',
+      '-c',
+      '-o',
+      '-q',
+      '-H',
+      '-N',
+      '-I',
+      '-n',
+      '--hidden',
+      '--no-ignore',
+      '--files-with-matches',
+      '--count',
+      '--no-heading',
+      '--heading',
+      '--line-number',
+      '--no-line-number',
+      '--json',
+      '--trim',
+      '--multiline',
+      '--pcre2',
+      '--fixed-strings',
+      '--smart-case',
+      '--case-sensitive',
+      '--ignore-case',
+      '--files',
+      '--text',
+      '--binary',
+      '--no-messages',
+      '--quiet',
+      '--word-regexp',
+      '--line-regexp',
+      '--unrestricted',
+      '--no-ignore-vcs',
+      '--no-ignore-dot',
+      '--one-file-system',
+      '--crlf',
+      '--null-data',
+      '--passthru',
+      '--no-config',
+    ]),
+    optionsWithArg: new Set([
+      '-e',
+      '--regexp',
+      '-f',
+      '--file',
+      '-g',
+      '--glob',
+      '--iglob',
+      '--pre',
+      '-t',
+      '--type',
+      '-T',
+      '--type-not',
+      '-A',
+      '-B',
+      '-C',
+      '-m',
+      '-j',
+      '-M',
+      '-E',
+      '-r',
+      '--replace',
+      '--max-depth',
+      '--color',
+      '--sort',
+      '--sortr',
+      '--context-separator',
+      '--field-context-separator',
+      '--engine',
+      '--path-separator',
+      '--threads',
+      '--glob-case-insensitive',
+      '--encoding',
+    ]),
+    patternOptions: new Set(['-e', '--regexp']),
+    patternFileOptions: new Set(['-f', '--file']),
+    positionalPattern: true,
+  },
+  ag: {
+    flags: new Set(['-i', '-n', '-r', '-R', '-l', '-c', '-v', '-w', '-x', '-o', '-q', '-s', '-a', '-z', '-H', '-h']),
+    optionsWithArg: new Set(['-e', '--regexp', '--expression', '-G', '--file-search-regex', '-m', '--max-count', '--depth']),
+    patternOptions: new Set(['-e', '--regexp', '--expression']),
+    patternFileOptions: new Set(),
+    positionalPattern: true,
+  },
+  ack: {
+    flags: new Set(['-i', '-n', '-r', '-R', '-l', '-c', '-v', '-w', '-x', '-o', '-q', '-s', '-a', '-H', '-h']),
+    optionsWithArg: new Set(['-e', '--regexp', '--expression', '-g', '--files-from', '--ignore-file', '--type', '--type-set']),
+    patternOptions: new Set(['-e', '--regexp', '--expression']),
+    patternFileOptions: new Set(),
+    positionalPattern: true,
+  },
+  sed: {
+    flags: new Set(['-n', '--quiet', '--silent', '--posix', '--sandbox', '--debug']),
+    optionsWithArg: new Set(['-e', '--expression', '-f', '--file']),
+    patternOptions: new Set(['-e', '--expression']),
+    patternFileOptions: new Set(['-f', '--file']),
+    positionalPattern: true,
+  },
+  awk: {
+    flags: new Set(['--posix', '--traditional', '--lint', '--re-interval', '--non-decimal-data']),
+    optionsWithArg: new Set(['-f', '--file', '-v', '--assign', '-F', '--field-separator']),
+    patternOptions: new Set(),
+    patternFileOptions: new Set(['-f', '--file']),
+    positionalPattern: true,
+  },
+  gawk: {
+    flags: new Set(['--posix', '--traditional', '--lint', '--re-interval', '--non-decimal-data']),
+    optionsWithArg: new Set(['-f', '--file', '-v', '--assign', '-F', '--field-separator']),
+    patternOptions: new Set(),
+    patternFileOptions: new Set(['-f', '--file']),
+    positionalPattern: true,
+  },
+  perl: {
+    flags: new Set(['-n', '-p', '-c', '-w', '-W']),
+    optionsWithArg: new Set(['-e']),
+    patternOptions: new Set(['-e']),
+    patternFileOptions: new Set(),
+  },
+};
+
+function excludedSearchPatternTokens(
+  tokens: readonly ShellToken[],
+  policy: PatternArgumentPolicy,
+): ShellToken[] | null {
+  const excluded: ShellToken[] = [];
+  let hasPattern = policy.positionalPattern !== true;
+  let optionsEnded = false;
+
+  for (let i = 0; i < tokens.length;) {
+    const token = tokens[i]!;
+    const value = token.value;
+    if (!optionsEnded && value === '--') {
+      optionsEnded = true;
+      i++;
+      continue;
+    }
+
+    if (!optionsEnded && value.startsWith('-') && value !== '-') {
+      let option: string | undefined;
+      let argument: ShellToken | undefined;
+      let nextIndex = i + 1;
+
+      if (value.startsWith('--')) {
+        const equalsIndex = value.indexOf('=');
+        option = equalsIndex === -1 ? value : value.slice(0, equalsIndex);
+        if (equalsIndex === -1 && policy.flags.has(option)) {
+          i++;
+          continue;
+        }
+        if (!policy.optionsWithArg.has(option)) return null;
+        argument = equalsIndex === -1 ? tokens[i + 1] : token;
+        nextIndex = equalsIndex === -1 ? i + 2 : i + 1;
+      } else {
+        for (let shortIndex = 1; shortIndex < value.length; shortIndex++) {
+          const shortOption = `-${value[shortIndex]!}`;
+          if (policy.flags.has(shortOption)) continue;
+          if (!policy.optionsWithArg.has(shortOption)) return null;
+          option = shortOption;
+          argument = shortIndex === value.length - 1 ? tokens[i + 1] : token;
+          nextIndex = shortIndex === value.length - 1 ? i + 2 : i + 1;
+          break;
+        }
+        if (option === undefined) {
+          i++;
+          continue;
+        }
+      }
+
+      if (argument === undefined) return null;
+      const kind: PatternOptionKind = policy.patternOptions.has(option)
+        ? 'pattern'
+        : policy.patternFileOptions.has(option)
+        ? 'pattern-file'
+        : 'scanned';
+      if (kind === 'pattern') excluded.push(argument);
+      if (kind !== 'scanned') hasPattern = true;
+      i = nextIndex;
+      continue;
+    }
+
+    if (!hasPattern) {
+      excluded.push(token);
+      hasPattern = true;
+    }
+    i++;
+  }
+
+  return excluded;
+}
+
 const PRIVILEGE_ESCALATION_REASON =
   'Privilege escalation tool (sudo/doas/pkexec/runas/please) — confirm manually outside the agent session';
 
@@ -139,29 +411,35 @@ export const GIT_OPTS_WITH_ARG: ReadonlySet<string> = new Set([
 type ShellToken = Readonly<{
   value: string;
   kind: 'word' | 'bang-operator';
+  start: number;
+  end: number;
 }>;
 
 function tokenizeShellSegments(cmd: string): ShellToken[][] {
   const segments: ShellToken[][] = [];
   let tokens: ShellToken[] = [];
   let token = '';
+  let tokenStart = 0;
   let tokenStarted = false;
   let tokenHasLiteralizingSyntax = false;
   let quote: '"' | '\'' | null = null;
   let comment = false;
 
-  const flushToken = (): void => {
+  const flushToken = (end: number): void => {
     if (!tokenStarted) return;
     tokens.push({
       value: token,
       kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
+      start: tokenStart,
+      end,
     });
     token = '';
+    tokenStart = 0;
     tokenStarted = false;
     tokenHasLiteralizingSyntax = false;
   };
-  const flushSegment = (): void => {
-    flushToken();
+  const flushSegment = (end: number): void => {
+    flushToken(end);
     if (tokens.length > 0) segments.push(tokens);
     tokens = [];
   };
@@ -171,7 +449,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
     if (comment) {
       if (ch === '\n') {
         comment = false;
-        flushSegment();
+        flushSegment(i);
       }
       continue;
     }
@@ -201,6 +479,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
         i++;
         continue;
       }
+      if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
       tokenHasLiteralizingSyntax = true;
       if (escaped === undefined) token += '\\';
@@ -212,6 +491,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
     }
     if (ch === '"' || ch === '\'') {
       quote = ch;
+      if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
       tokenHasLiteralizingSyntax = true;
       continue;
@@ -221,17 +501,18 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
       continue;
     }
     if (/\s/.test(ch) && ch !== '\n') {
-      flushToken();
+      flushToken(i);
       continue;
     }
     if (/[;&|\n]/.test(ch)) {
-      flushSegment();
+      flushSegment(i);
       continue;
     }
+    if (!tokenStarted) tokenStart = i;
     tokenStarted = true;
     token += ch;
   }
-  flushSegment();
+  flushSegment(cmd.length);
   return segments;
 }
 
@@ -320,6 +601,34 @@ function consumeCommandPrefixes(
     if (token.value === 'time') consumeBangOperators();
   }
   return { index: i, ambiguous: false };
+}
+
+// Masks only declared pattern-argument source ranges before the secret
+// family applies its legacy literal path-token scan.
+export function maskSearchPatternArguments(cmd: string): string {
+  const excluded: ShellToken[] = [];
+  for (const tokens of tokenizeShellSegments(cmd)) {
+    const prefix = consumeCommandPrefixes(tokens);
+    if (prefix.ambiguous) continue;
+    const tool = tokens[prefix.index]?.value;
+    if (tool === undefined) continue;
+    const policy = Object.hasOwn(SEARCH_PATTERN_ARGUMENT_POLICIES, tool)
+      ? SEARCH_PATTERN_ARGUMENT_POLICIES[tool]!
+      : undefined;
+    if (policy === undefined) continue;
+    const patternTokens = excludedSearchPatternTokens(tokens.slice(prefix.index + 1), policy);
+    if (patternTokens !== null) excluded.push(...patternTokens);
+  }
+
+  if (excluded.length === 0) return cmd;
+  let masked = '';
+  let offset = 0;
+  for (const token of excluded) {
+    masked += cmd.slice(offset, token.start);
+    masked += cmd.slice(token.start, token.end).replace(/[^\r\n]/g, ' ');
+    offset = token.end;
+  }
+  return masked + cmd.slice(offset);
 }
 
 function isCommandNamed(token: string | undefined, names: ReadonlySet<string>): boolean {

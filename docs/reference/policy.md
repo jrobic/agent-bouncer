@@ -74,6 +74,7 @@ Every entry in the five regex tables below shares this shape:
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
 
+
 ### Known limits
 
 - A sops command hidden behind a package script or launched by direnv is not
@@ -82,6 +83,9 @@ Every entry in the five regex tables below shares this shape:
   guard's scope.
 - A non-default `SOPS_AGE_KEY_FILE` is a human choice and needs a personal
   overlay row.
+- A pattern-only hidden-file search such as `rg --hidden -i env` can print
+  matching dotenv lines. The path scan guards command arguments, not command
+  output; `grep -r env .` has the same residual behavior.
 
 Example row (from the baseline):
 
@@ -189,6 +193,19 @@ commands = ["sudo", "doas", "pkexec", "runas", "please"]
 
 `git-protected` is governed by `safe_subcommands` and the three
 declarative forms above.
+
+### Secret Bash path-token scan
+
+`rules.secret.path` also scans path-like tokens in Bash commands. This is an
+engine algorithm: it masks only declared search pattern or program arguments
+for `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ack`, `sed`, `awk`/`gawk`, and
+`perl -e`/`-ne`/`-pe`, then applies the literal path-token scan to everything
+else. An unknown tool, option, or argument form retains the full scan.
+
+The parser shares the command guard's structural tokenizer and wrapper-prefix
+handling; see the header of `src/command-rules.ts`. Pattern files and
+file-targeting values (`-f`/`--file`, `-g`/`--glob`/`--iglob`, `--pre`) remain
+scanned.
 
 ## `mcp_write.read_prefixes`
 

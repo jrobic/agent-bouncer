@@ -5,12 +5,14 @@
 // scanning algorithms, parameterized over whichever tables are loaded.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
-// The Bash matcher tokenizes the literal command and is trivially defeated
+// The Bash matcher scans literal path-like tokens and is trivially defeated
 // by hex/base64/quote-splitting tricks (e.g. `printf '\x2eenv' | xargs
-// cat`). Treat this as protection against accidental leaks, not against an
-// adversarial agent.
+// cat`). Search-pattern exclusions are opt-in per tool and declared argument
+// shape; unknown commands or options retain the full scan. `rg --hidden -i
+// env` can still print dotenv lines, as `grep -r env .` already can. Treat
+// this as protection against accidental leaks, not against an adversarial agent.
 
-import { hasUnsafeGitConfigRemoteUrl } from './command-rules.ts';
+import { hasUnsafeGitConfigRemoteUrl, maskSearchPatternArguments } from './command-rules.ts';
 import { BASELINE } from './policy/baseline.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
 import type { RegexRule } from './policy/schema.ts';
@@ -57,7 +59,7 @@ export function createSecretChecker(
     const hit = firstMatch(compiledBash, cmd, 'block', specials);
     if (hit) return hit;
 
-    const tokens = cmd.match(BASH_PATH_TOKEN) ?? [];
+    const tokens = maskSearchPatternArguments(cmd).match(BASH_PATH_TOKEN) ?? [];
     for (const tok of tokens) {
       const normalized = tok.replace(/^~\//, '/');
       const pathHit = checkPath(normalized);
