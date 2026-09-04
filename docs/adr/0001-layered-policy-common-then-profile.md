@@ -233,36 +233,36 @@ was taken each time.
 Tickets under `.scratch/bouncer/issues/` (split by the `to-tickets` pass).
 
 ### Phase 1 — engine: named layers
-- [ ] `loadPolicyFromLayers(layers)` next to `loadPolicyFromOverlayFiles`
+- [x] `loadPolicyFromLayers(layers)` next to `loadPolicyFromOverlayFiles`
       (which becomes the one-layer case); precedence per target; per-layer
       rejection; baseline-id lint; `LoadResult` carries per-layer state and
       layer-qualified `sourceFile`.
-- [ ] Tests, pure: every precedence target ×2 layers; rejection matrix
+- [x] Tests, pure: every precedence target ×2 layers; rejection matrix
       (common broken / profile broken / both / override orphaned);
       baseline-id collision; intra-layer conflict unchanged.
 
 ### Phase 2 — adapter, outputs, docs
-- [ ] Shared helper for the common root (`~/.agents/bouncer/`, `HOME`-based
+- [x] Shared helper for the common root (`~/.agents/bouncer/`, `HOME`-based
       so tests use a throwaway home); CC adapter reads two roots through
       one `readLayer(root)`; realpath migration guard.
-- [ ] `rules list` / `rules lint` / `doctor` formats above; audit-log
+- [x] `rules list` / `rules lint` / `doctor` formats above; audit-log
       `policy-warning` per layer.
-- [ ] `docs/reference/policy.md` (§ Baseline vs. overlay → three layers,
+- [x] `docs/reference/policy.md` (§ Baseline vs. overlay → three layers,
       § Merge order, § Cross-file conflicts → per layer, § Provenance),
       `docs/reference/cli.md` samples, `docs/how-to/wire-into-claude-code.md`.
-- [ ] End-to-end adapter tests: real dirs, throwaway `HOME` +
+- [x] End-to-end adapter tests: real dirs, throwaway `HOME` +
       `CLAUDE_CONFIG_DIR`, the symlinked-profile migration case.
 
 ### Phase 3 — ship (lead, announced step by step)
-- [ ] Rebuild grouped with ticket 16; reinstall `~/.local/bin/bouncer`
+- [x] Rebuild grouped with ticket 16; reinstall `~/.local/bin/bouncer`
       (backup `bouncer.<sha>.bak`).
-- [ ] Both profiles: `rm` the `policy.d` link (an absent local `policy.d`
+- [x] Both profiles: `rm` the `policy.d` link (an absent local `policy.d`
       is an empty layer); purge `policy.d.pre-mount.bak/` and
       `policy.toml.pre-19.bak`.
-- [ ] dotfiles, as a proposed patch for its lead: drop the `symlink`
+- [x] dotfiles, as a proposed patch for its lead: drop the `symlink`
       manifest entry (keep `binary` and the `command` lint check); amend
       ADR-0004 (option 4 delivered, § 3 and § 7).
-- [ ] Proof: `doctor` ×2 green with `common: 4 files, profile: 0 files`,
+- [x] Proof: `doctor` ×2 green with `common: 4 files, profile: 0 files`,
       51 effective rules, 5 relaxations, `rules list` provenance
       `[common:…]` on every overlay entry.
 
