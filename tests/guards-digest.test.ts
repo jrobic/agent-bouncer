@@ -165,21 +165,21 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
 ];
 
-// policy/secret.toml `rules.secret.bash`. Five entries, each with its own
-// id (round-3 review: `bash-git-leak` used to be shared by index 0 and
-// index 1 — a `disable` override on that shared id would have silently
-// taken out both, including the `special = "git_remote_url"` marked
-// entry, so they were split into `bash-git-leak-credential` (index 2:
-// credential/signingkey, unconditional) and `bash-git-leak-remote-url`
-// (index 3: remote.*.url, read-excepted, marked `special`)). The pair
-// still shares a POSITION-adjacency lock: removing one must still redden
-// this digest even though the other survives with its own distinct id.
+// policy/secret.toml `rules.secret.bash`. Seven entries, each with its own
+// id. The git-config pair remains split: `bash-git-leak-credential` (index
+// 2: credential/signingkey, unconditional) and `bash-git-leak-remote-url`
+// (index 3: remote.*.url, read-excepted, marked `special`) cannot disable
+// each other. `keychain-dump` and `credential-printer` each own their
+// independent override target, so a consumer can relax a printer without
+// weakening the macOS keychain boundary.
 const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '0 sops-decrypt \\bsops(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt|decrypt|exec-env|exec-file|edit)(?:\\s|$)|(?:^|[;&|(]\\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=\\S*|rtk|command|exec|env|nice|time|builtin|proxy)\\s+)*sops\\s+[^\\s;&|\\-][^\\s;&|]*\\s*(?:$|[;&|)]) ',
   '1 age-decrypt \\b(?:age|rage)(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt)(?:\\s|$) ',
   '2 bash-git-leak-credential \\bgit\\s+config\\b[^\\n]*\\b(credential|user\\.signingkey)\\b ',
   '3 bash-git-leak-remote-url \\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b ',
   '4 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
+  '5 keychain-dump \\bsecurity\\s+(?:find-(?:generic|internet)-password|export|dump-keychain)\\b ',
+  '6 credential-printer \\bgh\\s+auth\\s+token\\b|\\bglab\\s+auth\\s+status\\b[^|;&\\n]*\\s--show-token\\b|\\bop\\s+read\\b|\\bop\\s+item\\s+get\\b[^|;&\\n]*\\s(?:--reveal|--fields)\\b|\\bgcloud\\s+auth\\s+print-(?:access|identity)-token\\b|\\baws\\s+sts\\s+(?:get-session-token|assume-role)\\b|\\bvault\\s+(?:read|kv\\s+get)\\b|\\bdoppler\\s+secrets\\s+download\\b ',
 ];
 
 // policy/write-secret.toml `rules.write_secret` — an identity control: 8
@@ -217,7 +217,7 @@ describe('guards-digest: tamper lock — the four tabular guards', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 
-  test('secret.bash matches the frozen ordered digest (5 entries, distinct ids)', () => {
+  test('secret.bash matches the frozen ordered digest (7 entries, distinct ids)', () => {
     expect(ruleDigest(BASELINE.rules.secret.bash)).toEqual([...EXPECTED_SECRET_DIGEST]);
   });
 
@@ -264,11 +264,9 @@ function pathRuleDigest(
 // be separate module-level regexes; they are policy data now too, one
 // field on the row they qualify, which is what let this lock stop needing
 // a second "declared outside the block" append step. `transcript-backup`,
-// `bouncer-audit-log` and `bouncer-policy` are the three rows with a
-// non-default `verdict` ("confirm" — review round 2's arbitration for
-// transcript-backup, ticket 14's own arbitration for bouncer-audit-log,
-// ticket 19's promotion of the overlay-born self-protection for
-// bouncer-policy; see policy/secret.toml).
+// `bouncer-audit-log`, `bouncer-policy`, `shell-history`, and
+// `session-transcripts` are the five rows with a non-default `verdict`
+// ("confirm"; see policy/secret.toml for their distinct rationale).
 const EXPECTED_PATH_DIGEST: readonly string[] = [
   '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
   '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
@@ -286,10 +284,12 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '13 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
   '14 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
   '15 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
+  '16 shell-history (^|/)\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)$ flags= except= verdict=confirm',
+  '17 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl$ flags= except= verdict=confirm',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the sixteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (16 entries + except/verdict fields)', () => {
+describe('guards-digest: tamper lock — secret.path, the eighteen-entry path guard', () => {
+  test('secret.path matches the frozen ordered digest (18 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });

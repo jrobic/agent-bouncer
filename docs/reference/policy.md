@@ -76,6 +76,16 @@ Every entry in the five regex tables below shares this shape:
 
 The command baseline also confirms outbound `publish` actions (package registries, Docker images, and `gh`/`glab` releases) and `forge-api-write` actions (a mutating HTTP verb or body-field flag on `gh api`/`glab api`). `forge-api-write` deliberately confirms `gh api graphql -f query=...` reads: flag-only matching cannot distinguish their query body from a mutation. `base64-decode-exec` blocks Base64, `xxd -r`, or `openssl enc -d` output piped directly into a shell or interpreter.
 
+The secret baseline names `keychain-dump` for macOS Security commands that
+print passwords or private keys. `credential-printer`, `shell-history`, and
+`session-transcripts` confirm before exposing a live credential, a shell
+history file, or a live Claude Code transcript; the `dotenv` row also covers
+direnv's `.envrc`. `session-transcripts` targets only
+`.claude[-profile]/projects/<slug>/<session>.jsonl`, leaving memory notes
+available. A transcript observer is a workstation-specific workflow, so it
+can relax that row in its profile overlay with a reason; no such override is
+part of the baseline.
+
 
 ### Known limits
 

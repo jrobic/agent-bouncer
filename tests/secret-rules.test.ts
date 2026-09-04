@@ -312,6 +312,91 @@ describe('secret-rules: PATH_RULES', () => {
     });
   });
 
+  test('ruleId dotenv: .envrc is blocked through file-path and Bash token scans', () => {
+    expect(checkPath('/repo/.envrc')).toMatchObject({ verdict: 'block', ruleId: 'dotenv' });
+    expect(checkSecretBash('cat .envrc')).toMatchObject({ verdict: 'block', ruleId: 'bash-dotenv' });
+  });
+
+  test.each([
+    '/home/user/.zsh_history',
+    '/home/user/.bash_history',
+    '/home/user/.zhistory',
+    '/home/user/.python_history',
+    '/home/user/.node_repl_history',
+    '/home/user/.psql_history',
+    '/home/user/.mysql_history',
+    '/home/user/.lesshst',
+  ])('ruleId shell-history: %s is confirmed', (path) => {
+    expect(checkPath(path)).toMatchObject({ verdict: 'confirm', ruleId: 'shell-history' });
+  });
+
+  test('ruleId shell-history: Bash token scan confirms a history path without blocking the history builtin', () => {
+    expect(checkSecretBash('tail -n 50 ~/.bash_history')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-shell-history',
+    });
+    expect(checkSecretBash('history | tail')).toBeNull();
+  });
+
+  test('ruleId session-transcripts: profile JSONL paths are confirmed while memory remains available', () => {
+    expect(checkPath('/home/user/.claude/projects/x/abc.jsonl')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'session-transcripts',
+    });
+    expect(checkPath('/home/user/.claude-work/projects/x/s.jsonl')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'session-transcripts',
+    });
+    expect(checkSecretBash('grep foo ~/.claude/projects/x/s.jsonl')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-session-transcripts',
+    });
+    expect(checkPath('/home/user/.claude/projects/x/memory/MEMORY.md')).toBeNull();
+  });
+
+  test('ruleId keychain-dump: secret-emitting macOS Security commands are blocked', () => {
+    for (
+      const command of [
+        'security find-generic-password -w -s x',
+        'security find-internet-password -a u -w',
+        'security export -k login.keychain',
+        'security dump-keychain',
+      ]
+    ) {
+      expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'keychain-dump' });
+    }
+    expect(checkSecretBash('security list-keychains')).toBeNull();
+    expect(checkSecretBash('security find-certificate -a')).toBeNull();
+    expect(checkSecretBash('security add-generic-password -s x -w y')).toBeNull();
+  });
+
+  test('ruleId credential-printer: token-printing commands are confirmed', () => {
+    for (
+      const command of [
+        'gh auth token',
+        'glab auth status --show-token',
+        'op read op://v/i/f',
+        'op item get x --reveal',
+        'op item get x --fields password',
+        'gcloud auth print-access-token',
+        'gcloud auth print-identity-token',
+        'aws sts get-session-token',
+        'aws sts assume-role --role-arn x',
+        'vault read secret/x',
+        'vault kv get x',
+        'doppler secrets download',
+      ]
+    ) {
+      expect(checkSecretBash(command)).toMatchObject({ verdict: 'confirm', ruleId: 'credential-printer' });
+    }
+    expect(checkSecretBash('gh auth status')).toBeNull();
+    expect(checkSecretBash('gh auth login')).toBeNull();
+    expect(checkSecretBash('op item list')).toBeNull();
+    expect(checkSecretBash('gcloud auth list')).toBeNull();
+    expect(checkSecretBash('aws sts get-caller-identity')).toBeNull();
+    expect(checkSecretBash('vault status')).toBeNull();
+  });
+
   test('ruleId secret-dir: secrets/ directory is blocked', () => {
     expect(checkPath('/proj/secrets/db.yaml')?.ruleId).toBe('secret-dir');
   });
