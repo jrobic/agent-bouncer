@@ -188,6 +188,45 @@ id = "persistence-scheduler"
 regex = "\\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+"
 reason = "installs a schedule or service that can run later outside this session"
 verdict = "confirm"
+[[rules.command.bash]]
+id = "terraform-mutating"
+regex = "\\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b"
+reason = "Terraform or OpenTofu command mutates infrastructure state or resources"
+verdict = "confirm"
+
+# Debatable (ticket 33): relax local `kubectl apply`/`create` in a profile with
+# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+[[rules.command.bash]]
+id = "kubectl-mutating"
+regex = "\\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b"
+except = "\\bkubectl\\b(?:[^|;&\\n]*--dry-run(?:=|\\s)[^|;&\\n]*\\s(?:apply|create)\\b|[^|;&\\n]*\\s(?:apply|create)\\b[^|;&\\n]*--dry-run(?:=|\\s|$))"
+reason = "kubectl command mutates Kubernetes cluster resources"
+verdict = "confirm"
+
+# Debatable (ticket 33): relax local `helm install` in a profile with
+# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+[[rules.command.bash]]
+id = "helm-mutating"
+regex = "\\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b"
+except = "\\bhelm\\s+(?:install|upgrade)\\b[^|;&\\n]*--dry-run(?:=|\\s|$)"
+reason = "Helm command mutates a release"
+verdict = "confirm"
+
+# Debatable (ticket 33): relax local volume resets in a profile with
+# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+[[rules.command.bash]]
+id = "docker-destructive"
+regex = "\\bdocker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune)|compose\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b)"
+reason = "Docker command deletes system or volume data"
+verdict = "confirm"
+
+# Debatable (ticket 33): relax local destructive SQL in a profile with
+# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+[[rules.command.bash]]
+id = "sql-destructive-inline"
+regex = "(?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+[\"'][^\"']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+[\"'][^\"']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b)"
+reason = "Inline SQL command mutates database data or schema"
+verdict = "confirm"
 
 [rules.command.rm_rf]
 # The `rm -rf` blocklist: each entry is a regex the rm target must NOT

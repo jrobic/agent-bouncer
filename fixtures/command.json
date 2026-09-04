@@ -2720,6 +2720,705 @@
           "ruleId": "direnv-trust"
         }
       ]
+    },
+    {
+      "id": "terraform-mutating-apply",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform apply"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-apply-auto-approve",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform apply -auto-approve"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-tofu-destroy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tofu destroy"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-import",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform import x y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-state-rm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform state rm x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-state-mv",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform state mv x y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-state-push",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform state push state.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "terraform-mutating"
+        }
+      ]
+    },
+    {
+      "id": "terraform-plan-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform plan"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-init-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform init"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-validate-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform validate"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-fmt-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform fmt"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-show-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform show"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-state-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform state list"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-mutating-apply",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl apply -f x.yaml"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-create-file",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl create -f x.yaml"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-create-namespace",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl create ns x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl delete pod x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-delete-namespaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl -n prod delete deploy x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-apply-context",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl --context prod apply -k overlays/prod"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-drain",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl drain node1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-cordon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl cordon node1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-taint",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl taint nodes node1 key=value:NoSchedule"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-patch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl patch deploy x -p '{}'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-scale",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl scale --replicas=0 deploy/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-rollout-restart",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl rollout restart deploy/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-rollout-undo",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl rollout undo deploy/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-replace",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl replace -f x.yaml"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-get-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl get pods"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-describe-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl describe pod x"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-logs-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl logs x"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-diff-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl diff -f x.yaml"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-apply-dry-run-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl apply --dry-run=client -f x"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-create-dry-run-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl create --dry-run=server -f x"
+      },
+      "expected": []
+    },
+    {
+      "id": "kubectl-config-use-context-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl config use-context x"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-mutating-install",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm install x chart"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-mutating-upgrade",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm upgrade --install x chart"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-mutating-uninstall",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm uninstall x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-mutating-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm delete x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-mutating-rollback",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm rollback x 1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm list"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-status-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm status x"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-template-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm template x chart"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-diff-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm diff upgrade x chart"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-install-dry-run-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm install x chart --dry-run"
+      },
+      "expected": []
+    },
+    {
+      "id": "helm-lint-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm lint chart"
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-destructive-system-prune",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker system prune -af"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
+        }
+      ]
+    },
+    {
+      "id": "docker-destructive-volume-rm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker volume rm x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
+        }
+      ]
+    },
+    {
+      "id": "docker-destructive-volume-prune",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker volume prune"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
+        }
+      ]
+    },
+    {
+      "id": "docker-destructive-compose-down-short-volumes",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose down -v"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
+        }
+      ]
+    },
+    {
+      "id": "docker-destructive-compose-down-long-volumes",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose down --volumes"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
+        }
+      ]
+    },
+    {
+      "id": "docker-compose-down-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose down"
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-compose-up-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose up -d"
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-image-prune-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker image prune"
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-ps-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker ps"
+      },
+      "expected": []
+    },
+    {
+      "id": "sql-destructive-inline-psql-drop",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c 'DROP TABLE x'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-mysql-truncate",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mysql -e \"TRUNCATE t\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-sqlite-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sqlite3 db.sqlite 'DELETE FROM t'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-psql-alter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c \"ALTER TABLE t DROP COLUMN c\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-select-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c 'SELECT 1'"
+      },
+      "expected": []
+    },
+    {
+      "id": "sql-psql-meta-command-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c '\\dt'"
+      },
+      "expected": []
+    },
+    {
+      "id": "sql-file-input-known-limit",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -f migrate.sql"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the SQL text is in a file, outside the inline quoted statement the command rule can inspect"
+    },
+    {
+      "id": "sql-sqlite-schema-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sqlite3 db '.schema'"
+      },
+      "expected": []
+    },
+    {
+      "id": "terraform-mutating-sudo-remains-blocked",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sudo terraform apply"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "terraform-mutating-etc-write-remains-blocked",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "terraform apply > /etc/passwd"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-shell"
+        }
+      ]
     }
   ]
 }

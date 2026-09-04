@@ -165,6 +165,11 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
   '24 direnv-trust \\bdirenv\\s+(?:allow|permit|grant)\\b ',
   '25 persistence-scheduler \\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+ ',
+  '26 terraform-mutating \\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b ',
+  '27 kubectl-mutating \\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b ',
+  '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b ',
+  '29 docker-destructive \\bdocker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune)|compose\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b) ',
+  '30 sql-destructive-inline (?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b) ',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Seven entries, each with its own
@@ -215,7 +220,7 @@ const EXPECTED_PROMPT_DIGEST: readonly string[] = [
 ];
 
 describe('guards-digest: tamper lock — the four tabular guards', () => {
-  test('command.bash matches the frozen ordered digest (26 regex entries)', () => {
+  test('command.bash matches the frozen ordered digest (31 regex entries)', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 

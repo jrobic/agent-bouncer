@@ -91,6 +91,19 @@ directory changes. `persistence-scheduler` confirms before `crontab`,
 launchd, user-systemd, or `at` can schedule or start work beyond the session.
 
 
+### Infrastructure mutation rows
+
+The command table's `terraform-mutating`, `kubectl-mutating`, `helm-mutating`,
+`docker-destructive`, and `sql-destructive-inline` rows return `confirm` before
+infrastructure, cluster, release, Docker volume, or inline SQL mutations. They
+do not infer whether a target is local or remote.
+
+`kubectl-mutating` (`apply`/`create`), `helm-mutating` (`install`),
+`docker-destructive`, and `sql-destructive-inline` are **Debatable (ticket
+33)**. A profile can relax a row with `[[override]]`, `action = "relax"`, and
+`verdict = "observe"` without removing the baseline guard.
+
+
 ### Known limits
 
 - A sops command hidden behind a package script or launched by direnv is not
@@ -118,6 +131,9 @@ launchd, user-systemd, or `at` can schedule or start work beyond the session.
 - A command substitution such as `$(ls *.pem)` is not evaluated before scanning.
 - An escaped metacharacter such as `\\*.pem` is literal shell syntax, not a
   glob expansion.
+- `sql-destructive-inline` sees SQL quoted directly after `-c` or `-e`, or
+  SQLite's positional statement argument; statements passed with `-f` or stdin
+  remain a known limit.
 
 Example row (from the baseline):
 

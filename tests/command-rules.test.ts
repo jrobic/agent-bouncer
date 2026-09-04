@@ -228,6 +228,31 @@ describe('command-rules: BASH_RULES', () => {
     const confirm = checkBash('crontab -e');
     expect(confirm?.ruleId).toBe('persistence-scheduler');
   });
+
+  test('ruleId terraform-mutating: terraform apply asks', () => {
+    const confirm = checkBash('terraform apply');
+    expect(confirm?.ruleId).toBe('terraform-mutating');
+  });
+
+  test('ruleId kubectl-mutating: kubectl apply asks', () => {
+    const confirm = checkBash('kubectl apply -f x.yaml');
+    expect(confirm?.ruleId).toBe('kubectl-mutating');
+  });
+
+  test('ruleId helm-mutating: helm install asks', () => {
+    const confirm = checkBash('helm install x chart');
+    expect(confirm?.ruleId).toBe('helm-mutating');
+  });
+
+  test('ruleId docker-destructive: docker volume prune asks', () => {
+    const confirm = checkBash('docker volume prune');
+    expect(confirm?.ruleId).toBe('docker-destructive');
+  });
+
+  test('ruleId sql-destructive-inline: psql inline DROP asks', () => {
+    const confirm = checkBash('psql -c \'DROP TABLE x\'');
+    expect(confirm?.ruleId).toBe('sql-destructive-inline');
+  });
 });
 
 describe('command-rules: git ask + SAFE_GIT', () => {
