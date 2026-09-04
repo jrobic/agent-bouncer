@@ -134,6 +134,7 @@ do not infer whether a target is local or remote.
 - `sql-destructive-inline` sees SQL quoted directly after `-c` or `-e`, or
   SQLite's positional statement argument; statements passed with `-f` or stdin
   remain a known limit.
+- A renamed live transcript such as `.jsonl.bak` is outside `session-transcripts`: the row protects active session files ending in `.jsonl`, not copies.
 
 Example row (from the baseline):
 
