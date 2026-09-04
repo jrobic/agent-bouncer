@@ -811,6 +811,12 @@ describe('command-rules: a wrapper no longer lets an escalation escape (sudo)', 
   });
 });
 
+describe('command-rules: heredoc body segments', () => {
+  test('ruleId sudo: a heredoc body keeps its command segment', () => {
+    expect(checkBash('bash <<EOF\nsudo id\nEOF')?.ruleId).toBe('sudo');
+  });
+});
+
 // A PRESERVATION vector, not a hardening one: curl's long `--data` form must
 // stay caught alongside the short forms.
 describe('command-rules: the curl file upload stays caught in its long form', () => {

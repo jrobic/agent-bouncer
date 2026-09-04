@@ -8,9 +8,13 @@
 // The Bash matcher scans literal path-like tokens and is trivially defeated
 // by hex/base64/quote-splitting tricks (e.g. `printf '\x2eenv' | xargs
 // cat`). Search-pattern exclusions are opt-in per tool and declared argument
-// shape; unknown commands or options retain the full scan. `rg --hidden -i
+// shape; unknown commands or options, unterminated quotes, and unterminated
+// heredocs retain the full scan. Whitespace-bearing quoted strings and
+// heredoc bodies mask only individual tokens without `/` or a leading `~`,
+// so source literals carrying a guarded path stay scanned. `rg --hidden -i
 // env` can still print dotenv lines, as `grep -r env .` already can. Treat
-// this as protection against accidental leaks, not against an adversarial agent.
+// this as protection against accidental leaks, not against an adversarial
+// agent.
 
 import { hasUnsafeGitConfigRemoteUrl, maskSearchPatternArguments } from './command-rules.ts';
 import { BASELINE } from './policy/baseline.ts';
@@ -59,7 +63,7 @@ export function createSecretChecker(
     const hit = firstMatch(compiledBash, cmd, 'block', specials);
     if (hit) return hit;
 
-    const tokens = maskSearchPatternArguments(cmd).match(BASH_PATH_TOKEN) ?? [];
+    const tokens = maskSearchPatternArguments(cmd, BASH_PATH_TOKEN).match(BASH_PATH_TOKEN) ?? [];
     for (const tok of tokens) {
       const normalized = tok.replace(/^~\//, '/');
       const pathHit = checkPath(normalized);

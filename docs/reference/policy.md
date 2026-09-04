@@ -86,6 +86,10 @@ Every entry in the five regex tables below shares this shape:
 - A pattern-only hidden-file search such as `rg --hidden -i env` can print
   matching dotenv lines. The path scan guards command arguments, not command
   output; `grep -r env .` has the same residual behavior.
+- A separator-bearing guarded path literal in a heredoc source file remains
+  scanned: this layer cannot distinguish source code from a filesystem target.
+- A guarded directory name written with whitespace and no separator inside a
+  quoted string, such as `cat "my secrets"`, is not a path candidate.
 
 Example row (from the baseline):
 
@@ -200,12 +204,17 @@ declarative forms above.
 engine algorithm: it masks only declared search pattern or program arguments
 for `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ack`, `sed`, `awk`/`gawk`, and
 `perl -e`/`-ne`/`-pe`, then applies the literal path-token scan to everything
-else. An unknown tool, option, or argument form retains the full scan.
+else. In a whitespace-bearing quoted token or a recognized heredoc body, each
+path token is considered independently: only a token carrying `/` or a
+leading `~` remains scanned. Quoted tokens without whitespace and unquoted
+tokens retain the full scan. Shell interpreter and `eval` command strings
+retain the full scan.
 
 The parser shares the command guard's structural tokenizer and wrapper-prefix
 handling; see the header of `src/command-rules.ts`. Pattern files and
 file-targeting values (`-f`/`--file`, `-g`/`--glob`/`--iglob`, `--pre`) remain
-scanned.
+scanned. An unknown tool, option, argument form, unterminated heredoc, or
+unterminated quote retains the full scan.
 
 ## `mcp_write.read_prefixes`
 

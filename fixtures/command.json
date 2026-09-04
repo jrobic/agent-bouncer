@@ -668,6 +668,32 @@
       ]
     },
     {
+      "id": "sudo-heredoc-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash <<EOF\nsudo id\nEOF"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "git-protected-heredoc-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash <<EOF\ngit push --force\nEOF"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "sudo-nominal",
       "toolName": "Bash",
       "toolInput": {

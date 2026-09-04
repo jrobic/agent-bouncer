@@ -25,7 +25,8 @@
 //   • Variable indirection: `D=/; rm -rf $D`
 //   • Command substitution: `rm -rf $(echo /)`, `` rm -rf `echo /` ``
 //   • Glob expansion: `rm -rf /???`
-//   • Heredoc: `bash <<< "rm -rf /"`
+//   • Here-string: `bash <<< "rm -rf /"` (a `<<` heredoc keeps its
+//     newline-delimited body segments)
 //   • Download-then-exec split: `curl x>/tmp/s.sh && bash /tmp/s.sh`
 //   • Native interpreters: `python -c "open('/etc/passwd').read()"`,
 //     same for node, ruby, perl, etc.
@@ -98,6 +99,15 @@ export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolic
   nice: { flags: new Set(), optionsWithArg: new Set(['-n']) },
   time: { flags: new Set(['-p']), optionsWithArg: new Set() },
   builtin: { flags: new Set(), optionsWithArg: new Set() },
+};
+
+const SHELL_INTERPRETER_COMMANDS: Readonly<Record<string, true>> = {
+  bash: true,
+  sh: true,
+  zsh: true,
+  dash: true,
+  ksh: true,
+  fish: true,
 };
 
 type PatternOptionKind = 'pattern' | 'pattern-file' | 'scanned';
@@ -407,21 +417,122 @@ export const GIT_OPTS_WITH_ARG: ReadonlySet<string> = new Set([
 // Canonical structural tokenizer for the git and privilege guards. Quotes
 // and escapes preserve the resulting literal token value, while their
 // contents never gain separator/comment/operator syntax. An unquoted `#`
-// starts a comment only at a shell word boundary.
-type ShellToken = Readonly<{
-  value: string;
-  kind: 'word' | 'bang-operator';
+// starts a comment only at a shell word boundary. A recognized `<<` heredoc
+// records its body source range and its body lines remain ordinary,
+// newline-delimited segments; only the secret path scan consults those
+// ranges. `hasQuotedWhitespace` distinguishes prose candidates from
+// quoted single-word paths.
+type SourceRange = Readonly<{
   start: number;
   end: number;
 }>;
 
-function tokenizeShellSegments(cmd: string): ShellToken[][] {
+type ShellToken =
+  & SourceRange
+  & Readonly<{
+    value: string;
+    kind: 'word' | 'bang-operator';
+    hasQuotedWhitespace: boolean;
+    hasUnterminatedQuote: boolean;
+  }>;
+
+type CommandPrefix = Readonly<{
+  index: number;
+  ambiguous: boolean;
+}>;
+
+type TokenizedShell = Readonly<{
+  segments: readonly ShellToken[][];
+  heredocBodies: readonly SourceRange[];
+}>;
+
+type HeredocDelimiter = Readonly<{
+  value: string;
+  stripTabs: boolean;
+}>;
+
+function namesPath(value: string): boolean {
+  return value.includes('/') || value.startsWith('~');
+}
+
+function heredocDelimiters(cmd: string, tokens: readonly ShellToken[]): readonly HeredocDelimiter[] | null {
+  const delimiters: HeredocDelimiter[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    const source = cmd.slice(token.start, token.end);
+    if (!source.startsWith('<<') || source.startsWith('<<<')) continue;
+
+    const stripTabs = source.startsWith('<<-');
+    let delimiter = token.value.slice(stripTabs ? 3 : 2);
+    if (!delimiter) {
+      const next = tokens[i + 1];
+      if (next === undefined) return null;
+      delimiter = next.value;
+      i++;
+    }
+    delimiters.push({ value: delimiter, stripTabs });
+  }
+  return delimiters;
+}
+
+function consumeHeredocBodies(
+  cmd: string,
+  start: number,
+  delimiters: readonly HeredocDelimiter[],
+): readonly SourceRange[] | null {
+  const bodies: SourceRange[] = [];
+  let cursor = start;
+
+  for (const { value, stripTabs } of delimiters) {
+    const bodyStart = cursor;
+    for (;;) {
+      const lineEnd = cmd.indexOf('\n', cursor);
+      const line = cmd.slice(cursor, lineEnd === -1 ? cmd.length : lineEnd);
+      const candidate = stripTabs ? line.replace(/^\t+/, '') : line;
+      if (candidate === value) {
+        bodies.push({ start: bodyStart, end: cursor });
+        cursor = lineEnd === -1 ? cmd.length : lineEnd + 1;
+        break;
+      }
+      if (lineEnd === -1) return null;
+      cursor = lineEnd + 1;
+    }
+  }
+
+  return bodies;
+}
+
+function nonPathTokenRanges(
+  cmd: string,
+  ranges: readonly SourceRange[],
+  pathToken: RegExp,
+): readonly SourceRange[] {
+  const nonPathTokens: SourceRange[] = [];
+  for (const range of ranges) {
+    const source = cmd.slice(range.start, range.end);
+    for (const match of source.matchAll(pathToken)) {
+      const value = match[0];
+      if (namesPath(value)) continue;
+      const start = range.start + match.index!;
+      nonPathTokens.push({ start, end: start + value.length });
+    }
+  }
+  return nonPathTokens;
+}
+
+function isInsideHeredocBody(position: number, bodies: readonly SourceRange[]): boolean {
+  return bodies.some((body) => body.start <= position && position < body.end);
+}
+
+function tokenizeShellSegments(cmd: string): TokenizedShell {
   const segments: ShellToken[][] = [];
+  const heredocBodies: SourceRange[] = [];
   let tokens: ShellToken[] = [];
   let token = '';
   let tokenStart = 0;
   let tokenStarted = false;
   let tokenHasLiteralizingSyntax = false;
+  let tokenHasQuotedWhitespace = false;
   let quote: '"' | '\'' | null = null;
   let comment = false;
 
@@ -432,16 +543,30 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
       kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
       start: tokenStart,
       end,
+      hasQuotedWhitespace: tokenHasQuotedWhitespace,
+      hasUnterminatedQuote: quote !== null,
     });
     token = '';
     tokenStart = 0;
     tokenStarted = false;
     tokenHasLiteralizingSyntax = false;
+    tokenHasQuotedWhitespace = false;
   };
-  const flushSegment = (end: number): void => {
+  const flushSegment = (end: number): ShellToken[] => {
     flushToken(end);
-    if (tokens.length > 0) segments.push(tokens);
+    const segment = tokens;
+    if (segment.length > 0) segments.push(segment);
     tokens = [];
+    return segment;
+  };
+  const finishLine = (end: number): void => {
+    const segment = flushSegment(end);
+    if (isInsideHeredocBody(end, heredocBodies)) return;
+
+    const delimiters = heredocDelimiters(cmd, segment);
+    if (delimiters === null || delimiters.length === 0) return;
+    const bodies = consumeHeredocBodies(cmd, end + 1, delimiters);
+    if (bodies !== null) heredocBodies.push(...bodies);
   };
 
   for (let i = 0; i < cmd.length; i++) {
@@ -449,7 +574,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
     if (comment) {
       if (ch === '\n') {
         comment = false;
-        flushSegment(i);
+        finishLine(i);
       }
       continue;
     }
@@ -469,6 +594,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
         quote = null;
         continue;
       }
+      if (/\s/.test(ch)) tokenHasQuotedWhitespace = true;
       token += ch;
       continue;
     }
@@ -504,8 +630,12 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
       flushToken(i);
       continue;
     }
-    if (/[;&|\n]/.test(ch)) {
+    if (/[;&|]/.test(ch)) {
       flushSegment(i);
+      continue;
+    }
+    if (ch === '\n') {
+      finishLine(i);
       continue;
     }
     if (!tokenStarted) tokenStart = i;
@@ -513,7 +643,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
     token += ch;
   }
   flushSegment(cmd.length);
-  return segments;
+  return { segments, heredocBodies };
 }
 
 // Find the git subcommand in a single command segment, tolerating wrappers
@@ -523,7 +653,7 @@ function tokenizeShellSegments(cmd: string): ShellToken[][] {
 type GitCommand = { sub: string; rest: string[]; forceConfirm?: true; };
 
 export function extractGitSubcommand(segment: string): GitCommand | null {
-  const tokens = tokenizeShellSegments(segment)[0] ?? [];
+  const tokens = tokenizeShellSegments(segment).segments[0] ?? [];
   return extractGitSubcommandFromTokens(tokens);
 }
 
@@ -554,7 +684,7 @@ function extractGitSubcommandFromTokens(
 function consumeCommandPrefixes(
   tokens: readonly ShellToken[],
   benignPrefixes: ReadonlySet<string> = GIT_BENIGN_PREFIXES,
-): { readonly index: number; readonly ambiguous: boolean; } {
+): CommandPrefix {
   let i = 0;
 
   const consumeBangOperators = (): void => {
@@ -603,12 +733,29 @@ function consumeCommandPrefixes(
   return { index: i, ambiguous: false };
 }
 
-// Masks only declared pattern-argument source ranges before the secret
-// family applies its legacy literal path-token scan.
-export function maskSearchPatternArguments(cmd: string): string {
-  const excluded: ShellToken[] = [];
-  for (const tokens of tokenizeShellSegments(cmd)) {
+function retainsQuotedTokenScan(
+  tokens: readonly ShellToken[],
+  prefix: CommandPrefix,
+): boolean {
+  if (prefix.ambiguous) return true;
+  const command = tokens[prefix.index]?.value;
+  return command === 'eval' || (command !== undefined && Object.hasOwn(SHELL_INTERPRETER_COMMANDS, command));
+}
+
+// Masks declared search-pattern arguments plus quoted prose and heredoc
+// bodies that cannot name a path before the secret path-token scan.
+export function maskSearchPatternArguments(cmd: string, pathToken: RegExp): string {
+  const tokenized = tokenizeShellSegments(cmd);
+  const excluded: SourceRange[] = [];
+  excluded.push(...nonPathTokenRanges(cmd, tokenized.heredocBodies, pathToken));
+
+  for (const tokens of tokenized.segments) {
     const prefix = consumeCommandPrefixes(tokens);
+    if (!retainsQuotedTokenScan(tokens, prefix)) {
+      const quotedProse = tokens.filter((token) => token.hasQuotedWhitespace && !token.hasUnterminatedQuote);
+      excluded.push(...nonPathTokenRanges(cmd, quotedProse, pathToken));
+    }
+
     if (prefix.ambiguous) continue;
     const tool = tokens[prefix.index]?.value;
     if (tool === undefined) continue;
@@ -621,12 +768,15 @@ export function maskSearchPatternArguments(cmd: string): string {
   }
 
   if (excluded.length === 0) return cmd;
+  const ranges = excluded.toSorted((a, b) => a.start - b.start || a.end - b.end);
   let masked = '';
   let offset = 0;
-  for (const token of excluded) {
-    masked += cmd.slice(offset, token.start);
-    masked += cmd.slice(token.start, token.end).replace(/[^\r\n]/g, ' ');
-    offset = token.end;
+  for (const range of ranges) {
+    const start = Math.max(offset, range.start);
+    if (start >= range.end) continue;
+    masked += cmd.slice(offset, start);
+    masked += cmd.slice(start, range.end).replace(/[^\r\n]/g, ' ');
+    offset = range.end;
   }
   return masked + cmd.slice(offset);
 }
@@ -638,7 +788,7 @@ function isCommandNamed(token: string | undefined, names: ReadonlySet<string>): 
 }
 
 function checkPrivilegeEscalationWith(cmd: string, privilegeCommands: ReadonlySet<string>): Verdict | null {
-  for (const tokens of tokenizeShellSegments(cmd)) {
+  for (const tokens of tokenizeShellSegments(cmd).segments) {
     const prefix = consumeCommandPrefixes(tokens, PRIVILEGE_BENIGN_PREFIXES);
     const index = prefix.ambiguous
       ? tokens.findIndex((token, tokenIndex) =>
@@ -665,7 +815,7 @@ export function isGitConfigRead(cmdOrRest: string | readonly string[], configRea
     return configReadModes.includes(cmdOrRest[0] ?? '');
   }
 
-  const segments = tokenizeShellSegments(cmdOrRest);
+  const segments = tokenizeShellSegments(cmdOrRest).segments;
   const configCommands = segments
     .map(extractGitSubcommandFromTokens)
     .filter((parsed): parsed is GitCommand => parsed?.sub === 'config');
@@ -676,7 +826,7 @@ export function isGitConfigRead(cmdOrRest: string | readonly string[], configRea
 const GIT_REMOTE_URL_KEY = /^remote\.[^\s]+\.url$/;
 
 export function hasUnsafeGitConfigRemoteUrl(cmd: string, configReadModes: readonly string[]): boolean {
-  for (const tokens of tokenizeShellSegments(cmd)) {
+  for (const tokens of tokenizeShellSegments(cmd).segments) {
     const gitIndex = tokens.findIndex((token) => token.value === 'git' || token.value.endsWith('/git'));
     if (
       gitIndex === -1
@@ -776,7 +926,7 @@ function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: Co
 }
 
 function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
-  for (const tokens of tokenizeShellSegments(cmd)) {
+  for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
     if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) {
@@ -802,7 +952,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
 // third return shape that every existing caller and fixture would have to
 // account for.
 function classifyGitAllowWith(cmd: string, git: CommandGitPolicy): Verdict | null {
-  for (const tokens of tokenizeShellSegments(cmd)) {
+  for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed || parsed.forceConfirm) continue;
     if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) continue;

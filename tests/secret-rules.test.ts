@@ -335,6 +335,28 @@ describe('secret-rules: PATH_RULES', () => {
   });
 });
 
+describe('secret-rules: checkSecretBash quoted prose and heredoc bodies', () => {
+  test('ruleId secret-dir: quoted prose with whitespace is not a path candidate', () => {
+    expect(checkSecretBash('git commit -m "rotate secrets before release"')).toBeNull();
+  });
+
+  test('ruleId ssh-dir: a heredoc prose body is not a path candidate', () => {
+    expect(checkSecretBash('cat > notes.md <<\'EOF\'\nsecrets and credentials are prose\nEOF')).toBeNull();
+  });
+
+  test('ruleId secret-dir: shell command strings retain the full path scan', () => {
+    expect(checkSecretBash('bash -c "cd secrets && cat db.yaml"')?.ruleId).toBe('bash-secret-dir');
+  });
+
+  test('ruleId secret-dir: an unterminated quote retains the full path scan', () => {
+    expect(checkSecretBash('cat "my secrets')?.ruleId).toBe('bash-secret-dir');
+  });
+
+  test('ruleId secret-dir: quoted prose masks path tokens independently', () => {
+    expect(checkSecretBash('git commit -m "rotate secrets and/or keys"')).toBeNull();
+  });
+});
+
 describe('secret-rules: sops and age decryption', () => {
   test('ruleId sops-decrypt: sops -d f is blocked', () => {
     expect(checkSecretBash('sops -d f')).toMatchObject({ verdict: 'block', ruleId: 'sops-decrypt' });
