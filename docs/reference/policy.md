@@ -86,6 +86,10 @@ available. A transcript observer is a workstation-specific workflow, so it
 can relax that row in its profile overlay with a reason; no such override is
 part of the baseline.
 
+`direnv-trust` confirms before trusting a project `.envrc` to run on later
+directory changes. `persistence-scheduler` confirms before `crontab`,
+launchd, user-systemd, or `at` can schedule or start work beyond the session.
+
 
 ### Known limits
 

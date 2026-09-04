@@ -163,6 +163,8 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '21 publish \\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+create\\b ',
   '22 forge-api-write \\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b ',
   '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
+  '24 direnv-trust \\bdirenv\\s+(?:allow|permit|grant)\\b ',
+  '25 persistence-scheduler \\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+ ',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Seven entries, each with its own
@@ -213,7 +215,7 @@ const EXPECTED_PROMPT_DIGEST: readonly string[] = [
 ];
 
 describe('guards-digest: tamper lock — the four tabular guards', () => {
-  test('command.bash matches the frozen ordered digest (24 regex entries)', () => {
+  test('command.bash matches the frozen ordered digest (26 regex entries)', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 

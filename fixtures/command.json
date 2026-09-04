@@ -2351,6 +2351,375 @@
       ],
       "knownLimit": true,
       "knownLimitReason": "gh api graphql accepts -f query=... for a read, but flag-only matching cannot distinguish it from a mutation"
+    },
+    {
+      "id": "direnv-trust-allow",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv allow"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "direnv-trust"
+        }
+      ]
+    },
+    {
+      "id": "direnv-trust-allow-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv allow ."
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "direnv-trust"
+        }
+      ]
+    },
+    {
+      "id": "direnv-trust-permit",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv permit"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "direnv-trust"
+        }
+      ]
+    },
+    {
+      "id": "direnv-trust-grant",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv grant"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "direnv-trust"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-edit",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -e"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-remove",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -r"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-file",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab mycron"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-stdin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-crontab-pipe-stdin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat c | crontab -"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-launchctl-load",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl load ~/Library/LaunchAgents/x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-launchctl-bootstrap",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl bootstrap gui/501 x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-launchctl-enable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl enable gui/501/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-launchctl-submit",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl submit -l x -- cmd"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-user-enable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl --user enable x.service"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-user-start",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl --user start x.service"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-enable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl enable x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-sudo-systemctl-enable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sudo systemctl enable x"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-at-now",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "at now + 1 hour"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-at-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo cmd | at 02:00"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "direnv-status-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv status"
+      },
+      "expected": []
+    },
+    {
+      "id": "direnv-deny-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv deny"
+      },
+      "expected": []
+    },
+    {
+      "id": "direnv-reload-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv reload"
+      },
+      "expected": []
+    },
+    {
+      "id": "direnv-exec-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv exec . cmd"
+      },
+      "expected": []
+    },
+    {
+      "id": "crontab-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "crontab -l"
+      },
+      "expected": []
+    },
+    {
+      "id": "launchctl-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl list"
+      },
+      "expected": []
+    },
+    {
+      "id": "launchctl-print-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl print gui/501"
+      },
+      "expected": []
+    },
+    {
+      "id": "launchctl-unload-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl unload x.plist"
+      },
+      "expected": []
+    },
+    {
+      "id": "systemctl-status-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl status x"
+      },
+      "expected": []
+    },
+    {
+      "id": "systemctl-user-list-units-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl --user list-units"
+      },
+      "expected": []
+    },
+    {
+      "id": "atq-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "atq"
+      },
+      "expected": []
+    },
+    {
+      "id": "atrm-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "atrm 3"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-rtk-crontab",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk crontab -e"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "direnv-trust-command-segment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cd x && direnv allow"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "direnv-trust"
+        }
+      ]
     }
   ]
 }

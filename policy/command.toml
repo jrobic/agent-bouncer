@@ -175,6 +175,19 @@ id = "base64-decode-exec"
 regex = "\\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b"
 reason = "Decoded payload piped directly into a shell or interpreter"
 
+# Ticket 32: trusting a project .envrc makes it execute on later directory changes.
+[[rules.command.bash]]
+id = "direnv-trust"
+regex = "\\bdirenv\\s+(?:allow|permit|grant)\\b"
+reason = "direnv grants a project .envrc permission to run outside this session"
+verdict = "confirm"
+
+# Ticket 32: scheduled jobs and services run later with the human's rights.
+[[rules.command.bash]]
+id = "persistence-scheduler"
+regex = "\\bcrontab\\s+(?:-(?:\\s|$)|-(?:e|r)\\b|[^-\\s]\\S*)|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|\\bat\\s+\\S+"
+reason = "installs a schedule or service that can run later outside this session"
+verdict = "confirm"
 
 [rules.command.rm_rf]
 # The `rm -rf` blocklist: each entry is a regex the rm target must NOT

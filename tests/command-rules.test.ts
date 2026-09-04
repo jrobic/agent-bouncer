@@ -219,6 +219,15 @@ describe('command-rules: BASH_RULES', () => {
     const confirm = checkBash('rg --pre cat foo src');
     expect(confirm?.ruleId).toBe('rg-pre-exec');
   });
+  test('ruleId direnv-trust: direnv allow asks', () => {
+    const confirm = checkBash('direnv allow');
+    expect(confirm?.ruleId).toBe('direnv-trust');
+  });
+
+  test('ruleId persistence-scheduler: crontab -e asks', () => {
+    const confirm = checkBash('crontab -e');
+    expect(confirm?.ruleId).toBe('persistence-scheduler');
+  });
 });
 
 describe('command-rules: git ask + SAFE_GIT', () => {
