@@ -188,43 +188,54 @@ id = "persistence-scheduler"
 regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|(?:^|[|;&]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)"
 reason = "installs a schedule or service that can run later outside this session"
 verdict = "confirm"
+
+# Ticket 33: confirm rather than block — Terraform changes infrastructure state, so a human verifies the target first.
 [[rules.command.bash]]
 id = "terraform-mutating"
 regex = "\\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b"
 reason = "Terraform or OpenTofu command mutates infrastructure state or resources"
 verdict = "confirm"
 
+# Ticket 33: confirm rather than block — cluster mutations need a human target check.
 # Debatable (ticket 33): relax local `kubectl apply`/`create` in a profile with
-# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+# `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
+# `reason = "our local cluster is disposable and managed by reviewed automation"`.
 [[rules.command.bash]]
 id = "kubectl-mutating"
 regex = "\\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b"
-except = "\\bkubectl\\b(?:[^|;&\\n]*--dry-run(?:=|\\s)[^|;&\\n]*\\s(?:apply|create)\\b|[^|;&\\n]*\\s(?:apply|create)\\b[^|;&\\n]*--dry-run(?:=|\\s|$))"
+except = "^[^|;&\\n]*\\b(?:apply|create)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$"
 reason = "kubectl command mutates Kubernetes cluster resources"
 verdict = "confirm"
 
+# Ticket 33: confirm rather than block — release mutations need a human target check.
 # Debatable (ticket 33): relax local `helm install` in a profile with
-# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+# `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
+# `reason = "our local release lifecycle is managed by reviewed automation"`.
 [[rules.command.bash]]
 id = "helm-mutating"
 regex = "\\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b"
-except = "\\bhelm\\s+(?:install|upgrade)\\b[^|;&\\n]*--dry-run(?:=|\\s|$)"
+except = "^[^|;&\\n]*\\b(?:install|upgrade)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$"
 reason = "Helm command mutates a release"
 verdict = "confirm"
 
+# Ticket 33: confirm rather than block — deleting Docker data warrants human review.
 # Debatable (ticket 33): relax local volume resets in a profile with
-# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+# `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
+# `reason = "our local volume reset is intentional during development"`.
 [[rules.command.bash]]
 id = "docker-destructive"
-regex = "\\bdocker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune)|compose\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b)"
+regex = "\\b(?:docker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune))|(?:docker\\s+compose|docker-compose)\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b)"
 reason = "Docker command deletes system or volume data"
 verdict = "confirm"
 
+# Ticket 33: confirm rather than block — destructive SQL needs human review.
 # Debatable (ticket 33): relax local destructive SQL in a profile with
-# `[[override]]`, `action = "relax"`, and `verdict = "observe"`.
+# `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
+# `reason = "our local database reset is intentional during development"`.
 [[rules.command.bash]]
 id = "sql-destructive-inline"
 regex = "(?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+[\"'][^\"']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+[\"'][^\"']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b)"
+flags = "i"
 reason = "Inline SQL command mutates database data or schema"
 verdict = "confirm"
 

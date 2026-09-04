@@ -3377,7 +3377,7 @@
       "expected": []
     },
     {
-      "id": "sql-file-input-known-limit",
+      "id": "known-limit-sql-file-input",
       "toolName": "Bash",
       "toolInput": {
         "command": "psql -f migrate.sql"
@@ -3501,6 +3501,97 @@
         {
           "verdict": "block",
           "ruleId": "bash-dotenv"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-lowercase-drop-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c 'drop table x'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-lowercase-truncate-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mysql -e 'truncate t'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "sql-destructive-inline-lowercase-delete-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "psql -c \"delete from t\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "sql-destructive-inline"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-dry-run-then-delete-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl apply --dry-run=client -f x && kubectl delete pod y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "kubectl-mutating-create-dry-run-then-delete-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kubectl create --dry-run=server -f x && kubectl delete pod y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "kubectl-mutating"
+        }
+      ]
+    },
+    {
+      "id": "helm-mutating-dry-run-then-uninstall-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "helm install x chart --dry-run && helm uninstall y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "helm-mutating"
+        }
+      ]
+    },
+    {
+      "id": "docker-destructive-compose-v1-down-volumes-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker-compose down -v"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "docker-destructive"
         }
       ]
     }

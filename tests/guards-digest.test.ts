@@ -168,8 +168,8 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '26 terraform-mutating \\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b ',
   '27 kubectl-mutating \\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b ',
   '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b ',
-  '29 docker-destructive \\bdocker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune)|compose\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b) ',
-  '30 sql-destructive-inline (?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b) ',
+  '29 docker-destructive \\b(?:docker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune))|(?:docker\\s+compose|docker-compose)\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b) ',
+  '30 sql-destructive-inline (?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b) i',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Seven entries, each with its own

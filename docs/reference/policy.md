@@ -102,8 +102,9 @@ do not infer whether a target is local or remote.
 
 `kubectl-mutating` (`apply`/`create`), `helm-mutating` (`install`),
 `docker-destructive`, and `sql-destructive-inline` are **Debatable (ticket
-33)**. A profile can relax a row with `[[override]]`, `action = "relax"`, and
-`verdict = "observe"` without removing the baseline guard.
+33)**. A profile can relax a row with `[[override]]`, `action = "relax"`,
+`verdict = "observe"`, and a non-empty `reason = "local automation is reviewed
+elsewhere"` without removing the baseline guard.
 
 
 ### Known limits
