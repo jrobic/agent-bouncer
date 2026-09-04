@@ -134,7 +134,12 @@ describe('run(): a broken overlay keeps the baseline active and logs a loud warn
     const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
     const warning = lines.find((l) => l.kind === 'policy-warning');
     expect(warning).toBeDefined();
-    expect(warning.message).toContain('baseline');
+    // Per-layer rejection (ticket 21): the message names the layer and
+    // file at fault, not a generic "falls back to baseline" — the
+    // BEHAVIOR (baseline enforced) is what the deny verdict above already
+    // proved.
+    expect(warning.message).toContain('profile layer rejected');
+    expect(warning.message).toContain('policy.toml');
   });
 
   test('an override with no reason: the baseline still denies, and the rejection is logged', async () => {

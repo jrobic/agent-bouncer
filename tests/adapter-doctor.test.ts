@@ -44,7 +44,7 @@ function cleanLoadResult(overlayApplied = false): LoadResult {
 function brokenOverlayLoadResult(): LoadResult {
   return {
     ...cleanLoadResult(false),
-    warnings: ['overlay policy rejected — falling back to the embedded baseline: invalid TOML'],
+    warnings: ['profile layer rejected — policy.toml: invalid TOML'],
   };
 }
 

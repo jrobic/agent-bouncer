@@ -15,9 +15,11 @@
 // unverified, accidentally-unset override for either falls through to it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { HOOK_NAME } from '../src/adapter/constants.ts';
+import { hookLogPath } from '../src/adapter/log-path.ts';
 import { loadCurrentPolicy } from '../src/adapter/policy.ts';
 import { run } from '../src/adapter/run.ts';
 import { runDoctor, runRulesLint, runRulesList } from '../src/cli-commands.ts';
@@ -223,18 +225,185 @@ describe('loadCurrentPolicy(): the profile wins over the common layer on a share
   });
 });
 
-describe('loadCurrentPolicy(): rejection stays collective across layers (ticket 21 makes it per-layer)', () => {
-  test('a broken common file rejects the profile layer too — the baseline alone still denies', async () => {
+describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejection)', () => {
+  test('a broken common file drops ONLY the common layer — the profile rule still fires, common relaxations stay listed', async () => {
+    const box = await sandbox();
+    await writeCommon(
+      box,
+      'policy.d/100-personal.toml',
+      '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "shared across every profile"\n',
+    );
+    await writeCommon(box, 'policy.d/999-broken.toml', 'this is [not valid toml {{{');
+    await writeProfile(box, 'policy.toml',
+      '[[rules.command.bash]]\nid = "would-still-work"\nregex = "would-still-work-trigger"\nreason = "test"\n');
+
+    const loaded = await loadCurrentPolicy();
+    // The common layer as a WHOLE is rejected (one broken file rejects
+    // its layer, not just itself) — its relax does NOT survive — but the
+    // profile layer, untouched by the fault, stays fully live.
+    expect(loaded.overlayApplied).toBe(true);
+    expect(loaded.warnings).toHaveLength(1);
+    expect(loaded.warnings[0]).toContain('common layer rejected');
+    expect(loaded.warnings[0]).toContain('policy.d/999-broken.toml');
+    expect(loaded.policy.command.bash.map((r) => r.id)).toContain('would-still-work');
+    expect(loaded.policy.command.git.safe_subcommands).not.toContain('push');
+    expect(loaded.layers.find((l) => l.name === 'common')?.rejected).toBeDefined();
+    expect(loaded.layers.find((l) => l.name === 'profile')?.rejected).toBeUndefined();
+
+    const envelope = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'would-still-work-trigger' },
+    });
+    const { stdout } = await run(envelope);
+    expect(JSON.parse(stdout!).hookSpecificOutput.permissionDecision).not.toBe('allow');
+  });
+
+  test('a broken profile file: doctor names the profile file, the common relax stays listed by runRulesList()', async () => {
+    const box = await sandbox();
+    await writeCommon(
+      box,
+      'policy.d/100-personal.toml',
+      '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "shared across every profile"\n',
+    );
+    await writeProfile(box, 'policy.toml', 'this is [not valid toml {{{');
+
+    const { text: listText } = await runRulesList();
+    expect(listText).toContain(
+      'overlay-relax command.git.safe_subcommands push — shared across every profile [common:policy.d/100-personal.toml]',
+    );
+    expect(listText).toContain('warning: profile layer rejected');
+    expect(listText).toContain('policy.toml');
+
+    const { text: doctorText, ok } = await runDoctor();
+    expect(ok).toBe(false);
+    expect(doctorText).toContain('profile layer rejected');
+    expect(doctorText).toContain('policy.toml');
+    expect(doctorText).toContain('common active');
+
+    const lint = await runRulesLint();
+    expect(lint.ok).toBe(false);
+    expect(lint.text).toContain('profile: rejected (policy.toml)');
+    expect(lint.text).toContain('common: active');
+  });
+
+  test('a broken common file rejects only common — the baseline-fallback rules stay in effect for what common WOULD have added, profile keeps enforcing', async () => {
     const box = await sandbox();
     await writeCommon(box, 'policy.toml', 'this is [not valid toml {{{');
     await writeProfile(box, 'policy.toml', '[[rules.command.bash]]\nid = "would-have-worked"\nregex = "x"\nreason = "test"\n');
 
     const loaded = await loadCurrentPolicy();
-    expect(loaded.overlayApplied).toBe(false);
-    expect(loaded.warnings.join(' ')).toContain('common:policy.toml');
+    expect(loaded.overlayApplied).toBe(true);
+    expect(loaded.warnings.join(' ')).toContain('common layer rejected');
+    expect(loaded.warnings.join(' ')).toContain('policy.toml');
+    expect(loaded.policy.command.bash.map((r) => r.id)).toContain('would-have-worked');
 
+    // The baseline's own rm_rf coverage is untouched either way — this
+    // just re-confirms enforcement never lapses while a layer is down.
     const { stdout } = await run(RM_RF_ENVELOPE);
     expect(JSON.parse(stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
+  });
+
+  test('each rejected layer writes its OWN policy-warning log entry, naming the layer and the file', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.toml', 'this is [not valid toml {{{');
+    await writeProfile(box, 'policy.toml', 'also [not valid toml {{{');
+
+    await run(RM_RF_ENVELOPE);
+
+    const logContent = await readFile(hookLogPath(HOOK_NAME), 'utf8');
+    const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
+    const warnings = lines.filter((l) => l.kind === 'policy-warning');
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((w) => w.message.startsWith('common layer rejected') && w.message.includes('policy.toml'))).toBe(true);
+    expect(warnings.some((w) => w.message.startsWith('profile layer rejected') && w.message.includes('policy.toml'))).toBe(true);
+  });
+});
+
+describe('loadCurrentPolicy(): migration guard — the interim profile→common symlink, any of its three forms (ADR-0001 § Rejection)', () => {
+  // Lead decision, review round 1: the guard checks BOTH the profile
+  // ROOT's realpath and its policy.d's realpath against the common
+  // root's (equal or descendant) — not just policy.d-to-policy.d. Two
+  // MORE link shapes pass the same test the profile:policy.toml shadows
+  // common:policy.toml case does: profile/policy.d -> the common ROOT
+  // (not common/policy.d), and the profile ROOT itself -> the common
+  // root. Whichever form matches, the WHOLE profile layer is dropped —
+  // no partial "keep the root policy.toml" carve-out (simpler, and
+  // doctor already screams until the link is gone).
+
+  test('profile/policy.d -> common/policy.d: the whole profile layer is dropped, doctor fails until the link is removed', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.d/100-shared.toml',
+      '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
+    // The interim mount this guard exists to catch: the profile's own
+    // policy.d IS (via a real symlink) the common root's policy.d — never
+    // created as a plain directory first.
+    await mkdir(box.profilePolicyDir, { recursive: true });
+    await symlink(join(box.commonPolicyDir, 'policy.d'), join(box.profilePolicyDir, 'policy.d'));
+
+    const loaded = await loadCurrentPolicy();
+    // The shared rule still loads exactly once, as "common" — never
+    // twice, never dropped outright.
+    expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
+    expect(loaded.warnings).toHaveLength(1);
+    expect(loaded.warnings[0]).toContain('profile policy resolves to the common root');
+    expect(loaded.warnings[0]).toContain('remove the link');
+
+    const { text, ok } = await runDoctor();
+    expect(ok).toBe(false);
+    expect(text).toContain('profile policy resolves to the common root');
+  });
+
+  test('profile/policy.d -> the common ROOT (not common/policy.d): still caught, whole profile layer dropped', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.d/100-shared.toml',
+      '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
+    await mkdir(box.profilePolicyDir, { recursive: true });
+    await symlink(box.commonPolicyDir, join(box.profilePolicyDir, 'policy.d'));
+
+    const loaded = await loadCurrentPolicy();
+    expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
+    expect(loaded.warnings).toHaveLength(1);
+    expect(loaded.warnings[0]).toContain('profile policy resolves to the common root');
+  });
+
+  test('the profile ROOT itself -> the common root (no policy.d segment at all): still caught, whole profile layer dropped', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.d/100-shared.toml',
+      '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
+    await mkdir(dirname(box.profilePolicyDir), { recursive: true });
+    await symlink(box.commonPolicyDir, box.profilePolicyDir);
+
+    const loaded = await loadCurrentPolicy();
+    expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
+    expect(loaded.warnings).toHaveLength(1);
+    expect(loaded.warnings[0]).toContain('profile policy resolves to the common root');
+  });
+
+  test('the profile root policy.toml is dropped too while the guard is up — no partial "keep the root file" carve-out', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.d/100-shared.toml',
+      '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
+    await mkdir(box.profilePolicyDir, { recursive: true });
+    await symlink(join(box.commonPolicyDir, 'policy.d'), join(box.profilePolicyDir, 'policy.d'));
+    await writeFile(join(box.profilePolicyDir, 'policy.toml'),
+      '[[rules.command.bash]]\nid = "profile-own-rule"\nregex = "x"\nreason = "test"\n', 'utf8');
+
+    const loaded = await loadCurrentPolicy();
+    expect(loaded.policy.command.bash.map((r) => r.id)).not.toContain('profile-own-rule');
+    expect(loaded.warnings).toHaveLength(1);
+    expect(loaded.warnings[0]).toContain('remove the link');
+  });
+
+  test('no symlink at all: the guard never fires, both layers load normally', async () => {
+    const box = await sandbox();
+    await writeCommon(box, 'policy.d/100-shared.toml',
+      '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
+    await writeProfile(box, 'policy.toml', '[[rules.command.bash]]\nid = "profile-rule"\nregex = "x"\nreason = "test"\n');
+
+    const loaded = await loadCurrentPolicy();
+    expect(loaded.warnings).toEqual([]);
+    expect(loaded.policy.command.bash.map((r) => r.id)).toEqual(expect.arrayContaining(['shared-rule', 'profile-rule']));
   });
 });
 

@@ -210,7 +210,7 @@ verdict = "confirm"         # "block" | "confirm" | "observe"
 `rule` not resolving to a known id, a missing/empty `reason`, an
 unrecognized `action`, `replace` without `regex`, or `relax` without a
 valid `verdict` — each independently fails lint and rejects the whole
-overlay.
+layer the override lives in (§ Fail-closed behavior below).
 
 ## `[[relax]]`: widen a pure allowlist
 
@@ -246,26 +246,76 @@ injected `regex`) is compiled and checked:
 
 ## Fail-closed behavior
 
-Any failure anywhere in the overlay — invalid TOML in any one file, a
-wrong-shaped table, a lint-failing regex, an unresolvable or reason-less
-`[[override]]`/`[[relax]]`, a malformed declarative git-conditional
-entry, a cross-file conflict (§ below) — rejects the **whole load**, in
-BOTH layers, not just the broken file or the broken layer. The embedded
-baseline stays fully active, and the rejection is a loud warning naming
-the specific file at fault: in the audit log (`kind: "policy-warning"`,
-see `docs/reference/audit-log.md`), in `bouncer rules lint`'s output, and
-in `bouncer doctor`'s `policy` check. Never partial application (a good
-`policy.d/10-npm.toml` sitting next to a broken `policy.d/20-bad.toml`
-does not apply on its own, and a broken common-layer file drops the
-profile layer too, not just its own), never a silent fallback. Per-layer
-rejection (a broken profile file no longer dropping the common layer's
-hardening) is a later ticket:
+Any failure in an overlay file — invalid TOML, a wrong-shaped table, a
+lint-failing regex, an unresolvable or reason-less `[[override]]`/
+`[[relax]]`, a malformed declarative git-conditional entry, a cross-file
+conflict (§ below) — rejects **its own layer**, not the whole load
+(ADR-0001 § Rejection): a good `policy.d/10-npm.toml` sitting next to a
+broken `policy.d/20-bad.toml` in the SAME layer still doesn't apply on
+its own (one bad file rejects the whole LAYER it lives in), but a broken
+common-layer file no longer drops the profile layer, and vice versa — the
+healthy layer stays fully active. Never partial application within a
+layer, never a silent fallback. Each rejected layer produces its own loud
+warning naming the layer and the specific file at fault: in the audit log
+(`kind: "policy-warning"`, one entry per rejected layer — see
+`docs/reference/audit-log.md`), in `bouncer rules lint`'s output, and in
+`bouncer doctor`'s `policy` check.
 
 ```
 $ bouncer rules lint
 lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
-  - overlay policy rejected — falling back to the embedded baseline: profile:policy.d/30-broken.toml: Failed to parse toml
+  - profile layer rejected — policy.d/30-broken.toml: Failed to parse toml
+  layers: common: active (4 files), profile: rejected (policy.d/30-broken.toml)
 ```
+
+The common layer's four files stay fully effective — only the profile
+layer, the one that actually broke, dropped out.
+
+**Both layers broken independently** produces two warnings, one per
+layer, and the embedded baseline runs alone:
+
+```
+$ bouncer rules lint
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - common layer rejected — policy.toml: Failed to parse toml
+  - profile layer rejected — policy.toml: Failed to parse toml
+  layers: common: rejected (policy.toml), profile: rejected (policy.toml)
+```
+
+**A profile `[[override]]` orphaned by a dropped common layer** is the
+one cascade: if the override's target rule lived only in a common-layer
+file that just got rejected, the override no longer resolves to anything.
+That is a SEPARATE fault in the profile file (not the common one), so the
+profile layer is rejected too — never a partial profile that silently
+lost the override it depended on. The baseline runs alone, with two
+warnings: one naming the common file that broke, one naming the profile
+file whose override no longer resolves.
+
+### Migration guard
+
+One more fail-closed case, adapter-specific rather than a broken file:
+when the profile ROOT (`<configDir>/bouncer`), or its `policy.d`
+directory, resolves — by `realpath`, following any symlink — to the
+common root or somewhere under it, the WHOLE profile layer is dropped
+(no partial "keep the root `policy.toml`" carve-out — simpler, and
+`doctor` already fails until the link is gone either way). Three shapes
+all trigger it: `<configDir>/bouncer/policy.d` linked straight to
+`~/.agents/bouncer/policy.d`, that same `policy.d` linked to the common
+ROOT instead, or `<configDir>/bouncer` itself linked to the common root
+with no `policy.d` segment at all. This is the interim per-profile mount
+some deployments used before this adapter read the common layer
+natively; left in place, the same files would load twice — once as
+"common", once as "profile" through the link — identical effect, lying
+provenance. The warning names the real linked path:
+
+```
+$ bouncer doctor
+[fail] policy — profile policy resolves to the common root (/path/to/.agents/bouncer) — remove the link (rm /path/to/.claude/bouncer/policy.d)
+```
+
+`SessionStart` repeats this warning every session until the link is
+actually removed — an absent `policy.d` afterward is simply an empty
+profile layer, the normal unconfigured case.
 
 ## Merge order
 
@@ -345,8 +395,14 @@ not a conflict — see § Precedence above):
 ```
 $ bouncer rules lint
 lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
-  - overlay policy rejected — falling back to the embedded baseline: conflicting [[override]] for rule "curl-file-upload" in profile:policy.d/20-relax.toml and profile:policy.d/30-conflict.toml
+  - profile layer rejected — conflicting [[override]] for rule "curl-file-upload" in profile:policy.d/20-relax.toml and profile:policy.d/30-conflict.toml
+  layers: common: active (4 files), profile: rejected (profile)
 ```
+
+A same-layer conflict names two files, not one — the layer as a whole is
+what's at fault, so `layers:`'s per-layer file pointer falls back to
+naming the layer itself; the full conflict message (both filenames) still
+appears in the warning line above.
 
 Multiple entries for the same target WITHIN one file are unaffected —
 that's existing, single-file behavior (sequential override chaining,
@@ -360,11 +416,10 @@ applies to BOTH rows, in the same file or not. Stated as the batch
 semantics it is, not a bug: `[[override]]` never resolves to "exactly
 one" row, only to "every row currently carrying this id".
 
-Fail-closed rejection itself stays collective across BOTH layers, not
-just within one — a broken file in EITHER layer rejects the whole
-overlay (baseline alone stays active), exactly like a broken file within
-a single set today. Per-layer rejection (a broken profile file no longer
-dropping the common layer's hardening) is a later ticket.
+Fail-closed rejection is per LAYER (ADR-0001 § Rejection): a broken file
+in one layer rejects that layer alone, exactly like a broken file within
+a single layer's own file set — see § Fail-closed behavior above for the
+full rejection matrix and the migration guard.
 
 ## Provenance: which layer, and which file, a rule came from
 

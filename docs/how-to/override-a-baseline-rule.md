@@ -108,8 +108,9 @@ lint:
 
 ```sh
 $ bouncer rules lint
-lint: FAILED (/path/to/policy.toml)
-  - overlay policy rejected — falling back to the embedded baseline: override rule "rm-rf-dangerous" does not resolve to any known rule id
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - profile layer rejected — policy.toml: override rule "rm-rf-dangerous" does not resolve to any known rule id
+  layers: common: active (0 files), profile: rejected (policy.toml)
 ```
 
 Each is governed by its own named TOML table instead:

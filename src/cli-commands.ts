@@ -88,8 +88,21 @@ export async function runRulesLint(): Promise<CommandResult> {
   // Names EVERY layer's root (not just the profile's) — a broken common-
   // layer file used to point the user at the profile paths only.
   const roots = loaded.layers.map((l) => `${l.name}: ${l.root ?? 'absent'}`).join(', ');
+  // ADR-0001 § Rejection, per layer: which layer(s) actually survive the
+  // load, not just which file(s) broke — a rejected profile next to a
+  // healthy common still has common's rules and relaxations effective,
+  // and this line is where that becomes visible without re-deriving it
+  // from `warnings`' free text. `absent` mirrors the `roots` line above
+  // (LayerInfo.root undefined, never merely zero files).
+  const layerStates = loaded.layers
+    .map((l) => {
+      if (l.rejected !== undefined) return `${l.name}: rejected (${l.rejected.file})`;
+      if (l.root === undefined) return `${l.name}: absent`;
+      return `${l.name}: active (${l.files.length} files)`;
+    })
+    .join(', ');
   return {
-    text: [`lint: FAILED (${roots})`, ...loaded.warnings.map((w) => `  - ${w}`)].join('\n'),
+    text: [`lint: FAILED (${roots})`, ...loaded.warnings.map((w) => `  - ${w}`), `  layers: ${layerStates}`].join('\n'),
     ok: false,
   };
 }

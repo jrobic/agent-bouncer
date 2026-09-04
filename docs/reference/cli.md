@@ -119,8 +119,9 @@ layer, `~/.agents/bouncer/`, then the profile layer, `<configDir>/bouncer/`
 the RE2-like regex dialect and the `[[override]]`/`[[relax]]` resolution,
 shape, precedence, and cross-file conflict rules — see
 `docs/reference/policy.md`. On success, names every file that was
-actually merged in, per layer; on failure, the warning line names the
-one file that broke the whole load (either layer).
+actually merged in, per layer; on failure (ADR-0001 § Rejection: per
+layer), one warning line per rejected layer names the file that broke it,
+and a trailing `layers:` line says which layer(s) survived.
 
 ```sh
 bouncer rules lint
@@ -142,13 +143,24 @@ lint: OK (overlay: common/policy.d/100-personal.toml, profile/policy.toml, profi
 
 $ bouncer rules lint
 lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
-  - overlay policy rejected — falling back to the embedded baseline: profile:policy.d/20-broken.toml: Failed to parse toml
+  - profile layer rejected — policy.d/20-broken.toml: Failed to parse toml
+  layers: common: active (4 files), profile: rejected (policy.d/20-broken.toml)
+
+$ bouncer rules lint
+lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bouncer)
+  - common layer rejected — policy.toml: Failed to parse toml
+  - profile layer rejected — policy.toml: Failed to parse toml
+  layers: common: rejected (policy.toml), profile: rejected (policy.toml)
 ```
 
 The `FAILED` line names BOTH layers' roots (`common: <root>` is `absent`
-when that directory does not exist at all) — a broken file in the common
-layer used to only ever point the user at the profile's paths; now
-either layer's root is visible regardless of which one broke.
+when that directory does not exist at all) — either layer's root is
+visible regardless of which one broke. Rejection is per layer (ADR-0001
+§ Rejection): the first example above has a broken profile file next to
+a fully healthy common layer — common's 4 files stay effective, only the
+`layers:` line's `profile: rejected` changes anything. The second
+example is both layers independently broken, one warning each, and the
+embedded baseline runs alone.
 
 An absent common layer (no `~/.agents/bouncer/` at all — a fresh install,
 or a workstation not opted into the shared common convention) is never a
@@ -243,6 +255,34 @@ The `policy` line's trailing `; common: N files, profile: M files`
 a count when the common layer contributed zero files (a fresh install
 with no `~/.agents/bouncer/`, or a workstation not opted into it). Never
 a failure either way.
+
+**Per-layer rejection (ADR-0001 § Rejection):** a broken file in one
+layer fails the `policy` check but names ONLY that layer — the other, if
+healthy, is reported as still active, and the effective-rule/file counts
+stay present on this path too:
+
+```
+[fail] policy — overlay active — common active (4 files) ; profile layer rejected (policy.d/20-broken.toml: Failed to parse toml) (4 effective rules; common: 4 files, profile: 1 files)
+```
+
+Both layers independently broken collapses to the embedded baseline
+alone — the difference from an unconfigured account is the leading
+clause: "baseline active (every layer rejected)" rather than "baseline
+only (no overlay configured)", since something WAS configured here and
+fell, on both sides:
+
+```
+[fail] policy — baseline active (every layer rejected) — common layer rejected (policy.toml: Failed to parse toml) ; profile layer rejected (policy.toml: Failed to parse toml) (4 effective rules; common: 1 files, profile: 1 files)
+```
+
+**Migration guard:** the interim per-profile symlink (`policy.d`, or the
+whole profile root) some deployments used before this adapter read the
+common layer natively — see `docs/reference/policy.md` § Migration
+guard — fails `policy` too, until the link is removed:
+
+```
+[fail] policy — overlay active (47 effective rules; common: 4 files, profile: 0 files) — profile policy resolves to the common root (/path/to/.agents/bouncer) — remove the link (rm /path/to/.claude/bouncer/policy.d)
+```
 
 **Exit code:** 0 when every check passes; 1 when any fails. An active
 override/relaxation alone does not fail the exit code — it's sovereign,

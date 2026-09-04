@@ -1,10 +1,11 @@
 // The named-layers engine seam (ticket 20, ADR-0001): loadPolicyFromLayers
 // receives layers in PRECEDENCE order (later wins) and owns cross-layer
-// precedence, provenance, and (still collective — ticket 21 makes it
-// per-layer) rejection. Every case here names an observed property at
-// that boundary, not internal structure — complements
-// tests/policy-load-multifile.test.ts (the single, unnamed-layer seam,
-// unchanged by this ticket).
+// precedence, provenance, and (ticket 21) PER-LAYER rejection — a fault
+// in one layer's files drops that layer alone, the other keeps running.
+// Every case here names an observed property at that boundary, not
+// internal structure — complements tests/policy-load-multifile.test.ts
+// (the single, unnamed-layer seam, where "the layer" and "the whole set"
+// are the same thing).
 
 import { describe, expect, test } from 'bun:test';
 import { loadPolicyFromLayers, type NamedLayer, type OverlayFile } from '../src/policy/load.ts';
@@ -213,7 +214,7 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
     expect(result.warnings.join(' ')).toContain('profile:policy.d/20-b.toml');
   });
 
-  test('two common files sharing a regex id is rejected even though the profile layer is clean', () => {
+  test('two common files sharing a regex id rejects ONLY the common layer (ticket 21) — the clean profile file stays active', () => {
     const result = loadPolicyFromLayers([
       layer('common', [
         file('policy.d/10-a.toml', '[[rules.command.bash]]\nid = "dup"\nregex = "a"\nreason = "test"\n'),
@@ -221,9 +222,20 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
       ]),
       layer('profile', [file('policy.toml', '[[rules.command.bash]]\nid = "fine"\nregex = "fine"\nreason = "test"\n')]),
     ]);
-    expect(result.overlayApplied).toBe(false);
+    // The profile layer never contained the conflict — its own clean file
+    // still merges in, per-layer rejection (ADR-0001 § Rejection).
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.command.bash.map((r) => r.id)).toContain('fine');
+    expect(result.policy.command.bash.map((r) => r.id)).not.toContain('dup');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('common layer rejected');
     expect(result.warnings.join(' ')).toContain('common:policy.d/10-a.toml');
     expect(result.warnings.join(' ')).toContain('common:policy.d/20-b.toml');
+    // A same-layer conflict names TWO files, not one — LayerRejectionInfo
+    // has no single "the" file to point at, so it falls back to naming
+    // the layer itself; the fuller `reason` text still names both files.
+    expect(result.layers.find((l) => l.name === 'common')?.rejected?.file).toBe('common');
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected).toBeUndefined();
   });
 
   test('two profile files [[relax]]ing the same list+value is rejected, common is unaffected by the check', () => {
@@ -255,26 +267,74 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
   });
 });
 
-describe('loadPolicyFromLayers: rejection stays collective across layers (ticket 21 makes it per-layer)', () => {
-  test('a broken file in the COMMON layer rejects the profile layer too, baseline alone stays active', () => {
+describe('loadPolicyFromLayers: per-layer rejection matrix (ticket 21, ADR-0001 § Rejection)', () => {
+  test('common broken, profile clean: the common layer drops, the profile rule stays effective', () => {
     const result = loadPolicyFromLayers([
       layer('common', [file('policy.toml', 'this is [not valid toml {{{')]),
       layer('profile', [file('policy.toml', '[[rules.command.bash]]\nid = "would-have-worked"\nregex = "x"\nreason = "test"\n')]),
     ]);
-    expect(result.overlayApplied).toBe(false);
-    expect(result.warnings.join(' ')).toContain('common:policy.toml');
-    expect(result.policy.command.bash.map((r) => r.id)).not.toContain('would-have-worked');
-    expect(result.layers).toEqual([{ name: 'common', files: ['policy.toml'] }, { name: 'profile', files: ['policy.toml'] }]);
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.command.bash.map((r) => r.id)).toContain('would-have-worked');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('common layer rejected — policy.toml:');
+    expect(result.layers).toEqual([
+      { name: 'common', files: ['policy.toml'], rejected: expect.objectContaining({ file: 'policy.toml' }) },
+      { name: 'profile', files: ['policy.toml'] },
+    ]);
   });
 
-  test('a broken file in the PROFILE layer rejects the common layer\'s otherwise-valid relax too', () => {
+  test('profile broken, common clean: the profile layer drops, the common relax stays effective', () => {
     const result = loadPolicyFromLayers([
       layer('common', [file('policy.toml', '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "test"\n')]),
       layer('profile', [file('policy.toml', 'this is [not valid toml {{{')]),
     ]);
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.command.git.safe_subcommands).toContain('push');
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('profile layer rejected — policy.toml:');
+    expect(result.layers.find((l) => l.name === 'common')?.rejected).toBeUndefined();
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected?.file).toBe('policy.toml');
+  });
+
+  test('both layers independently broken: each names its own file, baseline runs alone', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', 'this is [not valid toml {{{')]),
+      layer('profile', [file('policy.toml', 'also [not valid toml {{{')]),
+    ]);
     expect(result.overlayApplied).toBe(false);
-    expect(result.warnings.join(' ')).toContain('profile:policy.toml');
-    expect(result.policy.command.git.safe_subcommands).not.toContain('push');
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings.join(' | ')).toContain('common layer rejected — policy.toml:');
+    expect(result.warnings.join(' | ')).toContain('profile layer rejected — policy.toml:');
+    expect(result.layers.find((l) => l.name === 'common')?.rejected?.file).toBe('policy.toml');
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected?.file).toBe('policy.toml');
+  });
+
+  test('profile [[override]] orphaned by a dropped common layer: the profile layer is rejected too, baseline runs alone', () => {
+    // The rule this override targets lives ONLY in common's own overlay
+    // (not the baseline) — once common is dropped for its OWN fault, the
+    // override no longer resolves to anything, which is a SEPARATE
+    // reason the profile layer goes down too (never a partial profile).
+    const result = loadPolicyFromLayers([
+      layer('common', [
+        file(
+          'policy.toml',
+          '[[rules.command.bash]]\nid = "common-only-rule"\nregex = "x"\nreason = "test"\n\nthis is [not valid toml {{{',
+        ),
+      ]),
+      layer('profile', [
+        file('policy.toml', '[[override]]\nrule = "common-only-rule"\naction = "disable"\nreason = "orphaned once common falls"\n'),
+      ]),
+    ]);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings).toHaveLength(2);
+    const commonWarning = result.warnings.find((w) => w.startsWith('common layer rejected'));
+    const profileWarning = result.warnings.find((w) => w.startsWith('profile layer rejected'));
+    expect(commonWarning).toBeDefined();
+    expect(profileWarning).toBeDefined();
+    expect(profileWarning).toContain('common-only-rule');
+    expect(profileWarning).toContain('does not resolve');
+    expect(result.layers.find((l) => l.name === 'common')?.rejected).toBeDefined();
+    expect(result.layers.find((l) => l.name === 'profile')?.rejected).toBeDefined();
   });
 });
 

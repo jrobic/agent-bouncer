@@ -12,6 +12,15 @@ import type { OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
 
 export interface LintIssue {
   readonly message: string;
+  // The source entry's own layer/file (ADR-0001 § Rejection) — set by the
+  // functions below directly from the FileTagged/EffectiveRule entry
+  // they're already iterating (never derived from `message`), so a
+  // consumer needing to attribute this issue to a layer never has to
+  // parse it back out. Absent for a caller that passes entries with no
+  // `.layer` of their own (lintPolicyFile's synthetic single-file case,
+  // tests/policy-lint-filenames.test.ts's bare literals).
+  readonly layer?: string;
+  readonly file?: string;
 }
 
 // `(?=`, `(?!` — lookahead. `(?<=`, `(?<!` — lookbehind.
@@ -133,8 +142,9 @@ export function lintEffectiveDialect(effective: readonly EffectiveRule[]): LintI
   const issues: LintIssue[] = [];
   for (const entry of effective) {
     const prefix = entry.sourceFile !== undefined ? `${entry.sourceFile}: ` : '';
+    const tag = entry.layer !== undefined && entry.sourceFile !== undefined ? { layer: entry.layer, file: entry.sourceFile } : {};
     for (const issue of lintOneRule(entry.family, entry.rule)) {
-      issues.push({ message: `${prefix}${issue.message}` });
+      issues.push({ message: `${prefix}${issue.message}`, ...tag });
     }
   }
   return issues;
@@ -155,30 +165,37 @@ export function lintOverrides(
   resolvable: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
-  for (const { filename, raw: override } of overrides) {
+  for (const { filename, raw: override, layer } of overrides) {
     const prefix = `${filename}: `;
+    // This entry's own layer/file (ADR-0001 § Rejection) — attached to
+    // EVERY issue this iteration pushes, straight from data already in
+    // hand, not derived from `message`.
+    const tag = layer !== undefined ? { layer, file: filename } : {};
     if (!override.reason || override.reason.trim() === '') {
-      issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)}: reason must not be empty` });
+      issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)}: reason must not be empty`, ...tag });
     }
     if (!resolvable.has(override.rule)) {
       issues.push({
         message: `${prefix}override rule ${JSON.stringify(override.rule)} does not resolve to any known rule id`,
+        ...tag,
       });
     }
     if (!VALID_ACTIONS.has(override.action)) {
       issues.push({
         message: `${prefix}override on ${JSON.stringify(override.rule)}: action ${JSON.stringify(override.action)} `
           + `is not one of disable/replace/relax`,
+        ...tag,
       });
     }
     if (override.action === 'replace') {
       if (override.regex === undefined || override.regex.trim() === '') {
         issues.push({
           message: `${prefix}override on ${JSON.stringify(override.rule)}: action "replace" requires a "regex" field`,
+          ...tag,
         });
       } else {
         for (const issue of lintRegexSource(override.regex)) {
-          issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)} (regex): ${issue.message}` });
+          issues.push({ message: `${prefix}override on ${JSON.stringify(override.rule)} (regex): ${issue.message}`, ...tag });
         }
       }
     }
@@ -186,11 +203,13 @@ export function lintOverrides(
       if (override.verdict === undefined) {
         issues.push({
           message: `${prefix}override on ${JSON.stringify(override.rule)}: action "relax" requires a "verdict" field`,
+          ...tag,
         });
       } else if (!VALID_VERDICTS.has(override.verdict)) {
         issues.push({
           message: `${prefix}override on ${JSON.stringify(override.rule)}: verdict ${JSON.stringify(override.verdict)} `
             + `is not one of block/confirm/observe`,
+          ...tag,
         });
       }
     }
@@ -342,11 +361,12 @@ export function lintGitConditionalRelaxation(
   governedSubs: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
-  for (const { filename, raw: e } of entries) {
+  for (const { filename, raw: e, layer } of entries) {
     if (governedSubs.has(e.sub) && (!e.reason || e.reason.trim() === '')) {
       issues.push({
         message: `${filename}: command.git.${table}: overlay entry for sub ${JSON.stringify(e.sub)} substitutes a `
           + `baseline-governed subcommand and can only relax its behavior — "reason" must not be empty`,
+        ...(layer !== undefined ? { layer, file: filename } : {}),
       });
     }
   }

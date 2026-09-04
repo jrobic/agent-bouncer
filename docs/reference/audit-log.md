@@ -54,13 +54,15 @@ active — a healthy, unmodified baseline account never gets one.
 
 ## Policy-warning entry
 
-Written once per warning: when the current overlay was rejected (see
-`docs/reference/policy.md`'s fail-closed behavior), when a dispatch
-throw forced a retry against the embedded baseline, or when the
-`SessionStart` doctor check itself failed and fell back to silence.
+Written once per warning: one entry per REJECTED LAYER (ADR-0001
+§ Rejection — a broken common file and a broken profile file each get
+their own entry, naming their own layer and file), one for the migration
+guard (see `docs/reference/policy.md`'s fail-closed behavior), one when a
+dispatch throw forced a retry against the embedded baseline, or one when
+the `SessionStart` doctor check itself failed and fell back to silence.
 
 ```json
-{"timestamp":"2026-08-17T08:57:04.656Z","kind":"policy-warning","message":"overlay policy rejected — falling back to the embedded baseline: Failed to parse toml"}
+{"timestamp":"2026-08-17T08:57:04.656Z","kind":"policy-warning","message":"profile layer rejected — policy.d/20-broken.toml: Failed to parse toml"}
 ```
 
 | Field | Type | Notes |

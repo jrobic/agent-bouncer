@@ -277,29 +277,65 @@ function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): D
 // specifically means the layer's ROOT DIRECTORY does not exist on disk
 // (LayerInfo.root undefined), never merely "zero files": a root that
 // exists but happens to be empty is a real, distinct, reachable state
-// ("profile: 0 files") and must not collapse into "absent" too. A
-// directly constructed LoadResult fixture with an empty `layers` array
-// (as several doctor tests use, to test other checks in isolation)
-// renders no suffix at all — the pre-ticket-20 message, unchanged.
+// ("profile: 0 files") and must not collapse into "absent" too. An empty
+// `layers` array (no per-layer information at all in this LoadResult)
+// renders no suffix — nothing to name.
 function layerCountSuffix(loaded: LoadResult): string {
   const parts = loaded.layers.map((l) => (l.root === undefined ? `${l.name}: absent` : `${l.name}: ${l.files.length} files`));
   return parts.length > 0 ? `; ${parts.join(', ')}` : '';
 }
 
+// The leading "overlay active"/"baseline active (every layer rejected)"/
+// "baseline only" clause every policy message opens with, healthy or
+// not. Three states: an overlay that genuinely never existed ("no
+// overlay configured") and one that existed but got entirely rejected
+// ("every layer rejected") are DIFFERENT stories a human debugging this
+// needs told apart; both happen to leave `overlayApplied` false, so that
+// alone can't distinguish them — `warnings.length > 0` is what actually
+// separates "nothing was ever there" from "something was there and
+// fell" (a rejected layer always leaves at least one warning; see
+// src/policy/load.ts's warningsFor and the migration guard,
+// src/adapter/policy.ts, which also warns without necessarily marking a
+// layer `rejected`).
+function policyStateSuffix(loaded: LoadResult): string {
+  if (loaded.overlayApplied) return 'overlay active';
+  if (loaded.warnings.length > 0) return 'baseline active (every layer rejected)';
+  return 'baseline only (no overlay configured)';
+}
+
+// Every layer's own state, one entry per `loaded.layers` — `absent`
+// mirrors layerCountSuffix's own rule (LayerInfo.root undefined, not
+// merely zero files): "common: absent" belongs on every output this
+// module produces, not only the pass path's layerCountSuffix.
+function layerStateParts(loaded: LoadResult): string[] {
+  return loaded.layers.map((l) => {
+    if (l.rejected !== undefined) return `${l.name} layer rejected (${l.rejected.file}: ${l.rejected.reason})`;
+    if (l.root === undefined) return `${l.name}: absent`;
+    return `${l.name} active (${l.files.length} files)`;
+  });
+}
+
 function checkPolicy(loaded: LoadResult): DoctorCheck {
-  if (loaded.warnings.length > 0) {
-    return {
-      id: 'policy',
-      ok: false,
-      message: `baseline active (overlay rejected) — ${loaded.warnings.join('; ')}`,
-    };
+  const tail = `(${loaded.effectiveRules.length} effective rules${layerCountSuffix(loaded)})`;
+  const rejectedLayers = loaded.layers.filter((l) => l.rejected !== undefined);
+  if (rejectedLayers.length > 0) {
+    // ADR-0001 § Rejection, per layer: name which layer(s) fell and which
+    // survived — a surviving layer next to a rejected one still has its
+    // own rules and relaxations in effect, so `policyStateSuffix` alone
+    // is never enough; the counters + effective rule count stay present
+    // on this path too, not just the pass path.
+    return { id: 'policy', ok: false, message: `${policyStateSuffix(loaded)} — ${layerStateParts(loaded).join(' ; ')} ${tail}` };
   }
-  const suffix = loaded.overlayApplied ? 'overlay active' : 'baseline only (no overlay configured)';
-  return {
-    id: 'policy',
-    ok: true,
-    message: `${suffix} (${loaded.effectiveRules.length} effective rules${layerCountSuffix(loaded)})`,
-  };
+  if (loaded.warnings.length > 0) {
+    // A warning with no layer marked `rejected` at all — the migration
+    // guard (src/adapter/policy.ts) is the only production source of
+    // this shape: it warns without dropping a specific FILE, so no
+    // `LayerInfo.rejected` gets set. The load may still be (partially)
+    // applied either way — `policyStateSuffix` says which, never a
+    // hardcoded "baseline active" that would lie when it's not.
+    return { id: 'policy', ok: false, message: `${policyStateSuffix(loaded)} ${tail} — ${loaded.warnings.join('; ')}` };
+  }
+  return { id: 'policy', ok: true, message: `${policyStateSuffix(loaded)} ${tail}` };
 }
 
 async function fileExists(path: string): Promise<boolean> {

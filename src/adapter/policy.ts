@@ -22,13 +22,19 @@
 // proved it exists, so it is never `optional`: ANY subsequent read
 // failure (permission denied, a broken symlink, a directory entry, a
 // TOCTOU race where it vanished between readdir and readFile — even
-// ENOENT) is reported as a `readError`, which src/policy/load.ts turns
-// into a collective rejection naming the file. A file readdir proved
-// present has no license to silently vanish.
+// ENOENT) is reported as a `readError`, which src/policy/load.ts rejects
+// that file's whole LAYER over (ticket 21), naming the file. A file
+// readdir proved present has no license to silently vanish.
+//
+// Migration guard (ADR-0001 § Rejection, ticket 21): this module also owns
+// the ONE realpath check that has nothing to do with a broken file — the
+// interim per-profile symlink (dotfiles ADR-0004) that used to make
+// the common layer reachable before this native read existed. See
+// migrationGuardWarning below.
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { loadPolicyFromLayers, type LoadResult, type NamedLayer, type OverlayFile } from '../policy/load.ts';
 import { configDir } from './log-path.ts';
 
@@ -151,6 +157,54 @@ function namedLayer(name: string, read: LayerRead): NamedLayer {
   return { name, ...(read.root !== undefined ? { root: read.root } : {}), files: read.files };
 }
 
+// `undefined` (never a thrown error) for a path that doesn't resolve at
+// all — the normal case for a profile root/`policy.d` that isn't a link,
+// or a common root nobody has set up on this machine.
+async function tryRealpath(path: string): Promise<string | undefined> {
+  try {
+    return await realpath(path);
+  } catch {
+    return undefined;
+  }
+}
+
+// ADR-0001 § Rejection, migration guard: the interim per-profile symlink
+// (dotfiles ADR-0004) pointed `<configDir>/bouncer/policy.d` AT
+// `~/.agents/bouncer/policy.d` directly, before this module's native
+// common-layer read existed — the SAME mount also shows up as the
+// profile ROOT itself being the link (`<configDir>/bouncer` -> the
+// common root, no `policy.d` segment at all). Either shape loads the
+// same files TWICE — once as "common", once as "profile" through the
+// link, under a different qualified name each time (`profile:policy.toml
+// shadows common:policy.toml`) — identical effective policy, lying
+// provenance, exactly what this guard exists to kill. Checked by
+// REALPATH, never a string compare of the configured paths themselves (a
+// relative symlink, an extra hop, or two paths that just happen to
+// differ textually while resolving to the same inode would all slip past
+// that): when the profile ROOT's real path, OR its `policy.d`'s real
+// path, IS the common root's real path or lives under it (equal or
+// descendant), the WHOLE profile layer is dropped — not just `policy.d`;
+// a profile root that's itself the link has nothing of its own left to
+// keep. Neither candidate resolving at all (the common convention
+// unused on this machine, or a fresh profile with nothing linked) is
+// never a match — returns null, silently, the same "absent is normal"
+// discipline every other output in this module already has.
+async function migrationGuardWarning(): Promise<string | null> {
+  const candidates = [profileRoot(), join(profileRoot(), 'policy.d')];
+  const [commonReal, candidateReals] = await Promise.all([
+    tryRealpath(commonRoot()),
+    Promise.all(candidates.map(tryRealpath)),
+  ]);
+  if (commonReal === undefined) return null; // no common root at all — nothing to guard against
+  for (const [i, candidateReal] of candidateReals.entries()) {
+    if (candidateReal === undefined) continue; // this candidate doesn't exist
+    if (candidateReal === commonReal || candidateReal.startsWith(`${commonReal}${sep}`)) {
+      return `profile policy resolves to the common root (${commonReal}) — remove the link (rm ${candidates[i]})`;
+    }
+  }
+  return null;
+}
+
 /**
  * Reads and loads the effective, layered policy (ADR-0001) — the common
  * layer (commonRoot()) then the profile layer (profileRoot()), merged
@@ -160,14 +214,25 @@ function namedLayer(name: string, read: LayerRead): NamedLayer {
  * warning — an absent overlay (or an absent common layer alone) is the
  * normal, unconfigured case, not a failure. A `policy.d/*.toml` entry
  * that exists per `readdir` but fails to read is NOT dropped silently —
- * it flows through as a `readError` that src/policy/load.ts rejects the
- * whole load over, naming the file.
+ * it flows through as a `readError` that src/policy/load.ts rejects that
+ * file's layer over (ticket 21), naming the file.
+ *
+ * When the migration guard fires (migrationGuardWarning), the WHOLE
+ * profile layer is excluded from what's given to the engine — its files
+ * are still read off disk above (so `LayerInfo.root`/file count stay
+ * accurate), just dropped before merge — and the guard's own message is
+ * appended to `warnings` (which is what makes `doctor`/`rules lint` fail
+ * on it, same as any other warning; see log.ts's logPolicyWarnings for
+ * how it reaches the audit log).
  */
 export async function loadCurrentPolicy(): Promise<LoadResult> {
-  const [common, profile] = await Promise.all([
+  const [common, profile, migrationWarning] = await Promise.all([
     readLayer(commonRoot()),
     readLayer(profileRoot()),
+    migrationGuardWarning(),
   ]);
-  const layers: readonly NamedLayer[] = [namedLayer('common', common), namedLayer('profile', profile)];
-  return loadPolicyFromLayers(layers);
+  const effectiveProfile: LayerRead = migrationWarning === null ? profile : { ...profile, files: [] };
+  const layers: readonly NamedLayer[] = [namedLayer('common', common), namedLayer('profile', effectiveProfile)];
+  const result = loadPolicyFromLayers(layers);
+  return migrationWarning === null ? result : { ...result, warnings: [...result.warnings, migrationWarning] };
 }
