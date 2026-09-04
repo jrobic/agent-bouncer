@@ -182,6 +182,24 @@ describe('command-rules: BASH_RULES', () => {
     expect(deny?.ruleId).toBe('process-substitution-download');
   });
 
+  test('ruleId publish: npm publish asks', () => {
+    const confirm = checkBash('npm publish');
+    expect(confirm?.ruleId).toBe('publish');
+    expect(confirm?.verdict).toBe('confirm');
+  });
+
+  test('ruleId forge-api-write: gh api POST asks', () => {
+    const confirm = checkBash('gh api -X POST repos/x/y/issues');
+    expect(confirm?.ruleId).toBe('forge-api-write');
+    expect(confirm?.verdict).toBe('confirm');
+  });
+
+  test('ruleId base64-decode-exec: decoded payload piped to sh is denied', () => {
+    const deny = checkBash('echo cm0gLXJmIC8= | base64 -d | sh');
+    expect(deny?.ruleId).toBe('base64-decode-exec');
+    expect(deny?.verdict).toBe('block');
+  });
+
   test('ruleId fd-exec-destructive: fd -x rm asks', () => {
     const confirm = checkBash('fd -e log -x rm');
     expect(confirm?.ruleId).toBe('fd-exec-destructive');

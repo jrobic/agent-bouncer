@@ -155,6 +155,27 @@ regex = "\\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+"
 reason = "rg preprocessor runs an arbitrary command for each searched file"
 verdict = "confirm"
 
+# Ticket 30: confirm rather than block — publishing is intentional only after a human checks the target.
+[[rules.command.bash]]
+id = "publish"
+regex = "\\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+create\\b"
+except = "^\\s*(?:npm|pnpm|yarn)\\s+publish\\s+--dry-run\\s*$"
+reason = "Publishing sends a package or artifact to a public registry"
+verdict = "confirm"
+
+# Ticket 30: confirm rather than block — forge API writes can be intended but affect remote state.
+[[rules.command.bash]]
+id = "forge-api-write"
+regex = "\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b"
+reason = "gh or glab API request mutates remote forge state"
+verdict = "confirm"
+
+[[rules.command.bash]]
+id = "base64-decode-exec"
+regex = "\\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b"
+reason = "Decoded payload piped directly into a shell or interpreter"
+
+
 [rules.command.rm_rf]
 # The `rm -rf` blocklist: each entry is a regex the rm target must NOT
 # match. A target that matches none of them (node_modules, dist, .next,

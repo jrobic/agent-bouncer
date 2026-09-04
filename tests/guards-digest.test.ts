@@ -160,6 +160,9 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '18 find-exec-destructive \\bfind\\b[^|;&\\n]*\\s(?:-delete\\b|(?:-exec|-execdir|-ok)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b) ',
   '19 xargs-destructive \\b(?:xargs|parallel)\\b[^|;&\\n]*\\s(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b ',
   '20 rg-pre-exec \\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+ ',
+  '21 publish \\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+create\\b ',
+  '22 forge-api-write \\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b ',
+  '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Five entries, each with its own
@@ -210,7 +213,7 @@ const EXPECTED_PROMPT_DIGEST: readonly string[] = [
 ];
 
 describe('guards-digest: tamper lock — the four tabular guards', () => {
-  test('command.bash matches the frozen ordered digest (17 regex entries)', () => {
+  test('command.bash matches the frozen ordered digest (24 regex entries)', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 

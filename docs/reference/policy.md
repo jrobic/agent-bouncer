@@ -74,6 +74,8 @@ Every entry in the five regex tables below shares this shape:
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
 
+The command baseline also confirms outbound `publish` actions (package registries, Docker images, and `gh`/`glab` releases) and `forge-api-write` actions (a mutating HTTP verb or body-field flag on `gh api`/`glab api`). `forge-api-write` deliberately confirms `gh api graphql -f query=...` reads: flag-only matching cannot distinguish their query body from a mutation. `base64-decode-exec` blocks Base64, `xxd -r`, or `openssl enc -d` output piped directly into a shell or interpreter.
+
 
 ### Known limits
 

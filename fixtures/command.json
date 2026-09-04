@@ -1946,6 +1946,411 @@
       "expected": [],
       "knownLimit": true,
       "knownLimitReason": "the hex-encoded payload never appears as literal rm -rf text for the matcher to see"
+    },
+    {
+      "id": "publish-npm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "npm publish"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-pnpm-public",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "pnpm publish --access public"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-yarn",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "yarn publish"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-cargo",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cargo publish"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-gem",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gem push x.gem"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-poetry",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "poetry publish"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-twine",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "twine upload dist/*"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-docker",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker push repo/img:tag"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-gh-release",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release create v1.0.0"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-glab-release",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "glab release create v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-gh-post",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api -X POST repos/x/y/issues"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-gh-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api --method DELETE repos/x/y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-gh-field-short",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api repos/x/y -f name=z"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-gh-field-file",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api -F body=@f repos/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-gh-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api --input body.json repos/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "forge-api-glab-put",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "glab api -X PUT projects/1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ]
+    },
+    {
+      "id": "publish-npm-dry-run",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "npm publish --dry-run"
+      },
+      "expected": []
+    },
+    {
+      "id": "publish-npm-pack",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "npm pack"
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-build",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker build ."
+      },
+      "expected": []
+    },
+    {
+      "id": "docker-pull",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker pull x"
+      },
+      "expected": []
+    },
+    {
+      "id": "gh-release-list",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release list"
+      },
+      "expected": []
+    },
+    {
+      "id": "gh-release-view",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release view v1"
+      },
+      "expected": []
+    },
+    {
+      "id": "forge-api-gh-get",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api repos/x/y"
+      },
+      "expected": []
+    },
+    {
+      "id": "forge-api-gh-filtered-get",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api repos/x/y/issues?state=open"
+      },
+      "expected": []
+    },
+    {
+      "id": "gh-pr-list",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh pr list"
+      },
+      "expected": []
+    },
+    {
+      "id": "forge-api-glab-get",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "glab api projects"
+      },
+      "expected": []
+    },
+    {
+      "id": "base64-encode-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x | base64"
+      },
+      "expected": []
+    },
+    {
+      "id": "base64-decode-file-redirect",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "base64 -d file > out"
+      },
+      "expected": []
+    },
+    {
+      "id": "base64-decode-pipe-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x | base64 -d"
+      },
+      "expected": []
+    },
+    {
+      "id": "base64-decode-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo cm0gLXJmIC8= | base64 -d | sh"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "base64-decode-exec-long",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "base64 --decode p.txt | bash"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "base64-decode-exec-macos",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "base64 -D x | python3"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "xxd-decode-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xxd -r -p x | sh"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "openssl-decode-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "openssl enc -d -base64 -in x | zsh"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "base64-decode-exec-piped-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat p | base64 -d | node"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "base64-decode-exec"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-forge-api-graphql-field-query",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh api graphql -f query={viewer{login}}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "forge-api-write"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "gh api graphql accepts -f query=... for a read, but flag-only matching cannot distinguish it from a mutation"
     }
   ]
 }
