@@ -77,6 +77,23 @@ $ tail -1 <configDir>/logs/hooks/bouncer.log
 {"timestamp":"...","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","mode":"shadow"}
 ```
 
+## `ping`
+
+Runnability probe for the canary. It loads the layered policy through the
+same dispatcher-construction path as `run`, including its embedded-baseline
+retry, then probes account-directory readability — a probe `run` does not
+perform. It does not read stdin or evaluate a policy verdict. A rejected
+overlay falls back to the embedded baseline and remains runnable; an unreadable
+account directory or a dispatcher failure exits non-zero.
+
+```sh
+bouncer ping
+```
+
+**Output:** none.
+
+**Exit code:** 0 when the binary can run with its current policy; 1 otherwise.
+
 ## `check`
 
 Dry-runs a Bash command string against the effective policy (baseline +
@@ -232,7 +249,7 @@ Also reachable as a `SessionStart` hook through `run` (same checks,
 silent when healthy, `additionalContext` otherwise).
 
 ```sh
-bouncer doctor [--settings <path>]
+bouncer doctor [--settings <path>] [--print-canary]
 ```
 
 **Flags:**
@@ -240,16 +257,24 @@ bouncer doctor [--settings <path>]
   `<configDir>/settings.json`. Missing its value, or immediately
   followed by another flag, is a usage error (exits 1) — the next flag
   is never silently swallowed as if it were the path.
+- `--print-canary` — print the canonical second `PreToolUse` entry for the
+  primary bouncer command in this settings file, ready to paste beside that
+  entry. Its shell command runs the same binary's `ping`; on any non-zero
+  result, it writes the fixed `PreToolUse` deny envelope and exits 0. This
+  mode prints no checklist and exits 1 when it cannot find a primary bouncer
+  entry.
 
-**Output:** one `[pass]`/`[fail]` line per check
-(`settings`, `wiring:PreToolUse`, `wiring:UserPromptSubmit`,
-`wiring:SessionStart`, `policy`, `log`), then an `overrides: N active`
-line and, when `N > 0`, one indented line per active override/relaxation.
-Always printed in full, healthy or not.
+
+**Output:** without `--print-canary`, one `[pass]`/`[fail]` line per check
+(`settings`, `wiring:PreToolUse`, `wiring:canary`,
+`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `log`), then an
+`overrides: N active` line and, when `N > 0`, one indented line per active
+override/relaxation. Always printed in full, healthy or not.
 
 ```
 [pass] settings — settings.json parsed (/path/to/settings.json)
 [pass] wiring:PreToolUse — PreToolUse is correctly wired
+[pass] wiring:canary — PreToolUse canary is correctly wired
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
 [pass] policy — overlay active (51 effective rules; common: 4 files, profile: 0 files)
@@ -301,6 +326,11 @@ reasoned use, not a defect.
 mode)`, informational only, never a `fail`. After cutover the flag drops
 from settings.json and the suffix goes with it; there is nothing else to
 configure on doctor's side.
+
+**Canary in shadow mode:** the primary `run --shadow` command can be
+observe-only, but the paired canary remains enforcing because it judges only
+runnability. A passing `wiring:canary` line says so explicitly; never append
+`--shadow` to the canary command.
 
 ## `audit`
 
@@ -388,4 +418,4 @@ usage error (a bad `--days` value, an unrecognized flag, `--diff` and
 `--suggest` combined, `--ts-logs` without `--diff`).
 
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/envelopes.ts, src/adapter/policy.ts, src/adapter/log.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/envelopes.ts, src/adapter/policy.ts, src/adapter/log.ts

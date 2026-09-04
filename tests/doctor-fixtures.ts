@@ -11,9 +11,15 @@
 // points readers at: scratch/demo-settings.json is real but gitignored (a
 // clone has no copy of it), while this fixture ships with the repo.
 
+import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { EXPECTED_PRETOOLUSE_TOOLS } from '../src/adapter/doctor.ts';
 
 export const BOUNCER_COMMAND = '/fake/checkout/dist/bouncer run';
+export const CANARY_COMMAND = buildCanaryCommand('/fake/checkout/dist/bouncer');
+
+// Paired beside a primary hook, but not a shell liveness probe. The doctor
+// must not infer semantics from the incidental word "ping".
+export const PING_WORD_COMMAND = 'printf ping';
 
 // Ticket 08: shadow-mode wiring — same binary, same `run` arg
 // (pointsAtBouncer only requires 'run' among the args, so this already
@@ -35,7 +41,10 @@ function escapeRegExp(literal: string): string {
 export const FULL_MATCHER = EXPECTED_PRETOOLUSE_TOOLS.map(escapeRegExp).join('|');
 
 export const HEALTHY_HOOKS = {
-  PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+  PreToolUse: [
+    { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] },
+    { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: CANARY_COMMAND }] },
+  ],
   UserPromptSubmit: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
   SessionStart: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
 };

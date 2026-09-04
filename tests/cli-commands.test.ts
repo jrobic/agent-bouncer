@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runCheck, runRulesLint, runRulesList } from '../src/cli-commands.ts';
+import { runCheck, runPing, runRulesLint, runRulesList } from '../src/cli-commands.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
@@ -149,5 +149,26 @@ describe('runRulesList', () => {
     expect(text).toContain('rule command.bash block-npm-publish overlay [profile:policy.d/10-npm.toml]');
     expect(text).toContain('override disable mkfs — test [profile:policy.d/10-npm.toml]');
     expect(text).toContain('overlay-relax command.git.safe_subcommands push — test [profile:policy.d/10-npm.toml]');
+  });
+});
+
+describe('runPing', () => {
+  test('loads a healthy account policy silently', async () => {
+    await freshAccountDir();
+    await expect(runPing()).resolves.toEqual({ text: '', ok: true });
+  });
+
+  test('fails silently when the configured account root cannot be read', async () => {
+    const dir = await freshAccountDir();
+    const unreadableConfigRoot = join(dir, 'not-a-directory');
+    await writeFile(unreadableConfigRoot, '', 'utf8');
+    process.env.CLAUDE_CONFIG_DIR = unreadableConfigRoot;
+    await expect(runPing()).resolves.toEqual({ text: '', ok: false });
+  });
+
+  test('keeps the embedded baseline runnable when the overlay is rejected', async () => {
+    const accountDir = await freshAccountDir();
+    await writeOverlay(accountDir, 'not valid toml {{{');
+    await expect(runPing()).resolves.toEqual({ text: '', ok: true });
   });
 });

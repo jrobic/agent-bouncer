@@ -10,7 +10,17 @@
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunOptions, type RunResult } from './adapter/run.ts';
-import { parseAuditArgs, parseDoctorArgs, runAudit, runCheck, runDoctor, runRulesLint, runRulesList } from './cli-commands.ts';
+import {
+  parseAuditArgs,
+  parseDoctorArgs,
+  runAudit,
+  runCheck,
+  runDoctor,
+  runPing,
+  runPrintCanary,
+  runRulesLint,
+  runRulesList,
+} from './cli-commands.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
 // contract as a malformed envelope: an unreadable stdin (a broken pipe, a
@@ -61,6 +71,11 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (command === 'ping') {
+    const { ok } = await runPing();
+    process.exit(ok ? 0 : 1);
+  }
+
   if (command === 'check') {
     const target = rest.join(' ');
     if (target.trim() === '') {
@@ -104,12 +119,21 @@ async function main(): Promise<void> {
       console.error(`${HOOK_NAME}: ${parsed.error}`);
       process.exit(1);
     }
+    if (parsed.printCanary) {
+      const printed = await runPrintCanary(parsed.settingsPath);
+      if (!printed.ok) {
+        console.error(`${HOOK_NAME}: ${printed.error}`);
+        process.exit(1);
+      }
+      console.log(printed.text);
+      process.exit(0);
+    }
     const { text, ok } = await runDoctor(parsed.settingsPath);
     console.log(text);
     process.exit(ok ? 0 : 1);
   }
 
-  usageError(command, 'run | check | rules | audit | doctor');
+  usageError(command, 'run | ping | check | rules | audit | doctor');
 }
 
 if (import.meta.main) {

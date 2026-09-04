@@ -9,9 +9,17 @@ import { describe, expect, test } from 'bun:test';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
 import type { LoadResult } from '../src/policy/load.ts';
-import { BOUNCER_COMMAND, BOUNCER_SHADOW_COMMAND, BOUNCER_TYPO_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import {
+  BOUNCER_COMMAND,
+  BOUNCER_SHADOW_COMMAND,
+  BOUNCER_TYPO_COMMAND,
+  FULL_MATCHER,
+  HEALTHY_HOOKS,
+  PING_WORD_COMMAND,
+} from './doctor-fixtures.ts';
 
 async function scratchSettingsPath(hooks: unknown): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
@@ -76,7 +84,7 @@ describe('runDoctorChecks: wiring', () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult());
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
-    expect(wiring).toHaveLength(3);
+    expect(wiring).toHaveLength(4);
     expect(wiring.every((c) => c.ok)).toBe(true);
   });
 
@@ -176,6 +184,100 @@ describe('runDoctorChecks: wiring', () => {
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring.every((c) => !c.ok)).toBe(true);
   });
+
+  test('a canonical PreToolUse canary using the main binary path passes', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [
+        ...HEALTHY_HOOKS.PreToolUse,
+        {
+          matcher: FULL_MATCHER,
+          hooks: [{ type: 'command', command: buildCanaryCommand('/fake/checkout/dist/bouncer') }],
+        },
+      ],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((c) => c.id === 'wiring:canary')).toMatchObject({ ok: true });
+  });
+
+  test('a missing canary fails without weakening the primary wiring check', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const canary = report.checks.find((check) => check.id === 'wiring:canary');
+    expect(canary).toMatchObject({ ok: false });
+    expect(canary?.message).toContain('missing');
+    expect(report.checks.find((check) => check.id === 'wiring:PreToolUse')).toMatchObject({ ok: true });
+  });
+
+  test('a canonical canary pointed at another binary fails', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] },
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: buildCanaryCommand('/other/bouncer') }] },
+      ],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const canary = report.checks.find((check) => check.id === 'wiring:canary');
+    expect(canary).toMatchObject({ ok: false });
+    expect(canary?.message).toContain('different binary path');
+  });
+
+  test('a ping probe without the deny branch fails', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] },
+        {
+          matcher: FULL_MATCHER,
+          hooks: [{ type: 'command', command: 'sh -c \'"$0" ping\' /fake/checkout/dist/bouncer' }],
+        },
+      ],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const canary = report.checks.find((check) => check.id === 'wiring:canary');
+    expect(canary).toMatchObject({ ok: false });
+    expect(canary?.message).toContain('deny-on-failure');
+  });
+
+  test('a paired command merely containing the word ping is not a liveness probe', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] },
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: PING_WORD_COMMAND }] },
+      ],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((check) => check.id === 'wiring:canary')).toMatchObject({
+      ok: false,
+      message: 'PreToolUse canary is missing for /fake/checkout/dist/bouncer',
+    });
+  });
+
+  test('a shell command never counts as the primary bouncer entry', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: '/bin/sh ping' }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.checks.find((check) => check.id === 'wiring:PreToolUse')).toMatchObject({ ok: false });
+    expect(report.checks.find((check) => check.id === 'wiring:canary')).toMatchObject({ ok: false });
+  });
+
+  test('malformed hook entries become a failing checklist rather than a doctor crash', async () => {
+    const settingsPath = await scratchSettingsPath({
+      PreToolUse: [null, { matcher: FULL_MATCHER, hooks: [null, { command: 1 }] }],
+      UserPromptSubmit: HEALTHY_HOOKS.UserPromptSubmit,
+      SessionStart: HEALTHY_HOOKS.SessionStart,
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    expect(report.ok).toBe(false);
+    expect(report.checks.find((check) => check.id === 'wiring:PreToolUse')).toMatchObject({ ok: false });
+  });
 });
 
 // Ticket 08: `run --shadow` must count as valid wiring (pointsAtBouncer
@@ -221,6 +323,23 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.message.toLowerCase()).toContain('shadow');
     expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.message.toLowerCase()).not.toContain('shadow');
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.message.toLowerCase()).not.toContain('shadow');
+  });
+
+  test('the passing canary check says that it remains enforcing in shadow mode', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [
+        { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] },
+        {
+          matcher: FULL_MATCHER,
+          hooks: [{ type: 'command', command: buildCanaryCommand('/fake/checkout/dist/bouncer') }],
+        },
+      ],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const canary = report.checks.find((check) => check.id === 'wiring:canary');
+    expect(canary).toMatchObject({ ok: true });
+    expect(canary?.message).toContain('canary remains enforcing');
   });
 });
 

@@ -182,6 +182,24 @@ async function dispatchByEvent(
   }
 }
 
+/**
+ * Executes against the current policy's dispatcher, then retries once with
+ * the embedded baseline on any construction or dispatch failure. `run` and
+ * `ping` share this path so a runnable baseline has one definition.
+ */
+export async function withDispatcherLikeRun<T>(
+  loaded: LoadResult,
+  execute: (dispatcher: Dispatcher, effectiveLoaded: LoadResult | undefined) => Promise<T> | T,
+  onRetry?: (error: unknown) => Promise<void>,
+): Promise<T> {
+  try {
+    return await execute(createDispatcher(loaded.policy), loaded);
+  } catch (error) {
+    if (onRetry !== undefined) await onRetry(error);
+    return execute(createDispatcher(BASELINE.rules), undefined);
+  }
+}
+
 export async function run(rawStdin: string, options?: RunOptions): Promise<RunResult> {
   const shadow = options?.shadow ?? false;
   const unrecognizedTokens = options?.unrecognizedTokens ?? [];
@@ -215,28 +233,27 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
   }
 
   try {
-    const dispatcher = createDispatcher(loaded.policy);
-    return await dispatchByEvent(input, dispatcher, loaded, shadow);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    try {
-      await logPolicyWarnings(
-        [`dispatch failed, retrying with the embedded baseline: ${message}`],
-        undefined,
-        toLogMode(shadow),
-      );
-    } catch {
-      // Logging must never be what crashes the hook either.
-    }
-    try {
-      const baselineDispatcher = createDispatcher(BASELINE.rules);
-      return await dispatchByEvent(input, baselineDispatcher, undefined, shadow);
-    } catch {
-      // The baseline dispatcher is the vetted, tested set — it should
-      // never throw. If it somehow does, silence is still strictly safer
-      // than letting the process crash (Claude Code reads a crash as "no
-      // hook ran" — an accidental fail-open this catch exists to prevent).
-      return SILENT;
-    }
+    return await withDispatcherLikeRun(
+      loaded,
+      (dispatcher, effectiveLoaded) => dispatchByEvent(input, dispatcher, effectiveLoaded, shadow),
+      async (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        try {
+          await logPolicyWarnings(
+            [`dispatch failed, retrying with the embedded baseline: ${message}`],
+            undefined,
+            toLogMode(shadow),
+          );
+        } catch {
+          // Logging must never be what crashes the hook either.
+        }
+      },
+    );
+  } catch {
+    // The baseline dispatcher is the vetted, tested set — it should
+    // never throw. If it somehow does, silence is still strictly safer
+    // than letting the process crash (Claude Code reads a crash as "no
+    // hook ran" — an accidental fail-open this catch exists to prevent).
+    return SILENT;
   }
 }

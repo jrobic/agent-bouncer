@@ -3,7 +3,7 @@
 // as a success (for the exit code) — kept separate from process.exit/
 // console.log so these are unit-testable without spawning a subprocess.
 
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { clusterDivergences, diffLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
 import type { TsLogEntry } from './adapter/audit-diff.ts';
@@ -17,9 +17,10 @@ import {
 } from './adapter/audit.ts';
 import { HOOK_NAME } from './adapter/constants.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
-import { defaultSettingsPath, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
+import { defaultSettingsPath, formatCanonicalCanaryEntry, formatDoctorChecklist, runDoctorChecks } from './adapter/doctor.ts';
 import { configDir, hookLogPath } from './adapter/log-path.ts';
 import { loadCurrentPolicy } from './adapter/policy.ts';
+import { withDispatcherLikeRun } from './adapter/run.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 
@@ -50,6 +51,27 @@ export async function runCheck(command: string): Promise<CommandResult> {
   }
   const line = `${hit.verdict.verdict} [${hit.verdict.ruleId}] ${hit.verdict.reason}`;
   return { text: [...warningLines, line].join('\n'), ok: true };
+}
+
+/**
+ * `bouncer ping` — verifies that this process can read its account root and
+ * build a dispatcher through the same baseline-retry path `run` uses.
+ */
+export async function runPing(): Promise<CommandResult> {
+  try {
+    await readdir(configDir());
+  } catch (err) {
+    // The ticket wants an unreadable config dir to surface here; run would
+    // silently enforce the baseline.
+    if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') return { text: '', ok: false };
+  }
+  try {
+    const loaded = await loadCurrentPolicy();
+    await withDispatcherLikeRun(loaded, () => undefined);
+    return { text: '', ok: true };
+  } catch {
+    return { text: '', ok: false };
+  }
 }
 
 /**
@@ -167,42 +189,47 @@ export async function runRulesList(): Promise<CommandResult> {
 
 export interface ParsedDoctorArgs {
   readonly settingsPath?: string;
+  readonly printCanary?: true;
   readonly error?: string;
 }
 
 /**
- * Pure parsing for `bouncer doctor [--settings <path>]`'s argv tail — kept
- * out of cli.ts (the I/O layer) so the one rule that actually needs a test,
- * "what counts as a missing value", is unit-testable without spawning a
- * subprocess. `--settings` as the LAST token, or immediately followed by
- * another flag (`--settings --other-flag`), is a missing-argument error —
- * the next flag must never be silently swallowed as if it were the path.
+ * Pure parsing for `bouncer doctor [--settings <path>] [--print-canary]`'s
+ * argv tail. `--settings` as the LAST token, or immediately followed by
+ * another flag (`--settings --other-flag`), is a missing-argument error.
  */
 export function parseDoctorArgs(rest: readonly string[]): ParsedDoctorArgs {
+  const printCanary = rest.includes('--print-canary');
   const flagIndex = rest.indexOf('--settings');
-  if (flagIndex === -1) return {};
+  if (flagIndex === -1) return printCanary ? { printCanary: true } : {};
   const value = rest[flagIndex + 1];
   if (value === undefined || value.startsWith('--')) {
     return { error: '--settings requires a path argument' };
   }
-  return { settingsPath: value };
+  return { settingsPath: value, ...(printCanary ? { printCanary: true } : {}) };
 }
 
 /**
- * `bouncer doctor [--settings <path>]` — the manual, always-verbose form
- * of the wiring/policy/log/override checklist (ticket 07). `--settings`
- * defaults to `<configDir>/settings.json` (the account's own settings
- * file, same root as the policy overlay and the audit log) but accepts an
- * override so a scratch settings.json can be checked without touching a
- * live config — the same override this ticket's demo and ACs exercise.
- * Non-zero exit on any failing check (unlike `run`, which must always
- * exit 0 for the hook protocol) — `ok` is exactly what cli.ts maps to
- * `process.exit(ok ? 0 : 1)`.
+ * `bouncer doctor [--settings <path>]` — the manual, always-verbose
+ * wiring/policy/log/override checklist.
  */
 export async function runDoctor(settingsPath?: string): Promise<CommandResult> {
+  const resolvedSettingsPath = settingsPath ?? defaultSettingsPath();
   const loaded = await loadCurrentPolicy();
-  const report = await runDoctorChecks(settingsPath ?? defaultSettingsPath(), loaded);
+  const report = await runDoctorChecks(resolvedSettingsPath, loaded);
   return { text: formatDoctorChecklist(report), ok: report.ok };
+}
+
+export type PrintCanaryResult =
+  | { readonly text: string; readonly ok: true; readonly error?: undefined; }
+  | { readonly text?: undefined; readonly ok: false; readonly error: string; };
+
+/** `bouncer doctor --print-canary` — the printable canonical canary entry. */
+export async function runPrintCanary(settingsPath?: string): Promise<PrintCanaryResult> {
+  const result = await formatCanonicalCanaryEntry(settingsPath ?? defaultSettingsPath());
+  return result.error === undefined
+    ? { text: result.entry, ok: true }
+    : { error: result.error, ok: false };
 }
 
 export interface AuditOptions {

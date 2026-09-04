@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run, runSessionStart } from '../src/adapter/run.ts';
 import type { LoadResult } from '../src/policy/load.ts';
-import { BOUNCER_COMMAND, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { BOUNCER_COMMAND, CANARY_COMMAND, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
@@ -44,12 +44,24 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
   test('a PreToolUse matcher of "*" (CC\'s "all tools" wildcard) is silent too — never a cry-wolf scream', async () => {
     await accountWithSettings({
       ...HEALTHY_HOOKS,
-      PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+      PreToolUse: [
+        { matcher: '*', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] },
+        { matcher: '*', hooks: [{ type: 'command', command: CANARY_COMMAND }] },
+      ],
     });
     const { stdout } = await run(SESSION_START_ENVELOPE);
     expect(stdout).toBeNull();
   });
 
+  test('a missing canary reaches the SessionStart scream', async () => {
+    await accountWithSettings({
+      ...HEALTHY_HOOKS,
+      PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+    });
+    const { stdout } = await run(SESSION_START_ENVELOPE);
+    expect(stdout).not.toBeNull();
+    expect(JSON.parse(stdout!).hookSpecificOutput.additionalContext).toContain('wiring:canary');
+  });
   test('removing a hook entry from settings.json makes the next SessionStart scream', async () => {
     const { PreToolUse: _omit, ...withoutPreToolUse } = HEALTHY_HOOKS;
     await accountWithSettings(withoutPreToolUse);

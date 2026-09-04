@@ -8,11 +8,12 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseDoctorArgs, runDoctor } from '../src/cli-commands.ts';
-import { HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { parseDoctorArgs, runDoctor, runPrintCanary } from '../src/cli-commands.ts';
+import { BOUNCER_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
+const PROJECT_ROOT = join(import.meta.dir, '..');
 
 afterEach(async () => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
@@ -50,8 +51,48 @@ describe('parseDoctorArgs: the pure argv-tail parsing cli.ts delegates to', () =
     expect(result.settingsPath).toBeUndefined();
     expect(result.error).toBeDefined();
   });
+
+  test('--print-canary is captured alongside an explicit settings path', () => {
+    expect(parseDoctorArgs(['--print-canary', '--settings', '/tmp/scratch/settings.json'])).toEqual({
+      printCanary: true,
+      settingsPath: '/tmp/scratch/settings.json',
+    });
+  });
 });
 
+describe('runPrintCanary', () => {
+  test('names a missing primary PreToolUse entry', async () => {
+    await freshAccountDir();
+    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
+    cleanupDirs.push(scratchDir);
+    const settingsPath = join(scratchDir, 'settings.json');
+    await writeFile(settingsPath, JSON.stringify({ hooks: {} }), 'utf8');
+
+    await expect(runPrintCanary(settingsPath)).resolves.toEqual({
+      error: `no PreToolUse entry points at a bouncer binary in ${settingsPath}`,
+      ok: false,
+    });
+  });
+
+  test('writes a missing primary-entry diagnosis to stderr with no stdout', async () => {
+    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
+    cleanupDirs.push(scratchDir);
+    const settingsPath = join(scratchDir, 'settings.json');
+    await writeFile(settingsPath, JSON.stringify({ hooks: {} }), 'utf8');
+    const command = Bun.spawn(
+      ['bun', 'run', 'src/cli.ts', 'doctor', '--settings', settingsPath, '--print-canary'],
+      { cwd: PROJECT_ROOT, stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [stdout, stderr] = await Promise.all([
+      new Response(command.stdout).text(),
+      new Response(command.stderr).text(),
+    ]);
+
+    expect(await command.exited).toBe(1);
+    expect(stdout).toBe('');
+    expect(stderr).toBe(`bouncer: no PreToolUse entry points at a bouncer binary in ${settingsPath}\n`);
+  });
+});
 describe('runDoctor: the manual checklist, always printed', () => {
   test('a healthy scratch settings.json passed via --settings prints an all-pass checklist', async () => {
     await freshAccountDir();
@@ -63,6 +104,7 @@ describe('runDoctor: the manual checklist, always printed', () => {
     const { text, ok } = await runDoctor(settingsPath);
     expect(ok).toBe(true);
     expect(text).toContain('[pass] wiring:PreToolUse');
+    expect(text).toContain('[pass] wiring:canary');
     expect(text).toContain('[pass] wiring:UserPromptSubmit');
     expect(text).toContain('[pass] wiring:SessionStart');
     expect(text).toContain('[pass] policy');
@@ -106,6 +148,33 @@ describe('runDoctor: the manual checklist, always printed', () => {
     expect(text).toContain('overrides: 1 active');
     expect(text).toContain('curl-file-upload');
     expect(text).toContain('manual doctor visibility test');
+  });
+
+  test('--print-canary emits an entry that passes after pasting beside the primary hook', async () => {
+    await freshAccountDir();
+    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
+    cleanupDirs.push(scratchDir);
+    const settingsPath = join(scratchDir, 'settings.json');
+    const primaryPreToolUse = {
+      matcher: FULL_MATCHER,
+      hooks: [{ type: 'command', command: BOUNCER_COMMAND }],
+    };
+    const sourceHooks = { ...HEALTHY_HOOKS, PreToolUse: [primaryPreToolUse] };
+    await writeFile(settingsPath, JSON.stringify({ hooks: sourceHooks }), 'utf8');
+
+    const printed = await runPrintCanary(settingsPath);
+    expect(printed.ok).toBe(true);
+    if (!printed.ok) throw new Error(printed.error);
+    const canaryEntry = JSON.parse(printed.text);
+
+    await writeFile(
+      settingsPath,
+      JSON.stringify({ hooks: { ...sourceHooks, PreToolUse: [primaryPreToolUse, canaryEntry] } }),
+      'utf8',
+    );
+    const pasted = await runDoctor(settingsPath);
+    expect(pasted.ok).toBe(true);
+    expect(pasted.text).toContain('[pass] wiring:canary');
   });
 });
 

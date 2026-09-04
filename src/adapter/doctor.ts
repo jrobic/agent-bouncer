@@ -18,6 +18,7 @@
 import { access, constants as fsConstants, mkdir, open, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import type { LoadResult } from '../policy/load.ts';
+import { buildCanaryCommand, inspectCanaryCommand } from './canary.ts';
 import { HOOK_NAME } from './constants.ts';
 import { configDir, hookLogPath } from './log-path.ts';
 
@@ -72,15 +73,21 @@ export const EXPECTED_PRETOOLUSE_TOOLS: readonly string[] = [
   'mcp__filesystem__read_file',
 ];
 
-interface RawHookEntry {
-  readonly matcher?: unknown;
-  readonly hooks?: unknown;
-}
+type RawHookEntry = Readonly<Record<string, unknown>>;
 
 type SettingsReadResult =
   | { readonly kind: 'absent'; }
-  | { readonly kind: 'ok'; readonly settings: Record<string, unknown>; }
+  | { readonly kind: 'ok'; readonly settings: RawHookEntry; }
   | { readonly kind: 'corrupt'; readonly detail: string; };
+
+function recordFrom(value: unknown): RawHookEntry | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as RawHookEntry;
+}
+
+function ownValue(record: RawHookEntry, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
 
 // Absent and corrupt are NOT the same failure, and reporting them as one
 // ("hook missing") would name the wrong problem: a fresh account with no
@@ -106,10 +113,11 @@ async function readSettingsFile(settingsPath: string): Promise<SettingsReadResul
     const detail = err instanceof Error ? err.message : String(err);
     return { kind: 'corrupt', detail: `malformed JSON: ${detail}` };
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  const settings = recordFrom(parsed);
+  if (settings === null) {
     return { kind: 'corrupt', detail: 'settings.json does not contain a JSON object' };
   }
-  return { kind: 'ok', settings: parsed as Record<string, unknown> };
+  return { kind: 'ok', settings };
 }
 
 function checkSettings(result: SettingsReadResult, settingsPath: string): DoctorCheck {
@@ -122,27 +130,55 @@ function checkSettings(result: SettingsReadResult, settingsPath: string): Doctor
   return { id: 'settings', ok: true, message: `settings.json parsed (${settingsPath})` };
 }
 
-function entriesFor(settings: Record<string, unknown>, event: GuardedEvent): readonly RawHookEntry[] {
-  const hooks = settings['hooks'];
-  if (hooks === null || typeof hooks !== 'object') return [];
-  const forEvent = (hooks as Record<string, unknown>)[event];
-  return Array.isArray(forEvent) ? (forEvent as RawHookEntry[]) : [];
+function entriesFor(settings: RawHookEntry, event: GuardedEvent): readonly RawHookEntry[] {
+  const hooks = recordFrom(ownValue(settings, 'hooks'));
+  if (hooks === null) return [];
+  const forEvent = ownValue(hooks, event);
+  if (!Array.isArray(forEvent)) return [];
+  return forEvent.flatMap((entry) => {
+    const parsed = recordFrom(entry);
+    return parsed === null ? [] : [parsed];
+  });
+}
+
+function commandsOf(entries: readonly RawHookEntry[]): string[] {
+  const commands: string[] = [];
+  for (const entry of entries) {
+    const hooks = ownValue(entry, 'hooks');
+    if (!Array.isArray(hooks)) continue;
+    for (const rawHook of hooks) {
+      const hook = recordFrom(rawHook);
+      const command = hook === null ? undefined : ownValue(hook, 'command');
+      if (typeof command === 'string') commands.push(command);
+    }
+  }
+  return commands;
 }
 
 // A hook entry "points at bouncer" if its command's executable basename is
 // this binary's own name and `run` is among its arguments — robust to
 // wherever the binary is actually installed (absolute path in the demo,
 // a PATH-resolved name in a real install), unlike a literal string match.
+function bouncerExecutable(command: unknown): string | undefined {
+  if (typeof command !== 'string') return undefined;
+  const [executable, ...args] = command.trim().split(/\s+/);
+  if (executable === undefined || basename(executable) !== HOOK_NAME || !args.includes('run')) return undefined;
+  return executable;
+}
+
 function pointsAtBouncer(command: unknown): boolean {
-  if (typeof command !== 'string') return false;
-  const [exe, ...args] = command.trim().split(/\s+/);
-  return exe !== undefined && basename(exe) === HOOK_NAME && args.includes('run');
+  return bouncerExecutable(command) !== undefined;
 }
 
 function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly RawHookEntry[] {
-  return entries.filter(
-    (e) => Array.isArray(e.hooks) && e.hooks.some((h) => pointsAtBouncer((h as { command?: unknown; } | undefined)?.command)),
-  );
+  return entries.filter((entry) => commandsOf([entry]).some(pointsAtBouncer));
+}
+
+// Shadow and typo checks consume only true `bouncer run` commands, never
+// the paired `sh -c … ping` canary: its shell tokens describe a separate
+// liveness grammar and must not affect primary-wiring diagnosis.
+function bouncerCommandsOf(entries: readonly RawHookEntry[]): string[] {
+  return commandsOf(entries).filter(pointsAtBouncer);
 }
 
 // Ticket 08: `run --shadow` already satisfies pointsAtBouncer above (it
@@ -151,15 +187,8 @@ function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly Ra
 // healthy wiring, just worth naming in the manual checklist so a human
 // running `bouncer doctor` mid-shadow-window sees at a glance which
 // events are currently observe-only. Never affects `ok` — info, not fail.
-function commandsOf(entries: readonly RawHookEntry[]): string[] {
-  return entries
-    .flatMap((e) => (Array.isArray(e.hooks) ? e.hooks : []))
-    .map((h) => (h as { command?: unknown; } | undefined)?.command)
-    .filter((c): c is string => typeof c === 'string');
-}
-
 function wiredInShadowMode(entries: readonly RawHookEntry[]): boolean {
-  return commandsOf(entries).some((command) => command.trim().split(/\s+/).includes('--shadow'));
+  return bouncerCommandsOf(entries).some((command) => command.trim().split(/\s+/).includes('--shadow'));
 }
 
 // Ticket 08 review: `run()` itself treats an unrecognized argv token
@@ -175,11 +204,11 @@ const KNOWN_RUN_TOKENS: ReadonlySet<string> = new Set(['run', '--shadow']);
 
 function unrecognizedTokensIn(command: string): string[] {
   const [, ...args] = command.trim().split(/\s+/);
-  return args.filter((a) => !KNOWN_RUN_TOKENS.has(a));
+  return args.filter((arg) => !KNOWN_RUN_TOKENS.has(arg));
 }
 
 function unrecognizedTokensAmong(entries: readonly RawHookEntry[]): string[] {
-  return [...new Set(commandsOf(entries).flatMap(unrecognizedTokensIn))];
+  return [...new Set(bouncerCommandsOf(entries).flatMap(unrecognizedTokensIn))];
 }
 
 type MatcherCoverage =
@@ -195,7 +224,7 @@ type MatcherCoverage =
 // round's cry-wolf bug: `new RegExp('^(?:*)$')` throws (nothing to repeat),
 // screaming on a config that is actually fully healthy.
 function evaluateMatcherCoverage(entries: readonly RawHookEntry[]): MatcherCoverage {
-  const matcherFields = entries.map((e) => e.matcher);
+  const matcherFields = entries.map((entry) => ownValue(entry, 'matcher'));
   if (matcherFields.some((m) => m === undefined)) return { kind: 'covers' };
 
   const stringMatchers = matcherFields.filter((m): m is string => typeof m === 'string');
@@ -271,6 +300,95 @@ function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): D
 
   const shadowSuffix = wiredInShadowMode(wired) ? ' (shadow mode)' : '';
   return { id, ok: true, message: `${event} is correctly wired${shadowSuffix}` };
+}
+
+function checkCanary(settingsResult: SettingsReadResult): DoctorCheck {
+  const id = 'wiring:canary';
+  if (settingsResult.kind === 'corrupt') {
+    return {
+      id,
+      ok: false,
+      message: 'cannot verify — settings.json is unreadable/malformed (see the settings check)',
+    };
+  }
+
+  const settings = settingsResult.kind === 'ok' ? settingsResult.settings : {};
+  const preToolUseEntries = entriesFor(settings, 'PreToolUse');
+  const primaryEntries = entriesPointingAtBouncer(preToolUseEntries);
+  if (primaryEntries.length === 0) {
+    return {
+      id,
+      ok: false,
+      message: `cannot verify — the primary PreToolUse ${HOOK_NAME} entry is missing`,
+    };
+  }
+
+  for (const primaryEntry of primaryEntries) {
+    const binaryPaths = bouncerCommandsOf([primaryEntry])
+      .map((command) => bouncerExecutable(command))
+      .filter((path): path is string => path !== undefined);
+    const primaryMatcher = JSON.stringify(ownValue(primaryEntry, 'matcher'));
+    const pairedEntries = preToolUseEntries.filter(
+      (entry) => entry !== primaryEntry && JSON.stringify(ownValue(entry, 'matcher')) === primaryMatcher,
+    );
+    const canaryCommands = commandsOf(pairedEntries).map(inspectCanaryCommand);
+    for (const binaryPath of binaryPaths) {
+      if (canaryCommands.some((command) => command.kind === 'canonical' && command.binaryPath === binaryPath)) {
+        continue;
+      }
+      if (canaryCommands.some((command) => command.kind === 'ping-probe' && command.binaryPath === binaryPath)) {
+        return {
+          id,
+          ok: false,
+          message: `PreToolUse canary for ${binaryPath} has no canonical deny-on-failure branch`,
+        };
+      }
+      if (canaryCommands.some((command) => command.kind !== 'other')) {
+        return {
+          id,
+          ok: false,
+          message: `PreToolUse canary points at a different binary path than ${binaryPath}`,
+        };
+      }
+      return {
+        id,
+        ok: false,
+        message: `PreToolUse canary is missing for ${binaryPath}`,
+      };
+    }
+  }
+
+  const shadowSuffix = wiredInShadowMode(primaryEntries)
+    ? ' (primary wiring is in shadow mode; the canary remains enforcing)'
+    : '';
+  return { id, ok: true, message: `PreToolUse canary is correctly wired${shadowSuffix}` };
+}
+
+export type CanonicalCanaryEntry =
+  | { readonly entry: string; readonly error?: undefined; }
+  | { readonly entry?: undefined; readonly error: string; };
+
+export async function formatCanonicalCanaryEntry(settingsPath: string): Promise<CanonicalCanaryEntry> {
+  const settingsResult = await readSettingsFile(settingsPath);
+  if (settingsResult.kind !== 'ok') {
+    return { error: `cannot read a settings object from ${settingsPath}` };
+  }
+  const primaryEntry = entriesPointingAtBouncer(entriesFor(settingsResult.settings, 'PreToolUse'))[0];
+  if (primaryEntry === undefined) {
+    return { error: `no PreToolUse entry points at a bouncer binary in ${settingsPath}` };
+  }
+  const binaryPath = bouncerCommandsOf([primaryEntry])
+    .map((command) => bouncerExecutable(command))
+    .find((path): path is string => path !== undefined);
+  if (binaryPath === undefined) {
+    return { error: `no PreToolUse entry points at a bouncer binary in ${settingsPath}` };
+  }
+
+  const entry = {
+    ...(Object.hasOwn(primaryEntry, 'matcher') ? { matcher: ownValue(primaryEntry, 'matcher') } : {}),
+    hooks: [{ type: 'command', command: buildCanaryCommand(binaryPath) }],
+  };
+  return { entry: JSON.stringify(entry, null, 2) };
 }
 
 // ADR-0001 § Provenance: "; common: 4 files, profile: 0 files". `absent`
@@ -391,9 +509,14 @@ function overrideLinesOf(loaded: LoadResult): string[] {
  */
 export async function runDoctorChecks(settingsPath: string, loaded: LoadResult): Promise<DoctorReport> {
   const settingsResult = await readSettingsFile(settingsPath);
+  const wiringChecks: DoctorCheck[] = [];
+  for (const event of GUARDED_EVENTS) {
+    wiringChecks.push(checkWiring(settingsResult, event));
+    if (event === 'PreToolUse') wiringChecks.push(checkCanary(settingsResult));
+  }
   const checks: DoctorCheck[] = [
     checkSettings(settingsResult, settingsPath),
-    ...GUARDED_EVENTS.map((event) => checkWiring(settingsResult, event)),
+    ...wiringChecks,
     checkPolicy(loaded),
     await checkLogWritability(),
   ];
