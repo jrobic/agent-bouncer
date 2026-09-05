@@ -16,10 +16,10 @@ export interface RegexRule {
   // A second regex that, if it ALSO matches, cancels this rule's hit (the
   // dotenv/ENV_WHITELIST and npmrc/node_modules exceptions).
   readonly except?: string;
-  // An engine-recognized marker for logic no regex alone expresses — today
-  // only "git_remote_url" (the remote.*.url config entry, checked through
-  // the structural git parser instead of its own regex; see
-  // hasUnsafeGitConfigRemoteUrl). Replaces the old object-identity branch.
+  // An engine-recognized structural matcher. It receives the effective
+  // compiled row: `"git_remote_url"` owns its Git predicate, while
+  // `"docker_destructive"` applies the row's regex and exception to
+  // executable Docker candidates. Replaces object-identity branches.
   readonly special?: string;
   // A per-row static override of the family's default verdict (e.g.
   // secret.path rows default to "block"; a row that should only confirm

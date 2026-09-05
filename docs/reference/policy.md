@@ -62,7 +62,7 @@ Every entry in the six regex tables below shares this shape:
 | `reason` | string | yes | Shown in `bouncer check`/`rules list` output and in the degraded Claude Code verdict text. |
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
 | `except` | string | no | A second regex; if it ALSO matches, the rule does not fire (e.g. `.env.example`/`.env.test` excepted from the `.env` block). |
-| `special` | string | no | An engine-recognized marker for logic no regex alone expresses. Today only `"git_remote_url"`, on the `secret.bash` entry that also needs the structural git parser to distinguish a config read from a write. |
+| `special` | string | no | An engine-recognized structural matcher. A matcher receives the effective row: `git_remote_url` owns its read/write predicate; `docker_destructive` applies the row's `regex`, `flags`, and `except` to executable Docker candidates. The row's configured verdict and every override remain authoritative. |
 | `verdict` | `"block"` \| `"confirm"` \| `"observe"` | no | A per-row static override of the family's default verdict (e.g. every `secret.path` row defaults to `"block"`; `transcript-backup` sets `verdict = "confirm"`). Lint-validated against the same three kinds `[[override]]`'s `action = "relax"` can name. A live `[[override]]` relax still wins over this field when both apply — this is the row's own static default, not the loudest word on the subject. |
 
 ## The six regex tables
@@ -119,6 +119,21 @@ elsewhere"` without removing the baseline guard.
   overlay row.
 - A command hidden inside a finder or pipeline executor's `sh -c` argument is
   not inspected; the guard does not parse shell command strings.
+- `docker-destructive` recognizes literal Docker commands at command position,
+  after shell control keywords, in `sh -c`/`eval`, nested active command
+  substitutions, here-strings, remote and interpreter command strings, and a
+  `cmux send` payload (including global cmux options and executable paths).
+  A `cmux` payload has no reliable prose/code distinction, so the complete
+  visible `cmux` source range is conservatively checked; malformed or
+  fragmented payload tokens cannot discard a literal Docker operation.
+  Variable-built commands and aliases remain outside literal recognition.
+- `echo` and `printf` discard quoted Docker text only as an isolated display
+  command: one shell segment and no unquoted operator, redirection, pipeline,
+  heredoc, or compound command. Operators are recorded by the lexer while
+  quote state is known, so a quoted redirection target is still active whereas
+  a literal `>` inside display data is not. Every non-isolated input retains
+  the complete original command as a conservative candidate; normalized
+  executable candidates are additive.
 - A pattern-only hidden-file search such as `rg --hidden -i env` can print
   matching dotenv lines. The path scan guards command arguments, not command
   output; `grep -r env .` has the same residual behavior.

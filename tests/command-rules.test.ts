@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { checkBash, checkGit, checkRmRf, extractGitSubcommand, SAFE_GIT_SUBCOMMANDS } from '../src/command-rules.ts';
+import { checkBash, checkGit, checkRmRf, createCommandChecker, extractGitSubcommand, SAFE_GIT_SUBCOMMANDS } from '../src/command-rules.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 
 // One test per ruleId (nominal match on a representative sample), plus the
 // benign counter-examples called out in the task: `rm -rf node_modules`,
@@ -262,6 +263,28 @@ describe('command-rules: BASH_RULES', () => {
   test('ruleId docker-destructive: docker volume prune asks', () => {
     const confirm = checkBash('docker volume prune');
     expect(confirm?.ruleId).toBe('docker-destructive');
+  });
+
+  test.each([
+    {
+      name: 'configured regex, flags, and verdict',
+      changes: { regex: '\\bdocker\\s+version\\b', flags: 'i', verdict: 'block' as const },
+      command: '"docker" VERSION',
+      expectedVerdict: 'block',
+    },
+    {
+      name: 'configured exception',
+      changes: { regex: '\\bdocker\\s+version\\b', except: '\\bdocker\\s+version\\b' },
+      command: '"docker" version',
+      expectedVerdict: null,
+    },
+  ])('docker special preserves $name', ({ changes, command, expectedVerdict }) => {
+    const policy = {
+      ...BASELINE.rules.command,
+      bash: BASELINE.rules.command.bash.map((rule) => rule.id === 'docker-destructive' ? { ...rule, ...changes } : rule),
+    };
+    const verdict = createCommandChecker(policy).checkBash(command);
+    expect(verdict?.verdict ?? null).toBe(expectedVerdict);
   });
 
   test('ruleId sql-destructive-inline: psql inline DROP asks', () => {

@@ -5,6 +5,7 @@
 // structure.
 
 import { describe, expect, test } from 'bun:test';
+import { createCommandChecker } from '../src/command-rules.ts';
 import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
 
 describe('loadPolicyFromOverlayText: no overlay', () => {
@@ -325,6 +326,46 @@ describe('loadPolicyFromOverlayText: [[override]] application', () => {
     const effective = result.effectiveRules.find((r) => r.rule.id === 'curl-file-upload');
     expect(effective?.provenance).toBe('override');
     expect(effective?.overrideAction).toBe('relax');
+  });
+
+  test('a replacement keeps Docker structural matching and the replacement regex', () => {
+    const overlay = `
+      [[override]]
+      rule = "docker-destructive"
+      action = "replace"
+      regex = "\\\\bdocker\\\\s+version\\\\b"
+      reason = "our reviewed Docker version probe needs confirmation"
+    `;
+    const result = loadPolicyFromOverlayText(overlay);
+    expect(result.warnings).toEqual([]);
+    const checker = createCommandChecker(result.policy.command);
+    expect(checker.checkBash('"docker" version')?.ruleId).toBe('docker-destructive');
+    expect(checker.checkBash('docker volume prune')).toBeNull();
+  });
+
+  test('a disabled Docker special does not leave an engine-only rule behind', () => {
+    const overlay = `
+      [[override]]
+      rule = "docker-destructive"
+      action = "disable"
+      reason = "reviewed local Docker automation"
+    `;
+    const result = loadPolicyFromOverlayText(overlay);
+    expect(result.warnings).toEqual([]);
+    expect(createCommandChecker(result.policy.command).checkBash('docker volume prune')).toBeNull();
+  });
+
+  test('a Docker relaxation retains structural matching and its effective verdict', () => {
+    const overlay = `
+      [[override]]
+      rule = "docker-destructive"
+      action = "relax"
+      verdict = "observe"
+      reason = "reviewed local Docker automation"
+    `;
+    const result = loadPolicyFromOverlayText(overlay);
+    expect(result.warnings).toEqual([]);
+    expect(createCommandChecker(result.policy.command).checkBash('"docker" volume prune')?.verdict).toBe('observe');
   });
 
   test('an active override is reported with its provenance and reason', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { BASELINE } from '../src/policy/baseline.ts';
 import { checkPath, checkSecretBash, checkUrl, createSecretChecker } from '../src/secret-rules.ts';
 
 // One test per PATH_RULES id (nominal) + the two ENV_WHITELIST counter-examples
@@ -433,6 +434,34 @@ describe('secret-rules: BASH_RULES (secret)', () => {
     expect(checkSecretBash('git config remote.origin.url https://host/x.git')?.ruleId).toBe(
       'bash-git-leak-remote-url',
     );
+  });
+
+  test.each([
+    'git -C /tmp config remote.origin.url https://example.com/repo.git',
+    'git --no-pager -C /tmp config remote.origin.url https://example.com/repo.git',
+  ])('ruleId bash-git-leak-remote-url: global options preserve a remote-url write: %s', (cmd) => {
+    expect(checkSecretBash(cmd)?.ruleId).toBe('bash-git-leak-remote-url');
+  });
+
+  test('git_remote_url ignores an unrelated replacement candidate and owns its unsafe predicate', () => {
+    const checker = createSecretChecker(
+      {
+        ...BASELINE.rules.secret,
+        bash: BASELINE.rules.secret.bash.map((rule) =>
+          rule.id === 'bash-git-leak-remote-url'
+            ? { ...rule, regex: '\\becho\\s+unrelated\\b', except: '\\becho\\s+unrelated\\b' }
+            : rule
+        ),
+      },
+      BASELINE.rules.command.git.config_read_modes,
+    );
+
+    expect(checker.checkSecretBash('echo unrelated; git config --get remote.origin.url')).toBeNull();
+    expect(
+      checker.checkSecretBash(
+        'echo unrelated; git -C /tmp config remote.origin.url https://example.com/repo.git',
+      )?.ruleId,
+    ).toBe('bash-git-leak-remote-url');
   });
 
   test('ruleId bash-git-leak-remote-url: a quoted remote-url key stays an effective write', () => {

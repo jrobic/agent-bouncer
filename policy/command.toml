@@ -225,6 +225,7 @@ verdict = "confirm"
 [[rules.command.bash]]
 id = "docker-destructive"
 regex = "\\b(?:docker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune))|(?:docker\\s+compose|docker-compose)\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b)"
+special = "docker_destructive"
 reason = "Docker command deletes system or volume data"
 verdict = "confirm"
 

@@ -23,20 +23,19 @@ export function compileRules(rules: readonly RegexRule[]): CompiledRule[] {
   }));
 }
 
-// A `special`-marked rule (see schema.ts) is resolved by a named predicate
-// instead of its own regex — e.g. "git_remote_url", checked through the
-// structural git parser rather than a literal pattern. Checked in the
-// rule's own table position, same as any other entry, so evaluation order
-// (and therefore which ruleId is reported first) is unaffected.
-export type SpecialHandlers = Readonly<Record<string, (input: string) => boolean>>;
+// A special rule owns structural recognition; it receives the effective
+// compiled row when recognition also needs that row's regex or exception.
+// Existing predicates remain boolean so they cannot accidentally expose an
+// unrelated shell segment as a candidate for a replacement regex.
+export type SpecialHandlers = Readonly<Record<string, (rule: CompiledRule, input: string) => boolean>>;
+
+function regexMatches(rule: CompiledRule, input: string): boolean {
+  return rule.re.test(input) && !rule.exceptRe?.test(input);
+}
 
 function ruleMatches(rule: CompiledRule, input: string, specials: SpecialHandlers): boolean {
-  if (rule.special !== undefined) {
-    return specials[rule.special]?.(input) ?? false;
-  }
-  if (!rule.re.test(input)) return false;
-  if (rule.exceptRe?.test(input)) return false;
-  return true;
+  if (rule.special === undefined) return regexMatches(rule, input);
+  return specials[rule.special]?.(rule, input) ?? false;
 }
 
 function toVerdict(rule: CompiledRule, input: string, defaultVerdict: VerdictKind): Verdict {

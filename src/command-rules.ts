@@ -37,6 +37,7 @@
 
 import { BASELINE } from './policy/baseline.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
+import type { CompiledRule } from './policy/match.ts';
 import type { AskFlagsRule, CommandGitPolicy, CommandPolicy, SafeFirstArgRule, SafeGrammarRule } from './policy/schema.ts';
 import type { Verdict } from './types.ts';
 
@@ -445,6 +446,7 @@ type CommandPrefix = Readonly<{
 type TokenizedShell = Readonly<{
   segments: readonly ShellToken[][];
   heredocBodies: readonly SourceRange[];
+  hasUnquotedShellOperator: boolean;
 }>;
 
 type HeredocDelimiter = Readonly<{
@@ -536,6 +538,7 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
   let tokenHasQuotedWhitespace = false;
   let quote: '"' | '\'' | null = null;
   let comment = false;
+  let hasUnquotedShellOperator = false;
 
   const flushToken = (end: number): void => {
     if (!tokenStarted) return;
@@ -624,6 +627,7 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
       tokenHasLiteralizingSyntax = true;
       continue;
     }
+    if (';&|<>(){}'.includes(ch) || ch === '`') hasUnquotedShellOperator = true;
     if (ch === '#' && !tokenStarted) {
       comment = true;
       continue;
@@ -648,7 +652,208 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
     token += ch;
   }
   flushSegment(cmd.length);
-  return { segments, heredocBodies };
+  return { segments, heredocBodies, hasUnquotedShellOperator };
+}
+
+const PROSE_COMMANDS: Readonly<Record<string, true>> = {
+  echo: true,
+  printf: true,
+};
+
+function normalizedTokens(tokens: readonly ShellToken[], start = 0): string {
+  let normalized = '';
+  for (let index = start; index < tokens.length; index++) {
+    if (index > start) normalized += ' ';
+    normalized += tokens[index]!.value;
+  }
+  return normalized;
+}
+
+function shellCommandSource(tokens: readonly ShellToken[], commandIndex: number): string | null {
+  for (let index = commandIndex + 1; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (token.value === '--') return null;
+    if (token.value === '-c' || token.value === '--command' || /^-[^-]*c[^-]*$/.test(token.value)) {
+      return tokens[index + 1]?.value ?? '';
+    }
+  }
+  return null;
+}
+
+function commandSubstitutionEnd(source: string, start: number): number | null {
+  let depth = 1;
+  let quote: '"' | '\'' | null = null;
+
+  for (let index = start; index < source.length; index++) {
+    const character = source[index]!;
+    if (quote === '\'') {
+      if (character === '\'') quote = null;
+      continue;
+    }
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (quote === '"') {
+      if (character === '"') quote = null;
+      continue;
+    }
+    if (character === '"' || character === '\'') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') {
+      depth++;
+      continue;
+    }
+    if (character === ')') {
+      depth--;
+      if (depth === 0) return index;
+    }
+  }
+
+  return null;
+}
+
+function backtickSubstitutionEnd(source: string, start: number): number | null {
+  for (let index = start; index < source.length; index++) {
+    if (source[index] === '\\') {
+      index++;
+      continue;
+    }
+    if (source[index] === '`') return index;
+  }
+  return null;
+}
+
+function dockerSubstitutionCandidates(source: string): string[] {
+  const candidates: string[] = [];
+  let quote: '"' | '\'' | null = null;
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index]!;
+    if (quote === '\'') {
+      if (character === '\'') quote = null;
+      continue;
+    }
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (character === '"') {
+      quote = quote === '"' ? null : '"';
+      continue;
+    }
+    if (character === '\'') {
+      if (quote !== '"') quote = '\'';
+      continue;
+    }
+
+    const end = character === '$' && source[index + 1] === '('
+      ? commandSubstitutionEnd(source, index + 2)
+      : character === '`'
+      ? backtickSubstitutionEnd(source, index + 1)
+      : undefined;
+    if (end === undefined) continue;
+    if (end === null) {
+      candidates.push(source.slice(index));
+      return candidates;
+    }
+
+    const contentStart = character === '$' ? index + 2 : index + 1;
+    candidates.push(...dockerDestructiveCandidates(source.slice(contentStart, end)));
+    index = end;
+  }
+
+  return candidates;
+}
+
+function dockerSegmentCandidates(
+  command: string,
+  tokens: readonly ShellToken[],
+  isolatedDisplay: boolean,
+): string[] {
+  const candidates: string[] = [];
+  const prefix = consumeCommandPrefixes(tokens);
+  if (prefix.ambiguous || tokens.some((token) => token.hasUnterminatedQuote)) {
+    candidates.push(normalizedTokens(tokens));
+    return candidates;
+  }
+
+  let commandIndex = prefix.index;
+  const controlKeyword = tokens[commandIndex]?.value;
+  if (
+    controlKeyword === 'then'
+    || controlKeyword === 'do'
+    || controlKeyword === 'else'
+    || controlKeyword === 'elif'
+  ) commandIndex++;
+  if (commandIndex >= tokens.length) return candidates;
+
+  const commandName = tokens[commandIndex]!.value;
+  const executableName = commandName.slice(commandName.lastIndexOf('/') + 1);
+  if (executableName === 'docker' || executableName === 'docker-compose') {
+    candidates.push(normalizedTokens(tokens, commandIndex));
+    return candidates;
+  }
+
+  if (commandName === 'eval') {
+    candidates.push(...dockerDestructiveCandidates(normalizedTokens(tokens, commandIndex + 1)));
+    return candidates;
+  }
+
+  if (Object.hasOwn(SHELL_INTERPRETER_COMMANDS, executableName)) {
+    const source = shellCommandSource(tokens, commandIndex);
+    if (source === null) candidates.push(normalizedTokens(tokens, commandIndex));
+    else candidates.push(...dockerDestructiveCandidates(source));
+    return candidates;
+  }
+
+  if (commandName === 'cmux') {
+    const sendIndex = tokens.findIndex((token, index) => index > commandIndex && token.value === 'send');
+    if (sendIndex !== -1) {
+      const first = tokens[commandIndex]!;
+      const last = tokens[tokens.length - 1]!;
+      candidates.push(command.slice(first.start, last.end));
+      return candidates;
+    }
+  }
+
+  if (Object.hasOwn(PROSE_COMMANDS, commandName) && isolatedDisplay) return candidates;
+  candidates.push(normalizedTokens(tokens, commandIndex));
+  return candidates;
+}
+
+function isIsolatedDisplay(tokenized: TokenizedShell): boolean {
+  if (
+    tokenized.segments.length !== 1
+    || tokenized.heredocBodies.length !== 0
+    || tokenized.hasUnquotedShellOperator
+  ) return false;
+
+  const tokens = tokenized.segments[0]!;
+  const prefix = consumeCommandPrefixes(tokens);
+  const commandName = tokens[prefix.index]?.value;
+  return !prefix.ambiguous
+    && commandName !== undefined
+    && Object.hasOwn(PROSE_COMMANDS, commandName);
+}
+
+function dockerDestructiveCandidates(command: string): string[] {
+  const candidates = dockerSubstitutionCandidates(command);
+  const tokenized = tokenizeShellSegments(command);
+  const isolatedDisplay = isIsolatedDisplay(tokenized);
+  if (!isolatedDisplay) candidates.push(command);
+  for (const tokens of tokenized.segments) {
+    candidates.push(...dockerSegmentCandidates(command, tokens, isolatedDisplay));
+  }
+  return candidates;
+}
+
+function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean {
+  return dockerDestructiveCandidates(command).some(
+    (candidate) => rule.re.test(candidate) && !rule.exceptRe?.test(candidate),
+  );
 }
 
 // Find the git subcommand in a single command segment, tolerating wrappers
@@ -990,6 +1195,9 @@ export interface CommandChecker {
  */
 export function createCommandChecker(policy: CommandPolicy): CommandChecker {
   const compiledBash = compileRules(policy.bash);
+  const specials = {
+    docker_destructive: dockerDestructiveMatches,
+  };
   const dangerousTargets = policy.rm_rf.dangerous_targets.map((pattern) => new RegExp(pattern));
   const privilegeCommands = new Set(policy.privilege_escalation.commands);
   const git = policy.git;
@@ -1008,9 +1216,8 @@ export function createCommandChecker(policy: CommandPolicy): CommandChecker {
     if (privilegeHit) return privilegeHit;
 
     // Hard-block rules take priority over the git "confirm" guard.
-    const hit = firstMatch(compiledBash, cmd, 'block');
+    const hit = firstMatch(compiledBash, cmd, 'block', specials);
     if (hit) return hit;
-
     // Protected git operations → interactive prompt ("confirm").
     return checkGit(cmd);
   };

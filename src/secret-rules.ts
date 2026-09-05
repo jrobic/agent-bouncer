@@ -23,6 +23,7 @@
 import { hasUnsafeGitConfigRemoteUrl, maskSearchPatternArguments } from './command-rules.ts';
 import { BASELINE } from './policy/baseline.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
+import type { CompiledRule } from './policy/match.ts';
 import type { RegexRule } from './policy/schema.ts';
 import { type Verdict, VERDICT_SEVERITY } from './types.ts';
 
@@ -80,11 +81,9 @@ export function createSecretChecker(
   const compiledPath = compileRules(tables.path);
   const compiledBash = compileRules(tables.bash);
   const specials = {
-    // Reading remote.*.url is the same read-only class as `git remote
-    // get-url` (command family) — the structural parser decides that
-    // exception; the regex itself stays conservative and matches every
-    // remote-url config command, read or write.
-    git_remote_url: (cmd: string) => hasUnsafeGitConfigRemoteUrl(cmd, configReadModes),
+    // The predicate owns the special match, including its read-only
+    // exception, so global git options cannot be lost to a raw regex.
+    git_remote_url: (_rule: CompiledRule, cmd: string) => hasUnsafeGitConfigRemoteUrl(cmd, configReadModes),
   };
 
   const checkPath = (path: string): Verdict | null => {
