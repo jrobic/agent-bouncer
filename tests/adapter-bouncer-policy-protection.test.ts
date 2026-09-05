@@ -1,12 +1,8 @@
-// Ticket 19: the policy the binary RUNS ON (<configDir>/bouncer/policy.toml
-// and <configDir>/bouncer/policy.d/, src/adapter/policy.ts's
-// overlayPath/overlayDirPath) is now a baseline secret.path rule
-// (bouncer-policy, verdict "confirm") — the disarmament counterpart of
-// bouncer-audit-log (tests/adapter-bouncer-log-protection.test.ts), which
-// this file is modeled on. Real `run()` dispatch, a REAL on-disk overlay
-// under a throwaway, EXPLICITLY VERIFIED CLAUDE_CONFIG_DIR — same
-// ticket-13 lesson: an unverified, accidentally-empty CLAUDE_CONFIG_DIR
-// falls through to the real live ~/.claude.
+// The policy the binary runs on (<configDir>/bouncer/policy.toml and
+// <configDir>/bouncer/policy.d/) is a protected-write baseline row. Writes
+// require confirmation while ordinary reads remain free. Real `run()`
+// dispatches against a throwaway, explicitly verified CLAUDE_CONFIG_DIR so
+// no test can fall through to the live ~/.claude.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -42,7 +38,7 @@ function askReason(stdout: string | null): string {
   return parsed.hookSpecificOutput.permissionDecisionReason as string;
 }
 
-describe('run(): Edit/Write/Read on the live policy overlay confirms, under a real custom CLAUDE_CONFIG_DIR', () => {
+describe('run(): protected bouncer policy writes confirm while reads remain free', () => {
   test('Edit on a policy.d file asks, naming bouncer-policy', async () => {
     const accountDir = await freshAccountDir();
     const policyDFile = join(accountDir, 'bouncer', 'policy.d', '10-personal.toml');
@@ -75,7 +71,7 @@ describe('run(): Edit/Write/Read on the live policy overlay confirms, under a re
     expect(askReason(stdout)).toContain('bouncer-policy');
   });
 
-  test('Read via a symlink pointing AT the real policy.toml also asks (realpath resolution, not the literal path)', async () => {
+  test('Read through a symlink to the real policy.toml stays free', async () => {
     const accountDir = await freshAccountDir();
     const realPolicyFile = join(accountDir, 'bouncer', 'policy.toml');
     await mkdir(dirname(realPolicyFile), { recursive: true });
@@ -89,55 +85,53 @@ describe('run(): Edit/Write/Read on the live policy overlay confirms, under a re
       tool_input: { file_path: innocentLink },
     });
     const { stdout } = await run(envelope);
-    expect(askReason(stdout)).toContain('bouncer-policy');
+    expect(stdout).toBeNull();
   });
 
-  test('the dotfiles mount layout (bouncer/policy.d itself a symlink to a shared bouncer/policy.d elsewhere) still asks — realpath resolves through the directory symlink too', async () => {
+  test('Edit through a bouncer/policy.d mount asks', async () => {
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
-    // The shared mount target ALSO carries a `bouncer/` segment in its own
-    // real path (mirrors the actual dotfiles common mount) — this is
-    // the case the rule is built to survive.
     const commonDir = await mkdtemp(join(tmpdir(), 'bouncer-common-'));
     cleanupDirs.push(commonDir);
     const sharedPolicyD = join(commonDir, 'bouncer', 'policy.d');
     await mkdir(sharedPolicyD, { recursive: true });
-    await writeFile(join(sharedPolicyD, '10-shared.toml'), '# shared\n', 'utf8');
+    const mountedPolicyFile = join(sharedPolicyD, '10-shared.toml');
+    await writeFile(mountedPolicyFile, '# shared\n', 'utf8');
     await symlink(sharedPolicyD, join(accountDir, 'bouncer', 'policy.d'));
 
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
-      tool_name: 'Read',
-      tool_input: { file_path: join(accountDir, 'bouncer', 'policy.d', '10-shared.toml') },
+      tool_name: 'Edit',
+      tool_input: {
+        file_path: join(accountDir, 'bouncer', 'policy.d', '10-shared.toml'),
+        old_string: '# shared',
+        new_string: '# changed',
+      },
     });
     const { stdout } = await run(envelope);
     expect(askReason(stdout)).toContain('bouncer-policy');
   });
 
-  test('DOCUMENTED LIMIT: a mount target with NO bouncer/ segment in its real path escapes the rule after realpath — allow', async () => {
-    // The flip side of the case above: the LITERAL requested path still
-    // reads "bouncer/policy.d/…", but canonicalizePath's realpath resolves
-    // it onto a target directory whose real path never contains a
-    // `bouncer/` segment (e.g. an adapter mounting its overlay directly
-    // under a differently-named shared dotfiles root, with no `bouncer/`
-    // path component of its own). The rule anchors on the literal segment
-    // (see policy/secret.toml's bouncer-policy comment, point (a)) — an
-    // adapter whose overlay resolves elsewhere must carry the protection
-    // along itself; this test pins that this rule alone does not do it.
+  test('Edit through a mount with no bouncer target segment still asks from the raw path', async () => {
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     const noBouncerSegmentTarget = await mkdtemp(join(tmpdir(), 'shared-dotfiles-mount-'));
     cleanupDirs.push(noBouncerSegmentTarget);
-    await writeFile(join(noBouncerSegmentTarget, '10-shared.toml'), '# shared\n', 'utf8');
+    const mountedPolicyFile = join(noBouncerSegmentTarget, '10-shared.toml');
+    await writeFile(mountedPolicyFile, '# shared\n', 'utf8');
     await symlink(noBouncerSegmentTarget, join(accountDir, 'bouncer', 'policy.d'));
 
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
-      tool_name: 'Read',
-      tool_input: { file_path: join(accountDir, 'bouncer', 'policy.d', '10-shared.toml') },
+      tool_name: 'Edit',
+      tool_input: {
+        file_path: join(accountDir, 'bouncer', 'policy.d', '10-shared.toml'),
+        old_string: '# shared',
+        new_string: '# changed',
+      },
     });
     const { stdout } = await run(envelope);
-    expect(stdout).toBeNull();
+    expect(askReason(stdout)).toContain('bouncer-policy');
   });
 
   test('Bash: appending to the root overlay with printf asks, ruleId bash-bouncer-policy', async () => {
@@ -179,18 +173,7 @@ describe('run(): Edit/Write/Read on the live policy overlay confirms, under a re
     expect(text).toContain('bouncer-policy');
   });
 
-  test('closed loop: once the disarming [[override]] is on disk (i.e. already approved by a human), the guard steps aside — Read passes AND rules list shows the override', async () => {
-    // This test picks up AFTER the approval this file's own "Write ... asks"
-    // case above proves: writing the override is intercepted; a human who
-    // approves it anyway ends up with exactly the on-disk state this test
-    // starts from (plain fs write, no run() involved — simulating the
-    // human-approved write actually landing). This test deliberately
-    // FLIPS the day a stronger "sealed rules" notion ships (see the
-    // bouncer-policy comment in policy/secret.toml, point (b), and the
-    // cascade idea in .scratch/backlog.md): today, an ordinary
-    // override-able rule that neutralizes itself is expected behavior,
-    // not a bug — this is the regression seam that will need a conscious
-    // update, not a silent break, when sealed rules arrive.
+  test('closed loop: an approved override disables later policy edits and remains listed', async () => {
     const accountDir = await freshAccountDir();
     const policyDFile = join(accountDir, 'bouncer', 'policy.d', '99-disarm.toml');
     await mkdir(dirname(policyDFile), { recursive: true });
@@ -199,13 +182,12 @@ describe('run(): Edit/Write/Read on the live policy overlay confirms, under a re
       '[[override]]\nrule = "bouncer-policy"\naction = "disable"\nreason = "test: human-approved disarm already on disk"\n',
       'utf8',
     );
-    // Sanity: the file is really there, not an artifact of a stale mock.
     expect(await readFile(policyDFile, 'utf8')).toContain('bouncer-policy');
 
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
-      tool_name: 'Read',
-      tool_input: { file_path: policyDFile },
+      tool_name: 'Edit',
+      tool_input: { file_path: policyDFile, old_string: 'disarm', new_string: 'approved' },
     });
     const { stdout } = await run(envelope);
     expect(stdout).toBeNull();

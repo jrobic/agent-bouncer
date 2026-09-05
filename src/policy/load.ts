@@ -62,7 +62,7 @@ import type {
   SafeGrammarRule,
 } from './schema.ts';
 
-// Every regex-table id the embedded baseline already owns, across all five
+// Every regex-table id the embedded baseline already owns, across all six
 // families combined — computed once at module load (the baseline never
 // changes at runtime), see attemptCompose's use for the rationale.
 const BASELINE_RULE_IDS = resolvableRuleIds(BASELINE.rules);
@@ -383,6 +383,7 @@ interface MergedPolicy {
     readonly git: RulesPolicy['command']['git'];
   };
   readonly secret: { readonly path: Tagged[]; readonly bash: Tagged[]; };
+  readonly protected_write: Tagged[];
   readonly mcp_write: { readonly read_prefixes: readonly string[]; };
   readonly write_secret: Tagged[];
   readonly prompt: Tagged[];
@@ -462,6 +463,7 @@ function allTagged(merged: MergedPolicy): Tagged[] {
     ...merged.command.bash,
     ...merged.secret.path,
     ...merged.secret.bash,
+    ...merged.protected_write,
     ...merged.write_secret,
     ...merged.prompt,
   ];
@@ -543,6 +545,7 @@ function buildResult(
       path: regexRulesOf(effective, 'secret.path'),
       bash: regexRulesOf(effective, 'secret.bash'),
     },
+    protected_write: regexRulesOf(effective, 'protected_write'),
     mcp_write: merged.mcp_write,
     write_secret: regexRulesOf(effective, 'write_secret'),
     prompt: regexRulesOf(effective, 'prompt'),
@@ -563,6 +566,7 @@ function mergedBaselineOnly(): MergedPolicy {
       path: mergeRegexFamily('secret.path', baseline.secret.path, []),
       bash: mergeRegexFamily('secret.bash', baseline.secret.bash, []),
     },
+    protected_write: mergeRegexFamily('protected_write', baseline.protected_write, []),
     mcp_write: { read_prefixes: baseline.mcp_write.read_prefixes },
     write_secret: mergeRegexFamily('write_secret', baseline.write_secret, []),
     prompt: mergeRegexFamily('prompt', baseline.prompt, []),
@@ -696,6 +700,7 @@ interface FileEntries {
   readonly commandBash: readonly unknown[];
   readonly secretPath: readonly unknown[];
   readonly secretBash: readonly unknown[];
+  readonly protectedWrite: readonly unknown[];
   readonly writeSecret: readonly unknown[];
   readonly prompt: readonly unknown[];
   readonly rmRfTargets: readonly string[];
@@ -794,6 +799,7 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
     commandBash: fileArray<unknown>(parsed, ['rules', 'command', 'bash'], 'rules.command.bash', layer, filename),
     secretPath: fileArray<unknown>(parsed, ['rules', 'secret', 'path'], 'rules.secret.path', layer, filename),
     secretBash: fileArray<unknown>(parsed, ['rules', 'secret', 'bash'], 'rules.secret.bash', layer, filename),
+    protectedWrite: fileArray<unknown>(parsed, ['rules', 'protected_write'], 'rules.protected_write', layer, filename),
     writeSecret: fileArray<unknown>(parsed, ['rules', 'write_secret'], 'rules.write_secret', layer, filename),
     prompt: fileArray<unknown>(parsed, ['rules', 'prompt'], 'rules.prompt', layer, filename),
     rmRfTargets: fileArray<string>(
@@ -913,10 +919,10 @@ interface RegexCandidate {
   readonly seq: number;
 }
 
-// Regex-table ids resolve GLOBALLY across all five families (same reason
-// the pre-layering idConflicts check spanned all five, not per-table) —
+// Regex-table ids resolve GLOBALLY across all six families (same reason
+// the pre-layering idConflicts check spanned all six, not per-table) —
 // so cross-layer id precedence is computed once, over every family
-// combined, not five times.
+// combined, not six times.
 function regexIdCandidates(
   ...groups: readonly (readonly (FileTagged<unknown> & { readonly layer: string; readonly seq: number; })[])[]
 ): RegexCandidate[] {
@@ -1023,10 +1029,11 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   let rawCommandBash: L<unknown>[] = [];
   let rawSecretPath: L<unknown>[] = [];
   let rawSecretBash: L<unknown>[] = [];
+  let rawProtectedWrite: L<unknown>[] = [];
   let rawWriteSecret: L<unknown>[] = [];
   let rawPrompt: L<unknown>[] = [];
   // Layer- and file-tagged — dangerous_targets has no `id` of its own to
-  // carry through resolvePrecedence like the five regex families, it is
+  // carry through resolvePrecedence like the six regex families, it is
   // purely additive across layers (ADR-0001 § Merge order); `layer` here
   // is only for lintRmRfTargets to attribute a bad target back to it.
   const rmRfTagged: { readonly filename: string; readonly layer: string; readonly raw: string; }[] = [];
@@ -1046,6 +1053,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     for (const raw of entries.commandBash) rawCommandBash.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.secretPath) rawSecretPath.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.secretBash) rawSecretBash.push({ filename, layer, raw, seq: seq() });
+    for (const raw of entries.protectedWrite) rawProtectedWrite.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.writeSecret) rawWriteSecret.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.prompt) rawPrompt.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.rmRfTargets) rmRfTagged.push({ filename, layer, raw });
@@ -1091,7 +1099,14 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     (label, files) => `conflicting command.git.safe_grammar entries for sub ${JSON.stringify(label)} in ${files.join(' and ')}`,
   );
 
-  const regexCandidates = regexIdCandidates(rawCommandBash, rawSecretPath, rawSecretBash, rawWriteSecret, rawPrompt);
+  const regexCandidates = regexIdCandidates(
+    rawCommandBash,
+    rawSecretPath,
+    rawSecretBash,
+    rawProtectedWrite,
+    rawWriteSecret,
+    rawPrompt,
+  );
 
   // ADR-0001 § Precedence: an overlay row reusing a BASELINE rule id is
   // rejected outright, before cross-layer precedence ever runs — checked
@@ -1134,6 +1149,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   rawCommandBash = dropShadowed(rawCommandBash);
   rawSecretPath = dropShadowed(rawSecretPath);
   rawSecretBash = dropShadowed(rawSecretBash);
+  rawProtectedWrite = dropShadowed(rawProtectedWrite);
   rawWriteSecret = dropShadowed(rawWriteSecret);
   rawPrompt = dropShadowed(rawPrompt);
 
@@ -1165,6 +1181,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
       path: mergeRegexFamily('secret.path', BASELINE.rules.secret.path, rawSecretPath),
       bash: mergeRegexFamily('secret.bash', BASELINE.rules.secret.bash, rawSecretBash),
     },
+    protected_write: mergeRegexFamily('protected_write', BASELINE.rules.protected_write, rawProtectedWrite),
     mcp_write: {
       read_prefixes: appendedAfterBaseline(BASELINE.rules.mcp_write.read_prefixes, relaxedValuesFor(relax, 'mcp_write.read_prefixes')),
     },
@@ -1178,6 +1195,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   const resolvable = resolvableRuleIds({
     command: { ...merged.command, bash: merged.command.bash.map((t) => t.rule) },
     secret: { path: merged.secret.path.map((t) => t.rule), bash: merged.secret.bash.map((t) => t.rule) },
+    protected_write: merged.protected_write.map((t) => t.rule),
     mcp_write: merged.mcp_write,
     write_secret: merged.write_secret.map((t) => t.rule),
     prompt: merged.prompt.map((t) => t.rule),

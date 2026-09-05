@@ -427,3 +427,11 @@ sequences = [
     ["--check"],
     ["--check", "*"],
   ]
+
+# Claude Code's configuration commands write harness state without naming a
+# filesystem path, so this command-family row closes that separate surface.
+[[rules.command.bash]]
+id = "harness-self-config"
+regex = "\\bclaude\\b\\s+(?:mcp\\s+(?:add|remove)|plugin\\s+(?:install|enable|disable|uninstall)|config\\s+set)\\b"
+reason = "Claude Code command changes harness configuration or installed plugins"
+verdict = "confirm"

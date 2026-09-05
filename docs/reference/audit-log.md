@@ -28,7 +28,7 @@ produces no line at all.
 | `timestamp` | string | ISO 8601, set when the line is written. |
 | `session_id` | string \| null | From the hook envelope; `null` when absent. |
 | `tool_name` | string \| null | From the hook envelope; `null` when absent. |
-| `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"prompt"`. |
+| `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"protected-write"` \| `"prompt"`. |
 | `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"`. |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
 | `target` | string | The command/path/URL/prompt text the rule matched against, truncated to 200 characters (`...` appended when cut). |

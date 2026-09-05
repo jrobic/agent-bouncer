@@ -33,7 +33,7 @@ const BASH_SHELL_TOKEN = /(?:^|[\s;|&])(\$\([^)]*\)|\S+)/g;
 const BASH_GLOB_PATH_TOKEN = /[-\w./~?*]*[?*][-\w./~?*]*/;
 const UNSUPPORTED_GLOB_SYNTAX = /[[\]$\\]|\{[^}]*,[^}]*\}/;
 
-function globPathReadings(shellToken: string): readonly string[] | null {
+export function globPathReadings(shellToken: string): readonly string[] | null {
   if (shellToken === '*' || UNSUPPORTED_GLOB_SYNTAX.test(shellToken)) return null;
   const glob = shellToken.match(BASH_GLOB_PATH_TOKEN)?.[0];
   if (glob === undefined) return null;

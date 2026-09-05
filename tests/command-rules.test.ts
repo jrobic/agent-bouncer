@@ -753,6 +753,17 @@ describe('command-rules: quoted separators don\'t fabricate segments (tokenizer 
   });
 });
 
+describe('command-rules: clobber redirect tokenization', () => {
+  test('a clobber redirect leaves the preceding Git status subcommand intact', () => {
+    expect(extractGitSubcommand('git status >| out')?.sub).toBe('status');
+  });
+
+  test('a quoted greater-than and a clobber redirect retain their established behavior', () => {
+    expect(checkBash('echo "a>"|cat')).toBeNull();
+    expect(checkBash('rm -rf / >| out')?.verdict).toBe('block');
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');
@@ -946,5 +957,18 @@ describe('command-rules: known limits (bypass) — documented gaps stay intentio
     ['f(){f|f&};f', 'renamed fork bomb (signature evasion)'],
   ])('does NOT detect %s', (cmd) => {
     expect(checkBash(cmd)).toBeNull();
+  });
+});
+
+describe('command-rules: harness self-configuration', () => {
+  test('ruleId harness-self-config: Claude Code configuration writes confirm', () => {
+    expect(checkBash('claude mcp add local -- npx server')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'harness-self-config',
+    });
+  });
+
+  test('read-only Claude Code configuration commands stay silent', () => {
+    expect(checkBash('claude plugin list')).toBeNull();
   });
 });

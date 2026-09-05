@@ -3594,6 +3594,69 @@
           "ruleId": "docker-destructive"
         }
       ]
+    },
+    {
+      "id": "harness-self-config-mcp-add-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude mcp add x -- npx y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-self-config"
+        }
+      ]
+    },
+    {
+      "id": "harness-self-config-plugin-install-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude plugin install x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-self-config"
+        }
+      ]
+    },
+    {
+      "id": "harness-self-config-config-set-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude config set -g theme dark"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-self-config"
+        }
+      ]
+    },
+    {
+      "id": "harness-self-config-mcp-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude mcp list"
+      },
+      "expected": []
+    },
+    {
+      "id": "harness-self-config-config-get-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude config get theme"
+      },
+      "expected": []
+    },
+    {
+      "id": "harness-self-config-plugin-list-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude plugin list"
+      },
+      "expected": []
     }
   ]
 }

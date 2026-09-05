@@ -4,13 +4,14 @@ The policy is TOML, in three layers.
 
 ## Baseline vs. overlay
 
-**Baseline** — five files in this repository, one per rule family,
+**Baseline** — six files in this repository, one per rule family,
 compiled into the binary at build time (`bun build --compile`):
 `policy/command.toml`, `policy/secret.toml`, `policy/mcp-write.toml`,
-`policy/write-secret.toml`, `policy/prompt.toml`. Each file's own
-top-level TOML header (`[[rules.command.bash]]`, `[rules.secret...]`,
-...) already scopes it to its family, so merging the five at build time
-is a plain shallow merge — no file ever contributes to another's key.
+`policy/write-secret.toml`, `policy/protected-write.toml`, and
+`policy/prompt.toml`. Each file's own top-level TOML header
+(`[[rules.command.bash]]`, `[rules.secret...]`, ...) already scopes it to
+its family, so merging the six at build time is a plain shallow merge — no
+file ever contributes to another's key.
 Always present, never edited at runtime. The vetted starting point.
 
 **Overlay** — two named layers on top of the baseline (ADR-0001), each a
@@ -52,11 +53,11 @@ layers target the same thing (see § Precedence below).
 
 ## The rule row: `{id, regex, reason, flags?, except?, special?, verdict?}`
 
-Every entry in the five regex tables below shares this shape:
+Every entry in the six regex tables below shares this shape:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | string | yes | Unique across ALL FIVE tables combined (ids resolve globally, not per-table). Lint-enforced against two things: an id already owned by an embedded BASELINE rule, in either overlay layer, is rejected — use `[[override]]` (§ below) to touch a baseline rule instead of shadowing it; an id shared between two DIFFERENT FILES of the SAME layer is rejected too (§ Cross-file conflicts). The same id repeated twice WITHIN one file is not a lint error — it stays the existing `[[override]]` batch semantics, an override naming that id applies to every row carrying it. |
+| `id` | string | yes | Unique across ALL SIX tables combined (ids resolve globally, not per-table). Lint-enforced against two things: an id already owned by an embedded BASELINE rule, in either overlay layer, is rejected — use `[[override]]` (§ below) to touch a baseline rule instead of shadowing it; an id shared between two DIFFERENT FILES of the SAME layer is rejected too (§ Cross-file conflicts). The same id repeated twice WITHIN one file is not a lint error — it stays the existing `[[override]]` batch semantics, an override naming that id applies to every row carrying it. |
 | `regex` | string | yes | Must compile and stay inside the RE2-like dialect (§ below). |
 | `reason` | string | yes | Shown in `bouncer check`/`rules list` output and in the degraded Claude Code verdict text. |
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
@@ -64,7 +65,7 @@ Every entry in the five regex tables below shares this shape:
 | `special` | string | no | An engine-recognized marker for logic no regex alone expresses. Today only `"git_remote_url"`, on the `secret.bash` entry that also needs the structural git parser to distinguish a config read from a write. |
 | `verdict` | `"block"` \| `"confirm"` \| `"observe"` | no | A per-row static override of the family's default verdict (e.g. every `secret.path` row defaults to `"block"`; `transcript-backup` sets `verdict = "confirm"`). Lint-validated against the same three kinds `[[override]]`'s `action = "relax"` can name. A live `[[override]]` relax still wins over this field when both apply — this is the row's own static default, not the loudest word on the subject. |
 
-## The five regex tables
+## The six regex tables
 
 | Table | Family | Guards |
 |---|---|---|
@@ -72,6 +73,7 @@ Every entry in the five regex tables below shares this shape:
 | `rules.secret.path` | secret | file paths that read as secret-bearing |
 | `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
+| `rules.protected_write` | protected-write | paths whose mutation changes harness behavior, persistence, or shell startup |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
 
 The command baseline also confirms outbound `publish` actions (package registries, Docker images, and `gh`/`glab` releases) and `forge-api-write` actions (a mutating HTTP verb or body-field flag on `gh api`/`glab api`). `forge-api-write` deliberately confirms `gh api graphql -f query=...` reads: flag-only matching cannot distinguish their query body from a mutation. `base64-decode-exec` blocks Base64, `xxd -r`, or `openssl enc -d` output piped directly into a shell or interpreter.
@@ -138,6 +140,15 @@ elsewhere"` without removing the baseline guard.
   SQLite's positional statement argument; statements passed with `-f` or stdin
   remain a known limit.
 - A renamed live transcript such as `.jsonl.bak` is outside `session-transcripts`: the row protects active session files ending in `.jsonl`, not copies.
+- protected-write: a redirect embedded in a heredoc body is source text, not
+  an executable write segment.
+- protected-write: `sed -f` can name a script that writes a protected path,
+  but the script's contents are not parsed.
+- protected-write: a glob whose two readings match no protected-write row,
+  such as `~/.zsh*`, `~/.claude/set*`, or `~/.claude/*`, is not a recognized
+  target. This is the same residual class as `*.p*m` in the secret scan; the
+  protected `.claude` directory itself is a candidate baseline row, not a
+  parser exception.
 
 Example row (from the baseline):
 
@@ -148,7 +159,7 @@ regex = "\\bdd\\s+[^|;&\\n]*\\bof=\\/dev\\/"
 reason = "dd writing to a block device (/dev/...) — likely disk wipe"
 ```
 
-An overlay addition to any of these five tables is pure hardening: it
+An overlay addition to any of these six tables is pure hardening: it
 can only add a new match, never override or shadow an existing baseline
 row (baseline entries are always checked first).
 
@@ -258,9 +269,9 @@ leading `~` remains scanned. Quoted tokens without whitespace and unquoted
 tokens retain the full scan. Shell interpreter and `eval` command strings
 retain the full scan.
 
-A token containing `*` or `?` is checked with every metacharacter read as
-`x`, then with every metacharacter empty. The stricter matching path verdict
-wins. Tokens without either metacharacter keep the literal scan unchanged.
+A token containing `*` or `?` is checked with every metacharacter read as `x`,
+then with every metacharacter empty. The stricter matching path verdict wins.
+Tokens without either metacharacter keep the literal scan unchanged.
 
 The parser shares the command guard's structural tokenizer and wrapper-prefix
 handling; see the header of `src/command-rules.ts`. Pattern files and
@@ -268,6 +279,52 @@ file-targeting values (`-f`/`--file`, `-g`/`--glob`/`--iglob`, `--pre`) remain
 scanned. An unknown tool, option, argument form, unterminated heredoc, or
 unterminated quote retains the full scan.
 
+
+### Protected-write paths and Bash target extraction
+
+`rules.protected_write` defaults to `confirm` and applies only to native
+`Write`, `Edit`, `MultiEdit`, and `NotebookEdit` calls. `Read`, `Grep`, and
+`Glob` stay silent even when their path matches. Every native or Bash target is
+checked as both its raw spelling and its canonicalized path after symlink
+resolution. The stricter verdict wins, so an innocent symlink name cannot hide
+a protected destination and a protected raw mount path remains guarded when its
+target has an unrelated name.
+
+For Bash, the engine extracts known mutation targets structurally before it
+falls back to path-like tokens under an unrecognized command head:
+
+- redirects (`>`, `>>`, `>|`, `&>`, `&>>`, and numbered forms), every
+  non-option `tee` argument, the final non-option operand of
+  `cp`/`install`/`rsync`/`ln`, and every non-option operand of
+  `mv`/`rm`/`unlink`/`shred`/`truncate`/`touch`/`chmod`/`chown`/`chattr`/`patch`;
+- writer-specific option arguments, including `-t`/`--target-directory` for
+  `cp`/`install`/`ln`/`mv`, in-place `sed` and `perl` operands, and `dd`
+  operands written as `of=...`;
+- positional destinations of `cp`/`install`/`ln`/`mv`/`rsync` are checked as
+  both the literal destination and `<destination>/<basename(source)>` for each
+  source, without a trailing-slash heuristic. This conservatively treats
+  `cp ~/.zshrc /tmp/` as a write to `/tmp/.zshrc`.
+- `sed` expressions that name a path, even without `-i`; `sed -f` remains a
+  documented limit because its script contents are not available.
+
+A target token carrying `*` or `?` uses the same two glob readings as the
+secret scan before raw and canonical path checks: `rm ~/.claude/settings*.json`
+confirms, while `rm ~/.claude/settings.json.bak` does not.
+
+The fallback is deliberately not a shell evaluator. Exact read-only heads
+(`cat`, `less`, `more`, `head`, `tail`, `grep`, `rg`, `ag`, `diff`, `cmp`,
+`jq`, `stat`, `wc`, `file`, `bat`, checksum tools, `ls`, `find`, `fd`,
+`tree`, `cd`, `pushd`, `test`, `[`, `source`, `.`, `echo`, `printf`, and
+`bouncer`) stay free. Git subcommands that do not write their named path
+arguments (`diff`, `show`, `log`, `blame`, `status`, `ls-files`, `cat-file`,
+`grep`, `commit`, `add`, `push`, `fetch`, `rev-parse`, `branch`, `tag`, and
+`remote`) also stay free. `checkout` and `restore` still confirm.
+
+Search-pattern masking is opt-in only for `grep`/`egrep`/`fgrep`, `rg`, `ag`,
+and `ack`; a head that can write through its pattern argument is never opted
+in. Path-bearing quoted strings and shell command strings under an unknown
+head therefore reach the conservative fallback. See [Known limits](#known-limits)
+for heredoc and `sed -f` boundaries.
 
 ## `mcp_write.read_prefixes`
 
@@ -287,7 +344,7 @@ read_prefixes = ["get", "list", "search", "fetch", "read", "query", "lookup", "d
 
 ```toml
 [[override]]
-rule = "curl-file-upload"   # must resolve to an id in one of the five regex tables
+rule = "curl-file-upload"   # must resolve to an id in one of the six regex tables
 action = "disable"          # "disable" | "replace" | "relax"
 reason = "..."              # mandatory, non-empty
 # action = "replace" also needs:
@@ -419,7 +476,7 @@ Three different orders, by scope:
   always merges before every profile-layer file, regardless of either
   layer's own filenames — see § Precedence below for what happens when
   the two layers target the same thing.
-- **The five regex tables, `rm_rf.dangerous_targets`,
+- **The six regex tables, `rm_rf.dangerous_targets`,
   `privilege_escalation.commands`** — baseline first, then every overlay
   file's additions across both layers, in merge order (common's files,
   then profile's). An overlay addition can only ever add, never shadow a
@@ -439,7 +496,7 @@ set — the SAME target contributed by both is not a cross-file conflict,
 it is the profile layer replacing the common layer's entry outright. The
 targets this applies to (the four case ADR-0001 names):
 
-- A regex-table row `id` (any of the five families).
+- A regex-table row `id` (any of the six families).
 - An `[[override]]`'s `rule`.
 - An `[[relax]]`'s `list` + `value`.
 - An `ask_flags` / `safe_first_arg` / `safe_grammar` entry's `sub`
@@ -479,9 +536,9 @@ carrying the row is enough:
   files of the same layer.
 - Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
   `sub`, in two different files of the same layer.
-- Two regex-table rows (any of the five families) sharing the same `id`,
+- Two regex-table rows (any of the six families) sharing the same `id`,
   in two different files of the same layer — ids resolve GLOBALLY, not
-  per-family, so this is checked across all five tables combined, not
+  per-family, so this is checked across all six tables combined, not
   per-table.
 - A regex-table row whose `id` already names an embedded BASELINE rule
   (ADR-0001 § Precedence) — in EITHER layer, and regardless of whether any
@@ -566,4 +623,4 @@ A `baseline`-provenance line has no file to name (the embedded baseline
 has no file on disk) and carries no suffix.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/prompt.toml, src/adapter/policy.ts, src/adapter/log-path.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, src/adapter/policy.ts, src/adapter/log-path.ts

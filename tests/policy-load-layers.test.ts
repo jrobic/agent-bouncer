@@ -391,8 +391,8 @@ describe('loadPolicyFromLayers: an overlay id reusing a BASELINE id is rejected 
   test('a baseline id from a DIFFERENT family is caught too — ids resolve globally, not per-table', () => {
     // "curl-file-upload" is a command.bash baseline id — reused here in
     // the prompt family, a completely different table. Ids resolve
-    // globally across all five regex families (same reason the pre-
-    // layering idConflicts check spanned all five, not per-table).
+    // globally across all six regex families (same reason the pre-
+    // layering idConflicts check spans all six, not per-table).
     const result = loadPolicyFromLayers([
       layer('common', []),
       layer('profile', [file('policy.toml', '[[rules.prompt]]\nid = "curl-file-upload"\nregex = "unrelated-shape"\nreason = "test"\n')]),

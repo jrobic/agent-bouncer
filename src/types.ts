@@ -37,7 +37,7 @@ export interface BashRule {
   reason: string;
 }
 
-// The five guard families this repository ports, named once so a dispatcher
+// The six guard families this repository ports, named once so a dispatcher
 // or a log entry can say which one produced a verdict without falling back
 // to a bare `string` (a typo'd family name would otherwise type-check).
-export type Family = 'command' | 'secret' | 'mcp-write' | 'write-secret' | 'prompt';
+export type Family = 'command' | 'secret' | 'protected-write' | 'mcp-write' | 'write-secret' | 'prompt';

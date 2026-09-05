@@ -1,6 +1,6 @@
 // The "first match wins" loop over a compiled regex-rule table — used
-// identically by all five families (command.bash, secret.path, secret.bash,
-// write_secret, prompt), where it used to be duplicated once per family.
+// identically by all six families (command.bash, secret.path, secret.bash,
+// write_secret, protected_write, prompt), where it used to be duplicated.
 
 import type { Verdict, VerdictKind } from '../types.ts';
 import type { RegexRule } from './schema.ts';

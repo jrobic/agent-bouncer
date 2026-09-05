@@ -19,6 +19,7 @@ import { createCheckMcpWrite } from '../mcp-write-rules.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { RulesPolicy } from '../policy/schema.ts';
 import { createScanPrompt } from '../prompt-rules.ts';
+import { createProtectedWriteChecker } from '../protected-write-rules.ts';
 import { createSecretChecker } from '../secret-rules.ts';
 import { extractTargets, type GuardedToolCall, isGuardedToolName, readStringField } from '../targets.ts';
 import { type Family, type Verdict, VERDICT_SEVERITY } from '../types.ts';
@@ -57,6 +58,11 @@ const NATIVE_FILE_PATH_FIELD: Readonly<Record<string, string>> = {
   NotebookEdit: 'notebook_path',
 };
 
+// Protected writes share the native path map but deliberately exclude Read.
+const PROTECTED_WRITE_FILE_PATH_FIELD = Object.fromEntries(
+  Object.entries(NATIVE_FILE_PATH_FIELD).filter(([tool]) => tool !== 'Read'),
+) as Readonly<Record<string, string>>;
+
 // Text about to be written, per tool — mirrors the catalog's
 // guard-write-secret dispatch (Write.content, Edit.new_string,
 // MultiEdit.edits[].new_string joined); the workstation generation
@@ -88,7 +94,7 @@ function writeSecretText(tool: string | undefined, ti: Record<string, unknown>):
 // workstation ran these as independent, separately-registered hooks, and
 // Claude Code denies a tool call if ANY registered hook denies it — the
 // strictest verdict wins regardless of which hook happened to run first.
-// Unifying five families into one dispatch must preserve that property:
+// Unifying six families into one dispatch must preserve that property:
 // checking command before secret must never let a stricter secret-family
 // block go unheard just because command found a milder confirm first.
 // VERDICT_SEVERITY lives in src/types.ts so every engine family ranks the
@@ -127,6 +133,7 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
 export function createDispatcher(policy: RulesPolicy): Dispatcher {
   const command = createCommandChecker(policy.command);
   const secret = createSecretChecker(policy.secret, policy.command.git.config_read_modes);
+  const protectedWrite = createProtectedWriteChecker(policy.protected_write);
   const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write.read_prefixes);
   const scanSecretsBound = createScanSecrets(policy.write_secret);
   const scanPromptBound = createScanPrompt(policy.prompt);
@@ -190,6 +197,26 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
     return null;
   }
 
+  async function inspectProtectedWriteFamily(input: HookInput): Promise<FamilyVerdict | null> {
+    const tool = input.tool_name;
+    if (tool !== undefined && Object.hasOwn(PROTECTED_WRITE_FILE_PATH_FIELD, tool)) {
+      const path = readStringField(input.tool_input ?? {}, PROTECTED_WRITE_FILE_PATH_FIELD[tool]!, HOOK_NAME);
+      const verdict = path === null ? null : await protectedWrite.checkPath(path);
+      return verdict ? { family: 'protected-write', verdict } : null;
+    }
+
+    if (!isGuardedToolName(tool)) return null;
+    const { commands } = extractTargets(toGuardedCall(input), HOOK_NAME);
+    for (const bashCommand of commands) {
+      // Sequential on purpose: the first protected target preserves the
+      // command's source order and avoids canonicalizing later candidates.
+      // oxlint-disable-next-line no-await-in-loop
+      const verdict = await protectedWrite.checkBashWrites(bashCommand);
+      if (verdict) return { family: 'protected-write', verdict };
+    }
+    return null;
+  }
+
   function inspectWriteSecretFamily(input: HookInput): FamilyVerdict | null {
     const ti = input.tool_input ?? {};
     const text = writeSecretText(input.tool_name, ti);
@@ -220,6 +247,9 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
 
     const secretHit = await inspectSecretFamily(input);
     if (secretHit) hits.push(secretHit);
+
+    const protectedWriteHit = await inspectProtectedWriteFamily(input);
+    if (protectedWriteHit) hits.push(protectedWriteHit);
 
     const writeSecretHit = inspectWriteSecretFamily(input);
     if (writeSecretHit) hits.push(writeSecretHit);

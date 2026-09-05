@@ -427,11 +427,12 @@ type SourceRange = Readonly<{
   end: number;
 }>;
 
-type ShellToken =
+export type ShellToken =
   & SourceRange
   & Readonly<{
     value: string;
     kind: 'word' | 'bang-operator';
+    hasLiteralizingSyntax: boolean;
     hasQuotedWhitespace: boolean;
     hasUnterminatedQuote: boolean;
   }>;
@@ -524,7 +525,7 @@ function isInsideHeredocBody(position: number, bodies: readonly SourceRange[]): 
   return bodies.some((body) => body.start <= position && position < body.end);
 }
 
-function tokenizeShellSegments(cmd: string): TokenizedShell {
+export function tokenizeShellSegments(cmd: string): TokenizedShell {
   const segments: ShellToken[][] = [];
   const heredocBodies: SourceRange[] = [];
   let tokens: ShellToken[] = [];
@@ -543,6 +544,7 @@ function tokenizeShellSegments(cmd: string): TokenizedShell {
       kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
       start: tokenStart,
       end,
+      hasLiteralizingSyntax: tokenHasLiteralizingSyntax,
       hasQuotedWhitespace: tokenHasQuotedWhitespace,
       hasUnterminatedQuote: quote !== null,
     });
@@ -630,7 +632,10 @@ function tokenizeShellSegments(cmd: string): TokenizedShell {
       flushToken(i);
       continue;
     }
-    if (/[;&|]/.test(ch)) {
+    if (
+      /[;&]/.test(ch)
+      || (ch === '|' && !(tokenStarted && !tokenHasLiteralizingSyntax && /^\d*>\|?$/.test(token)))
+    ) {
       flushSegment(i);
       continue;
     }
@@ -657,7 +662,7 @@ export function extractGitSubcommand(segment: string): GitCommand | null {
   return extractGitSubcommandFromTokens(tokens);
 }
 
-function extractGitSubcommandFromTokens(
+export function extractGitSubcommandFromTokens(
   tokens: readonly ShellToken[],
 ): GitCommand | null {
   const prefix = consumeCommandPrefixes(tokens);
@@ -681,7 +686,7 @@ function extractGitSubcommandFromTokens(
   };
 }
 
-function consumeCommandPrefixes(
+export function consumeCommandPrefixes(
   tokens: readonly ShellToken[],
   benignPrefixes: ReadonlySet<string> = GIT_BENIGN_PREFIXES,
 ): CommandPrefix {
@@ -743,8 +748,12 @@ function retainsQuotedTokenScan(
 }
 
 // Masks declared search-pattern arguments plus quoted prose and heredoc
-// bodies that cannot name a path before the secret path-token scan.
-export function maskSearchPatternArguments(cmd: string, pathToken: RegExp): string {
+// bodies that cannot name a path before a path-token scan.
+export function maskSearchPatternArguments(
+  cmd: string,
+  pathToken: RegExp,
+  maskedHeads?: Readonly<Record<string, true>>,
+): string {
   const tokenized = tokenizeShellSegments(cmd);
   const excluded: SourceRange[] = [];
   excluded.push(...nonPathTokenRanges(cmd, tokenized.heredocBodies, pathToken));
@@ -763,6 +772,7 @@ export function maskSearchPatternArguments(cmd: string, pathToken: RegExp): stri
       ? SEARCH_PATTERN_ARGUMENT_POLICIES[tool]!
       : undefined;
     if (policy === undefined) continue;
+    if (maskedHeads !== undefined && !Object.hasOwn(maskedHeads, tool)) continue;
     const patternTokens = excludedSearchPatternTokens(tokens.slice(prefix.index + 1), policy);
     if (patternTokens !== null) excluded.push(...patternTokens);
   }

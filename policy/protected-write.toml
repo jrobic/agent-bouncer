@@ -1,0 +1,55 @@
+# bouncer baseline policy — protected-write family (files an agent may read
+# freely but must not modify without human confirmation).
+
+[[rules.protected_write]]
+id = "harness-settings"
+regex = "(^|/)\\.claude(-[\\w.-]+)?/settings(\\.local)?\\.json$"
+reason = "Claude Code settings persist tool and hook configuration across sessions"
+
+[[rules.protected_write]]
+id = "harness-hooks"
+regex = "(^|/)\\.claude(-[\\w.-]+)?/hooks(/|$)"
+reason = "Claude Code hooks can alter future tool-call enforcement"
+
+[[rules.protected_write]]
+id = "harness-plugins"
+regex = "(^|/)\\.claude(-[\\w.-]+)?/plugins(/|$)"
+reason = "Claude Code plugins can alter future session behavior"
+
+[[rules.protected_write]]
+id = "harness-instructions"
+regex = "(^|/)\\.claude(-[\\w.-]+)?/CLAUDE\\.md$"
+reason = "Claude Code instructions persist across future sessions"
+
+[[rules.protected_write]]
+id = "harness-global-config"
+regex = "(^|/)\\.claude(-[\\w.-]+)?\\.json$"
+reason = "Claude Code global configuration controls harness behavior"
+
+[[rules.protected_write]]
+id = "project-mcp-config"
+regex = "(^|/)\\.mcp\\.json$"
+reason = "Project MCP configuration can add or reconfigure external tools"
+
+[[rules.protected_write]]
+id = "launch-agents"
+regex = "(^|/)Library/Launch(Agents|Daemons)/[^/]+\\.plist$"
+reason = "Launchd plist files can start work outside the current session"
+
+[[rules.protected_write]]
+id = "user-systemd-units"
+regex = "(^|/)\\.config/systemd/user(/|$)"
+reason = "User systemd units can start work outside the current session"
+
+[[rules.protected_write]]
+id = "shell-rc"
+regex = "(^|/)\\.(zshrc|zprofile|zshenv|zlogin|bashrc|bash_profile|bash_login|profile)$|(^|/)\\.config/fish/config\\.fish$"
+reason = "Shell startup files execute commands in future terminal sessions"
+
+# Ticket 19, moved by ticket 35 / ADR-0004 § F3: `(/|$)` excludes `.bak` and `~`.
+# Baseline, not overlay: an invalid overlay is rejected as a unit and falls back to it, so self-protection remains available.
+# Confirm, not block: editing this policy is legitimate and common, and a disabling override is itself an intercepted write.
+[[rules.protected_write]]
+id = "bouncer-policy"
+regex = "(^|/)bouncer/(policy\\.toml|policy\\.d)(/|$)"
+reason = "Bouncer policy changes can alter future guard enforcement"

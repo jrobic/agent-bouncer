@@ -23,7 +23,7 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
 1. Open (or create) the overlay file — `<configDir>/bouncer/policy.toml`,
    or a themed file under `<configDir>/bouncer/policy.d/` (see above).
 
-2. Pick the table that matches what you're guarding — one of the five
+2. Pick the table that matches what you're guarding — one of the six
    regex tables:
 
    | You want to block/flag... | Table |
@@ -33,6 +33,7 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
    | a shell command that leaks a secret | `rules.secret.bash` |
    | writing text matching a secret shape | `rules.write_secret` |
    | a submitted prompt matching an injection shape | `rules.prompt` |
+   | a harness, persistence, or shell-startup path being written | `rules.protected_write` |
 
 3. Add a `[[<table>]]` entry with `id`, `regex`, and `reason`. `id` must be
    unique inside its table — `rules lint` (next step) doesn't enforce
@@ -47,7 +48,7 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
    reason = "npm publish should go through CI, not an agent session"
    ```
 
-   An addition to any of the five regex tables only ever adds a new
+   An addition to any of the six regex tables only ever adds a new
    BLOCK/confirm signature — it can't relax an existing one. It's active
    as soon as it validates, no restart needed (the policy is loaded fresh
    on every hook invocation).

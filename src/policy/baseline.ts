@@ -1,9 +1,9 @@
-// The embedded baseline: five STATIC imports, one per rule family
-// (policy/command.toml, secret.toml, mcp-write.toml, write-secret.toml,
-// prompt.toml — split from one ~500-line policy/baseline.toml for
-// review/diff visibility, ticket 12), merged at build time into the same
-// shape a single file used to produce. `bun build --compile` inlines all
-// five parsed TOML files into the compiled binary — there is no on-disk
+// The embedded baseline: six STATIC imports, one per rule family
+// (policy/command.toml, secret.toml, protected-write.toml, mcp-write.toml,
+// write-secret.toml, prompt.toml — split from one ~500-line
+// policy/baseline.toml for review/diff visibility, ticket 12), merged at
+// build time into the same shape a single file used to produce. `bun build --compile`
+// inlines all six parsed TOML files into the compiled binary — there is no on-disk
 // file to find at runtime for any of them. This is deliberately separate
 // from the overlay, which is read from disk at runtime (see load.ts) —
 // the baseline can never be missing or unreadable, which is exactly the
@@ -12,13 +12,14 @@
 // Each family file's TOML header is `[[rules.<family>...]]`, so parsing
 // it alone yields an object shaped `{ rules: { <family>: ... } }` — every
 // family owns a DISTINCT top-level key under `rules` (command / secret /
-// mcp_write / write_secret / prompt), so merging the five is a single
-// shallow spread, not a deep merge: no two files ever contribute to the
-// same key.
+// protected_write / mcp_write / write_secret / prompt), so merging the six
+// is a single shallow spread, not a deep merge: no two files ever contribute
+// to the same key.
 
 import commandData from '../../policy/command.toml';
 import mcpWriteData from '../../policy/mcp-write.toml';
 import promptData from '../../policy/prompt.toml';
+import protectedWriteData from '../../policy/protected-write.toml';
 import secretData from '../../policy/secret.toml';
 import writeSecretData from '../../policy/write-secret.toml';
 import type { RawPolicyFile, RulesPolicy } from './schema.ts';
@@ -61,6 +62,7 @@ export function assertExactlyOneFamily<K extends keyof RulesPolicy>(
 const mergedRules: RulesPolicy = {
   ...assertExactlyOneFamily(commandData, 'command', 'policy/command.toml').rules,
   ...assertExactlyOneFamily(secretData, 'secret', 'policy/secret.toml').rules,
+  ...assertExactlyOneFamily(protectedWriteData, 'protected_write', 'policy/protected-write.toml').rules,
   ...assertExactlyOneFamily(mcpWriteData, 'mcp_write', 'policy/mcp-write.toml').rules,
   ...assertExactlyOneFamily(writeSecretData, 'write_secret', 'policy/write-secret.toml').rules,
   ...assertExactlyOneFamily(promptData, 'prompt', 'policy/prompt.toml').rules,

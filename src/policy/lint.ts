@@ -84,6 +84,7 @@ function allRegexRules(rules: RawPolicyFile['rules']): readonly [family: string,
     ...rules.command.bash.map((r): [string, RegexRule] => ['command.bash', r]),
     ...rules.secret.path.map((r): [string, RegexRule] => ['secret.path', r]),
     ...rules.secret.bash.map((r): [string, RegexRule] => ['secret.bash', r]),
+    ...rules.protected_write.map((r): [string, RegexRule] => ['protected_write', r]),
     ...rules.write_secret.map((r): [string, RegexRule] => ['write_secret', r]),
     ...rules.prompt.map((r): [string, RegexRule] => ['prompt', r]),
   ];

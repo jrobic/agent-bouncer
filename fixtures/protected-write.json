@@ -1,0 +1,2797 @@
+{
+  "family": "protected-write",
+  "event": "PreToolUse",
+  "cases": [
+    {
+      "id": "native-read-harness-settings-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-harness-settings-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-harness-settings-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-harness-hooks-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.claude/hooks/hook.sh"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-harness-hooks-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.claude/hooks/hook.sh"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-harness-hooks-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.claude/hooks/hook.sh"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-harness-plugins-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.claude/plugins/example/index.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-harness-plugins-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.claude/plugins/example/index.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-harness-plugins-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.claude/plugins/example/index.ts"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-harness-instructions-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.claude/CLAUDE.md"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-harness-instructions-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.claude/CLAUDE.md"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-harness-instructions-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.claude/CLAUDE.md"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-harness-global-config-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.claude-work.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-harness-global-config-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.claude-work.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-harness-global-config-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.claude-work.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-project-mcp-config-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "/repo/.mcp.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-project-mcp-config-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "/repo/.mcp.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-project-mcp-config-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "/repo/.mcp.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-launch-agents-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/Library/LaunchAgents/com.example.agent.plist"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-launch-agents-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/Library/LaunchAgents/com.example.agent.plist"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-launch-agents-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/Library/LaunchAgents/com.example.agent.plist"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-user-systemd-units-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.config/systemd/user/example.service"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-user-systemd-units-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.config/systemd/user/example.service"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-user-systemd-units-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.config/systemd/user/example.service"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-shell-rc-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-shell-rc-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-shell-rc-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-read-bouncer-policy-allowed",
+      "toolName": "Read",
+      "toolInput": {
+        "file_path": "~/.agents/bouncer/policy.d/100-personal.toml"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-grep-bouncer-policy-allowed",
+      "toolName": "Grep",
+      "toolInput": {
+        "pattern": "setting",
+        "path": "~/.agents/bouncer/policy.d/100-personal.toml"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-glob-bouncer-policy-allowed",
+      "toolName": "Glob",
+      "toolInput": {
+        "pattern": "*",
+        "path": "~/.agents/bouncer/policy.d/100-personal.toml"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-write-harness-settings-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/settings.json",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "native-edit-profile-settings-confirm",
+      "toolName": "Edit",
+      "toolInput": {
+        "file_path": "~/.claude-work/settings.local.json",
+        "old_string": "{}",
+        "new_string": "{\"enabled\":true}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "native-multiedit-project-settings-confirm",
+      "toolName": "MultiEdit",
+      "toolInput": {
+        "file_path": ".claude/settings.json",
+        "edits": [
+          {
+            "old_string": "{}",
+            "new_string": "{\"enabled\":true}"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "native-write-global-config-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude.json",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "native-write-profile-global-config-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude-work.json",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "native-write-project-mcp-config-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": ".mcp.json",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "project-mcp-config"
+        }
+      ]
+    },
+    {
+      "id": "native-write-harness-hook-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/hooks/pretool.sh",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "native-write-harness-plugin-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/plugins/example/index.ts",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-plugins"
+        }
+      ]
+    },
+    {
+      "id": "native-write-harness-instructions-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/CLAUDE.md",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-instructions"
+        }
+      ]
+    },
+    {
+      "id": "native-write-launch-agent-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/Library/LaunchAgents/com.example.agent.plist",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "native-write-user-systemd-unit-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.config/systemd/user/example.service",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "user-systemd-units"
+        }
+      ]
+    },
+    {
+      "id": "native-write-shell-rc-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.zshrc",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "native-write-fish-config-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.config/fish/config.fish",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "native-write-bouncer-policy-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.agents/bouncer/policy.d/100-personal.toml",
+        "content": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bouncer-policy"
+        }
+      ]
+    },
+    {
+      "id": "native-notebook-edit-protected-path-confirm",
+      "toolName": "NotebookEdit",
+      "toolInput": {
+        "notebook_path": "~/.claude/settings.json",
+        "new_source": "{}"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-redirect-overwrite-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x > ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-redirect-append-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >> ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-heredoc-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat > ~/.claude/hooks/x <<'EOF'\nbody\nEOF"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "bash-redirect-ampersand-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmd &> ~/.claude.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "bash-redirect-fd-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmd 2> ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-tee-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-tee-append-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-cp-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp x ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-install-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -m 644 x ~/Library/LaunchAgents/y.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "bash-rsync-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync x ~/.claude/hooks/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "bash-ln-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -sf x ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-mv-source-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv ~/.claude/settings.json ~/.claude/settings.json.bak"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-mv-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv x ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-rm-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-shred-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "shred ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-truncate-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "truncate -s0 ~/.claude.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "bash-touch-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "touch ~/.claude/settings.local.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-chmod-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 000 ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-chown-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown bob ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-sed-in-place-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -i '' 's/a/b/' ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-sed-long-in-place-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed --in-place=.bak s/a/b/ ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-perl-in-place-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "perl -pi -e s/a/b/ ~/.claude.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "bash-dd-output-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dd if=x of=~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-patch-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "patch ~/.zshrc < d.diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-yq-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "yq -i '.a=1' ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-python-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "python3 -c 'open(\"/Users/x/.zshrc\",\"w\")'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-code-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "code ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-vim-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "vim ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-git-checkout-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -- ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-git-restore-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-script-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "./script.sh ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-fallback-claude-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "claude --settings ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "bash-reader-cat-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-less-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "less ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-more-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "more ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-head-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "head ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-tail-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tail ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-grep-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "grep x ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-rg-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg x ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-ag-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ag x ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-diff-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "diff /tmp/other ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-cmp-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmp /tmp/other ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-jq-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "jq . ~/.claude.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-stat-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "stat ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-wc-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "wc ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "file ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-bat-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bat ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-shasum-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "shasum ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-sha1sum-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sha1sum ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-sha256sum-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sha256sum ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-sha512sum-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sha512sum ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-md5sum-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "md5sum ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-ls-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ls ~/.claude/hooks/"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-find-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "find ~/.claude/hooks -name x"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-fd-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "fd x ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-tree-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tree ~/.claude/hooks/"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-cd-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cd ~/.claude/hooks"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-pushd-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "pushd ~/.claude/hooks"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-test-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "test -f ~/.claude/settings.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-[-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "[ -f ~/.claude/settings.json ]"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "source ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-dot-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": ". ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-echo-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-printf-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "printf %s ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-bouncer-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bouncer check 'cat ~/.zshrc'"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-diff-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git diff ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-show-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git show ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-log-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git log ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-blame-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git blame ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-status-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git status ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-ls-files-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git ls-files ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-cat-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git cat-file ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-reader-git-grep-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git grep ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-cp-protected-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp ~/.claude/settings.json /tmp/"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-cp-protected-source-backup-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp ~/.claude/settings.json ~/.claude/settings.json.bak"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-near-miss-settings-example-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat x > settings.json.example"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-tee-input-redirect-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee /tmp/out < ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-sed-without-in-place-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed s/a/b/ ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-unprotected-memory-delete-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm ~/.claude/projects/x/memory/notes.md"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-unprotected-memory-write-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/projects/x/memory/MEMORY.md",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-unprotected-skill-write-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/skills/x/SKILL.md",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "native-unprotected-agent-write-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "~/.claude/agents/x.md",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-prose-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git commit -m 'edit ~/.zshrc later'"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-heredoc-prose-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat > /tmp/notes.md <<'EOF'\n~/.claude/settings.json\nEOF"
+      },
+      "expected": []
+    },
+    {
+      "id": "bash-pattern-argument-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rg -e 'settings\\.json' src"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-target-directory-cp-file-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -t ~/.claude/settings.json x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-bash-command-string-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo x > ~/.claude/settings.json'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-heredoc-body-redirect",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<'EOF'\necho x > ~/.claude/settings.json\nEOF"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a redirect inside a heredoc body is source text, not an executable shell segment"
+    },
+    {
+      "id": "strictest-secret-block-wins",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "direnv allow .envrc"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "bash-dotenv"
+        }
+      ]
+    },
+    {
+      "id": "strictest-command-confirm-single-result",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat c | crontab -"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "strictest-protected-write-and-command-confirm-single-result",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp x ~/Library/LaunchAgents/y.plist && launchctl load ~/Library/LaunchAgents/y.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "round-redirect-cp-stderr-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp /tmp/x ~/.zshrc 2>/dev/null"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-redirect-cp-stdout-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp /tmp/x ~/.zshrc > /dev/null"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-redirect-install-stderr-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -m 755 /tmp/x ~/.claude/hooks/h.sh 2>/dev/null"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-redirect-ln-stdout-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -sf /tmp/evil ~/.zshrc >/dev/null"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-redirect-rsync-log-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -a /tmp/x ~/.zshrc > log.txt"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-attached-double-quoted-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >\"/Users/u/.zshrc\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-attached-single-quoted-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >'/Users/u/.zshrc'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-attached-append-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >>\"/Users/u/.claude/settings.json\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-literal-quoted-operator-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"a>\"|cat"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-fallback-python-command-string-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "python3 -c \"import os; os.remove('/Users/x/.zshrc')\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-fallback-shell-command-string-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c \"cat > /Users/x/.zshrc\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-fallback-vim-spaced-path-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "vim \"/Users/u/.claude/hooks/my hook.sh\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-fallback-nano-spaced-path-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nano \"/Users/u/Library/LaunchAgents/com.x plist.plist\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-git-commit-prose-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git commit -m 'edit ~/.zshrc later'"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-git-add-path-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git add ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-git-checkout-path-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -- ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "round-git-restore-path-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git restore ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "round-glob-rm-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm ~/.claude/settings*.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-glob-shell-prefix-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm ~/.zsh*"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the two glob readings do not produce the terminal .zshrc spelling"
+    },
+    {
+      "id": "round-glob-touch-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "touch ~/.claude/settings*.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-glob-cp-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp x ~/.claude/settings*.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-glob-shell-prefix-redirect-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x > ~/.zsh*"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the two glob readings do not produce the terminal .zshrc spelling"
+    },
+    {
+      "id": "round-glob-rm-settings-backup-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm ~/.claude/settings.json.bak"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-glob-cat-settings-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat ~/.claude/settings*.json"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-target-directory-install-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -t ~/Library/LaunchAgents x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-install-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -Dt ~/Library/LaunchAgents x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-ln-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -t ~/.claude/hooks ./evil.sh"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-cp-long-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp --target-directory=~/.claude/hooks ./evil.sh"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-cp-short-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -t ~/.claude/hooks x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-cp-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -vt ~/.claude/hooks x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-cp-recursive-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -rt ~/.claude/hooks x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-mv-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv -vt ~/.claude/hooks x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-target-directory-ln-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -st ~/.claude/hooks x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-patch-output-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "patch -o ~/.zshrc d.diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-rm-recursive-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm -r ~/.claude/hooks"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-rm-interactive-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm -i ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-mv-interactive-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv -i ~/.claude/settings.json /tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-unlink-interactive-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "unlink -i ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-chattr-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chattr -i ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-touch-reference-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "touch -r ref ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-truncate-size-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "truncate -s 0 ~/.claude.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "round-chmod-reference-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod --reference=x ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-shred-count-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "shred -n 3 ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-rsync-times-verbose-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -tv evil ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-rsync-times-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -t evil ~/.claude/hooks/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-rsync-cluster-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -avz x/ ~/.claude/hooks/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-rsync-rsh-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -e ssh x ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-rsync-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync -av ~/.claude/settings.json /tmp/"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-cp-cluster-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -tv ~/.claude/hooks x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-sed-write-script-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed 'w /Users/me/.zshrc' file"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-sed-attached-write-script-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed w/Users/me/.zshrc file"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-sed-expression-write-script-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -e 's/a/b/w /Users/me/.zshrc' file"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-sed-read-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed s/a/b/ ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-sed-numbered-read-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -n '1,10p' ~/.zshrc"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-sed-expression-read-source-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -e s/a/b/ ~/.claude/CLAUDE.md"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-perl-open-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "perl -e \"open(F,'>','/Users/me/.zshrc')\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-awk-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "awk '{print > \"/Users/me/.zshrc\"}' file"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-perl-path-fallback-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "perl -ne print ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-perl-include-fallback-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "perl -Ilib script.pl ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-clobber-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >| ~/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-quoted-pipe-tee-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"x>\"|tee ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-append-all-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmd &>> ~/.claude.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-global-config"
+        }
+      ]
+    },
+    {
+      "id": "round-bouncer-root-write-confirm",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.toml",
+        "content": "[[override]]\nrule = \"bouncer-policy\"\naction = \"disable\"\nreason = \"disarm\"\n"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bouncer-policy"
+        }
+      ]
+    },
+    {
+      "id": "round-bouncer-policy-d-edit-confirm",
+      "toolName": "Edit",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.d/10-personal.toml",
+        "old_string": "# end",
+        "new_string": "next"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bouncer-policy"
+        }
+      ]
+    },
+    {
+      "id": "round-bouncer-policy-toml-bak-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.toml.bak",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-bouncer-policy-toml-backup-allowed",
+      "toolName": "Edit",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.toml~",
+        "old_string": "x",
+        "new_string": "y"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-bouncer-policy-tomlx-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.tomlx",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-bouncer-policy-pre-mount-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/policy.d.pre-mount.bak/10-personal.toml",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-bouncer-readme-allowed",
+      "toolName": "Edit",
+      "toolInput": {
+        "file_path": "/custom/config/dir/bouncer/README.md",
+        "old_string": "x",
+        "new_string": "y"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-bouncer-repo-source-allowed",
+      "toolName": "Write",
+      "toolInput": {
+        "file_path": "/home/user/code/agent-bouncer/policy/secret.toml",
+        "content": "x"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-sed-script-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -f ./rules.sed ~/.zshrc"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a sed -f script may name a write target, but its contents are not parsed"
+    },
+    {
+      "id": "round-bouncer-bash-append-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "printf x >> /custom/config/dir/bouncer/policy.d/10-personal.toml"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-bouncer-policy"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-cp-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -t~/.claude/hooks evil"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-install-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -t~/Library/LaunchAgents x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-install-cluster-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -Dt~/Library/LaunchAgents x.plist"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-ln-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -t~/.claude/hooks evil.sh"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-mv-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv -t~/.claude/hooks evil.sh"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-two-target-directory-cp-cluster-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp -vt~/.claude/hooks evil"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-two-patch-output-attached-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "patch -o~/.zshrc d.diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-cp-suffix-after-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp /tmp/evil ~/.zshrc -S .bak"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-install-mode-after-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install /tmp/evil ~/.claude/hooks/h.sh -m 755"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-hooks"
+        }
+      ]
+    },
+    {
+      "id": "round-two-ln-suffix-after-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ln -s /tmp/evil ~/.zshrc -S .bak"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-cp-context-after-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp /tmp/evil ~/.zshrc -Z ctx"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-cp-verbose-after-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp /tmp/x ~/.zshrc -v"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-word-attached-redirect-shell-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x>/Users/u/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-word-attached-append-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x>>/Users/u/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-two-word-attached-cat-shell-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat a>/Users/u/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-word-attached-quoted-shell-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x>\"/Users/u/.zshrc\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-numbered-clobber-shell-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x 2>| ~/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-two-numbered-stderr-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmd 2>&1 | tee /tmp/log"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-two-stderr-redirect-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x >&2"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-glob-harness-directory-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm -rf ~/.claude/*"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the two glob readings do not produce a protected-write row for the .claude directory"
+    },
+    {
+      "id": "round-three-quoted-prefix-shell-append-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"export PATH=/x\">>/Users/u/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-three-quoted-prefix-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"hi\">/Users/u/.claude/settings.json"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-three-quoted-prefix-printf-append-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "printf \"%s\" \"x\">>/Users/u/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-three-quoted-prefix-cat-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat \"in.txt\">/Users/u/.zshrc"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-three-quoted-prefix-unprotected-target-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo 'a'>/tmp/x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-three-quoted-content-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo 'a>b' /tmp/x"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-four-cp-directory-launch-agent-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp evil.plist ~/Library/LaunchAgents/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-four-install-directory-launch-agent-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "install -m 644 evil.plist ~/Library/LaunchAgents/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-four-rsync-directory-launch-agent-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rsync evil.plist ~/Library/LaunchAgents/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-four-cp-directory-settings-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp settings.json ~/.claude/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-four-mv-directory-instructions-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mv CLAUDE.md ~/.claude/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-instructions"
+        }
+      ]
+    },
+    {
+      "id": "round-four-cp-directory-launch-agent-no-slash-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp evil.plist ~/Library/LaunchAgents"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-launch-agents"
+        }
+      ]
+    },
+    {
+      "id": "round-four-cp-shell-source-ordinary-directory-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp ~/.zshrc /tmp/"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-four-cp-source-ordinary-directory-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp ~/.claude/settings.json /tmp/"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-four-cp-multiple-sources-ordinary-directory-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp a b /tmp/"
+      },
+      "expected": []
+    },
+    {
+      "id": "round-five-rm-double-quoted-operand-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm \"~/.claude/settings.json\">/tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-five-rm-single-quoted-operand-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm '~/.claude/settings.json'>/tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-harness-settings"
+        }
+      ]
+    },
+    {
+      "id": "round-five-cp-quoted-destination-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cp evil \"~/.zshrc\">/tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-five-double-quoted-target-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x>/Users/u/\".zshrc\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-five-tilde-quoted-target-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x>~/\".zshrc\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-six-sed-attached-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -i /Users/u/.zshrc>/tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-six-sed-quoted-attached-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sed -i \"/Users/u/.zshrc\">/tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-six-dd-attached-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dd if=x of=/Users/u/.zshrc>/tmp/y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    },
+    {
+      "id": "round-six-dd-quoted-attached-redirect-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dd if=x of=\"/Users/u/.zshrc\">/tmp/y"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-shell-rc"
+        }
+      ]
+    }
+  ]
+}

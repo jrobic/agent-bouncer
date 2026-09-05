@@ -449,8 +449,8 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
   });
 });
 
-describe('ticket-19 regression: bouncer-policy still fires on the common root (it carries a bouncer/ segment too)', () => {
-  test('Read on a common-layer policy.d file asks, naming bouncer-policy', async () => {
+describe('protected-write regression: common-layer policy reads remain free', () => {
+  test('Read on a common-layer policy.d file is silent', async () => {
     const box = await sandbox();
     const commonFile = join(box.commonPolicyDir, 'policy.d', '10-shared.toml');
     await mkdir(join(box.commonPolicyDir, 'policy.d'), { recursive: true });
@@ -462,9 +462,6 @@ describe('ticket-19 regression: bouncer-policy still fires on the common root (i
       tool_input: { file_path: commonFile },
     });
     const { stdout } = await run(envelope);
-    expect(stdout).not.toBeNull();
-    const parsed = JSON.parse(stdout!);
-    expect(parsed.hookSpecificOutput.permissionDecision).toBe('ask');
-    expect(parsed.hookSpecificOutput.permissionDecisionReason).toContain('bouncer-policy');
+    expect(stdout).toBeNull();
   });
 });

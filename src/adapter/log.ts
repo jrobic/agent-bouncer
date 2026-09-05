@@ -2,7 +2,7 @@
 // (byte-identical between the two prior generations — nothing to converge,
 // it was always adapter/runtime plumbing) and adapted for the unified
 // binary: one JSONL file per account instead of one per guard, with a
-// `family` field on each entry so a single-process, five-family dispatch
+// `family` field on each entry so a single-process, six-family dispatch
 // stays legible in the log.
 
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';

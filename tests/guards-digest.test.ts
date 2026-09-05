@@ -170,6 +170,7 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b ',
   '29 docker-destructive \\b(?:docker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune))|(?:docker\\s+compose|docker-compose)\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b) ',
   '30 sql-destructive-inline (?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b) i',
+  '31 harness-self-config \\bclaude\\b\\s+(?:mcp\\s+(?:add|remove)|plugin\\s+(?:install|enable|disable|uninstall)|config\\s+set)\\b ',
 ];
 
 // policy/secret.toml `rules.secret.bash`. Seven entries, each with its own
@@ -219,8 +220,8 @@ const EXPECTED_PROMPT_DIGEST: readonly string[] = [
   '6 base64-blob [A-Za-z0-9+/]{200,}={0,2} ',
 ];
 
-describe('guards-digest: tamper lock — the four tabular guards', () => {
-  test('command.bash matches the frozen ordered digest (31 regex entries)', () => {
+describe('guards-digest: tamper lock — the five tabular guards', () => {
+  test('command.bash matches the frozen ordered digest (32 regex entries)', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 
@@ -265,15 +266,30 @@ function pathRuleDigest(
   return rules.map((r, i) => `${i} ${r.id} ${r.regex} flags=${r.flags ?? ''} except=${r.except ?? ''} verdict=${r.verdict ?? ''}`);
 }
 
+// DERIVED by running pathRuleDigest against policy/protected-write.toml and
+// printing the output — never hand-transcribed. This independent copy locks
+// the protected-write table's membership, ordering, and regex boundaries.
+const EXPECTED_PROTECTED_WRITE_DIGEST: readonly string[] = [
+  '0 harness-settings (^|/)\\.claude(-[\\w.-]+)?/settings(\\.local)?\\.json$ flags= except= verdict=',
+  '1 harness-hooks (^|/)\\.claude(-[\\w.-]+)?/hooks(/|$) flags= except= verdict=',
+  '2 harness-plugins (^|/)\\.claude(-[\\w.-]+)?/plugins(/|$) flags= except= verdict=',
+  '3 harness-instructions (^|/)\\.claude(-[\\w.-]+)?/CLAUDE\\.md$ flags= except= verdict=',
+  '4 harness-global-config (^|/)\\.claude(-[\\w.-]+)?\\.json$ flags= except= verdict=',
+  '5 project-mcp-config (^|/)\\.mcp\\.json$ flags= except= verdict=',
+  '6 launch-agents (^|/)Library/Launch(Agents|Daemons)/[^/]+\\.plist$ flags= except= verdict=',
+  '7 user-systemd-units (^|/)\\.config/systemd/user(/|$) flags= except= verdict=',
+  '8 shell-rc (^|/)\\.(zshrc|zprofile|zshenv|zlogin|bashrc|bash_profile|bash_login|profile)$|(^|/)\\.config/fish/config\\.fish$ flags= except= verdict=',
+  '9 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=',
+];
+
 // DERIVED by running the projection above against policy/secret.toml and
 // printing the output — never hand-transcribed. `except` carries the
 // ENV_WHITELIST (dotenv) and node_modules (npmrc) exceptions that used to
 // be separate module-level regexes; they are policy data now too, one
 // field on the row they qualify, which is what let this lock stop needing
 // a second "declared outside the block" append step. `transcript-backup`,
-// `bouncer-audit-log`, `bouncer-policy`, `shell-history`, and
-// `session-transcripts` are the five rows with a non-default `verdict`
-// ("confirm"; see policy/secret.toml for their distinct rationale).
+// `bouncer-audit-log`, `shell-history`, and `session-transcripts` are the
+// four rows with a non-default `verdict` ("confirm"; see policy/secret.toml).
 const EXPECTED_PATH_DIGEST: readonly string[] = [
   '0 dotenv (^|/)\\.env[^/]*$ flags= except=(^|/)\\.env\\.(example|test)$ verdict=',
   '1 crypto-key (^|/)[^/.][^/]*\\.(pem|key|pkey|crt|cert|pfx|p12|jks|keystore|gpg|asc|kdbx|kbx|agekey|ovpn)$ flags=i except= verdict=',
@@ -287,16 +303,19 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '9 gitconfig (^|/)\\.gitconfig$ flags= except= verdict=',
   '10 transcript-backup (^|/)\\.claude/transcripts(/|$) flags= except= verdict=confirm',
   '11 bouncer-audit-log (^|/)logs/hooks/bouncer\\.log(\\.1)?$ flags= except= verdict=confirm',
-  '12 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=confirm',
-  '13 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
-  '14 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
-  '15 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
-  '16 shell-history (^|/)\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)$ flags= except= verdict=confirm',
-  '17 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl$ flags= except= verdict=confirm',
+  '12 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
+  '13 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
+  '14 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
+  '15 shell-history (^|/)\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)$ flags= except= verdict=confirm',
+  '16 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl$ flags= except= verdict=confirm',
 ];
 
-describe('guards-digest: tamper lock — secret.path, the eighteen-entry path guard', () => {
-  test('secret.path matches the frozen ordered digest (18 entries + except/verdict fields)', () => {
+describe('guards-digest: tamper lock — protected_write and secret.path path guards', () => {
+  test('protected_write matches the frozen ordered digest (10 entries)', () => {
+    expect(pathRuleDigest(BASELINE.rules.protected_write)).toEqual([...EXPECTED_PROTECTED_WRITE_DIGEST]);
+  });
+
+  test('secret.path matches the frozen ordered digest (17 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });

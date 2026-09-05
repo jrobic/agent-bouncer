@@ -6,10 +6,10 @@ visible in `rules list`, never silent.
 
 ## Disable, replace, or relax a regex rule with `[[override]]`
 
-`[[override]]` targets a rule id from one of the five regex tables
+`[[override]]` targets a rule id from one of the six regex tables
 (`rules.command.bash`, `rules.secret.path`, `rules.secret.bash`,
-`rules.write_secret`, `rules.prompt`). Every entry needs a non-empty
-`reason` — `rules lint` rejects one without it.
+`rules.write_secret`, `rules.protected_write`, `rules.prompt`). Every entry
+needs a non-empty `reason` — `rules lint` rejects one without it.
 
 1. Find the rule id to target:
 
@@ -103,7 +103,7 @@ Expect a line like:
 `rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`
 (the git conditional dispatch itself) are produced by engine algorithms,
 not by a `{id, regex, reason}` table row — `[[override]]` only resolves
-against the five regex tables, so targeting any of these three fails
+against the six regex tables, so targeting any of these three fails
 lint:
 
 ```sh
@@ -123,17 +123,15 @@ counts as dangerous, never narrow it), `command.privilege_escalation.commands`
 
 ## The self-protection loop: overriding `bouncer-policy`
 
-`bouncer-policy` (`rules.secret.path`) confirms any read or write that
-touches `<configDir>/bouncer/policy.toml` or `<configDir>/bouncer/policy.d/`
-— the policy the binary itself runs on. It is override-able like any other
-regex-table rule, which means an `[[override]]` block that disables it is
-itself a write to a `policy.d/*.toml` file, so the live rule confirms
-*that* write too, before it lands. Once it's on disk (a human approved the
-confirm prompt), the rule is gone from the effective set and further
-edits to the policy overlay go unconfirmed — this is intentional: ordinary,
-override-able protection, not a hard seal. A stronger "sealed rule" that
-can't be turned off through the overlay at all is a tracked backlog idea,
-not built here.
+`bouncer-policy` (`rules.protected_write`) confirms writes to
+`<configDir>/bouncer/policy.toml` and `<configDir>/bouncer/policy.d/` — the
+policy the binary itself runs on. Reads remain free. It is override-able like
+any other regex-table rule, which means an `[[override]]` block that disables
+it is itself a write to a `policy.d/*.toml` file, so the live rule confirms
+that write before it lands. Once it is on disk (after human approval), the
+rule is gone from the effective set and further policy edits are
+unconfirmed — intentional ordinary, override-able protection rather than a
+hard seal. A stronger sealed rule is a backlog idea, not built here.
 
 ## Verify
 

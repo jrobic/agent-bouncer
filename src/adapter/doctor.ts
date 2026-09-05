@@ -40,7 +40,7 @@ export function defaultSettingsPath(): string {
   return join(configDir(), 'settings.json');
 }
 
-// The three events a working install must wire: PreToolUse (the five guard
+// The three events a working install must wire: PreToolUse (the six guard
 // families), UserPromptSubmit (prompt injection), and SessionStart (doctor
 // itself — its own absence is exactly the "wiring was cut" case this
 // module exists to catch).

@@ -1,8 +1,8 @@
 // Ticket 13, decision carried from ticket 12's review: src/policy/baseline.ts
-// merges five family files by shallow spread — until now, a family file
-// contributing a STRAY extra key (or the WRONG key entirely) under [rules]
-// would silently spread into the merged RulesPolicy with no compile-time
-// signal (the Pick<RulesPolicy, 'command'> casts, ticket 12, only catch a
+// merges six family files by shallow spread — a family file contributing a
+// STRAY extra key (or the WRONG key entirely) under [rules] would silently
+// spread into the merged RulesPolicy with no compile-time signal (the
+// Pick<RulesPolicy, 'command'> casts, ticket 12, only catch a
 // MISSING family — an extra/wrong key sails through the `as unknown as`
 // cast unexamined). assertExactlyOneFamily is the runtime guard: each
 // family file must contribute EXACTLY its one expected key under [rules],
@@ -40,10 +40,10 @@ describe('assertExactlyOneFamily', () => {
   });
 });
 
-describe('the real baseline module (five actual TOML files) satisfies the assertion', () => {
-  test('BASELINE still loads — importing this module at all proves every real family file passed', () => {
-    // If any of the five real policy/*.toml files contributed a stray or
-    // wrong key, importing baseline.ts (which every other test file also
+describe('the real baseline module (six actual TOML files) satisfies the assertion', () => {
+  test('BASELINE still loads — importing this module proves every family file passed', () => {
+    // If any real policy/*.toml family file contributed a stray or wrong key,
+    // importing baseline.ts (which every other test file also
     // does, transitively) would already have thrown before this test ever
     // ran. This assertion is a documented tripwire, not the real check.
     expect(BASELINE.rules.command.bash.length).toBeGreaterThan(0);
@@ -51,5 +51,6 @@ describe('the real baseline module (five actual TOML files) satisfies the assert
     expect(BASELINE.rules.mcp_write.read_prefixes.length).toBeGreaterThan(0);
     expect(BASELINE.rules.write_secret.length).toBeGreaterThan(0);
     expect(BASELINE.rules.prompt.length).toBeGreaterThan(0);
+    expect(BASELINE.rules.protected_write.length).toBeGreaterThan(0);
   });
 });

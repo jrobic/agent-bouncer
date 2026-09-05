@@ -105,6 +105,14 @@ describe('completeness: every effective rule carries a behavioural case', () => 
     );
   });
 
+  test('protected-write rules', () => {
+    expectRuleIdsToMatch(
+      'protected-write',
+      ids(BASELINE.rules.protected_write),
+      coveredRuleIds('protected-write-rules.test.ts'),
+    );
+  });
+
   test('prompt rules', () => {
     // base64-blob is a plain 7th entry of rules.prompt now (ticket 06 — it
     // used to be a module constant evaluated apart from the table), so no

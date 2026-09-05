@@ -49,6 +49,28 @@ describe('loadPolicyFromOverlayText: additive merge', () => {
   });
 });
 
+describe('loadPolicyFromOverlayText: protected_write policy', () => {
+  test('a protected-write row merges and a global override resolves its baseline id', () => {
+    const overlay = `
+      [[rules.protected_write]]
+      id = "custom-protected-write"
+      regex = "/etc/example\\.conf$"
+      reason = "this service configuration controls production traffic"
+
+      [[override]]
+      rule = "bouncer-policy"
+      action = "disable"
+      reason = "a human-approved recovery procedure manages this policy"
+    `;
+    const result = loadPolicyFromOverlayText(overlay);
+    expect(result.warnings).toEqual([]);
+    expect(result.overlayApplied).toBe(true);
+    expect(result.policy.protected_write.map((rule) => rule.id)).toContain('custom-protected-write');
+    expect(result.policy.protected_write.map((rule) => rule.id)).not.toContain('bouncer-policy');
+    expect(result.activeOverrides).toContainEqual(expect.objectContaining({ rule: 'bouncer-policy', action: 'disable' }));
+  });
+});
+
 describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to widen an allowlist', () => {
   test('a [[relax]] entry with a reason extends safe_subcommands and is reported as an active relaxation', () => {
     const overlay = `

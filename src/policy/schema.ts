@@ -99,6 +99,7 @@ export interface McpWritePolicy {
 export interface RulesPolicy {
   readonly command: CommandPolicy;
   readonly secret: SecretPolicy;
+  readonly protected_write: readonly RegexRule[];
   readonly mcp_write: McpWritePolicy;
   readonly write_secret: readonly RegexRule[];
   readonly prompt: readonly RegexRule[];
