@@ -277,19 +277,14 @@
       ]
     },
     {
-      "id": "native-edit-profile-settings-confirm",
+      "id": "native-edit-profile-settings-allowed",
       "toolName": "Edit",
       "toolInput": {
         "file_path": "~/.claude-work/settings.local.json",
         "old_string": "{}",
         "new_string": "{\"enabled\":true}"
       },
-      "expected": [
-        {
-          "verdict": "confirm",
-          "ruleId": "harness-settings"
-        }
-      ]
+      "expected": []
     },
     {
       "id": "native-multiedit-project-settings-confirm",
@@ -325,18 +320,13 @@
       ]
     },
     {
-      "id": "native-write-profile-global-config-confirm",
+      "id": "native-write-profile-global-config-allowed",
       "toolName": "Write",
       "toolInput": {
         "file_path": "~/.claude-work.json",
         "content": "{}"
       },
-      "expected": [
-        {
-          "verdict": "confirm",
-          "ruleId": "harness-global-config"
-        }
-      ]
+      "expected": []
     },
     {
       "id": "native-write-project-mcp-config-confirm",
@@ -2492,14 +2482,17 @@
       "expected": []
     },
     {
-      "id": "known-limit-glob-harness-directory-allowed",
+      "id": "glob-harness-directory-confirm",
       "toolName": "Bash",
       "toolInput": {
         "command": "rm -rf ~/.claude/*"
       },
-      "expected": [],
-      "knownLimit": true,
-      "knownLimitReason": "the two glob readings do not produce a protected-write row for the .claude directory"
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "bash-claude-code-config-dir"
+        }
+      ]
     },
     {
       "id": "round-three-quoted-prefix-shell-append-confirm",
@@ -2617,7 +2610,7 @@
       "expected": [
         {
           "verdict": "confirm",
-          "ruleId": "bash-harness-settings"
+          "ruleId": "bash-claude-code-config-dir"
         }
       ]
     },
@@ -2630,7 +2623,7 @@
       "expected": [
         {
           "verdict": "confirm",
-          "ruleId": "bash-harness-instructions"
+          "ruleId": "bash-claude-code-config-dir"
         }
       ]
     },

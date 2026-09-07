@@ -143,11 +143,12 @@ function ruleLine(entry: EffectiveRule): string {
   const suffix = entry.provenance === 'override'
     ? `override(${entry.overrideAction}) — ${entry.overrideReason}`
     : entry.provenance;
-  // The source file only exists for overlay/override provenance — a
-  // baseline rule has no file on disk to name, so `sourceFile` stays
-  // absent and this suffix stays empty, leaving baseline lines unchanged.
-  const fileSuffix = entry.sourceFile !== undefined ? ` [${entry.sourceFile}]` : '';
-  return `rule ${entry.family} ${entry.rule.id} ${suffix}${fileSuffix}${shadowsSuffix(entry.shadows)}`;
+  // A coalesced baseline harness row names every contributing overlay file;
+  // a normal overlay/override still has exactly one sourceFile.
+  const files = entry.sourceFiles ?? (entry.sourceFile === undefined ? [] : [entry.sourceFile]);
+  const fileSuffix = files.map((file) => ` [${file}]`).join('');
+  const harnessSuffix = entry.harnessId !== undefined ? ` [harness:${entry.harnessId}]` : '';
+  return `rule ${entry.family} ${entry.rule.id} ${suffix}${fileSuffix}${harnessSuffix}${shadowsSuffix(entry.shadows)}`;
 }
 
 function overrideLine(loaded: LoadResult): string[] {

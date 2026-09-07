@@ -4,14 +4,15 @@ The policy is TOML, in three layers.
 
 ## Baseline vs. overlay
 
-**Baseline** — six files in this repository, one per rule family,
-compiled into the binary at build time (`bun build --compile`):
-`policy/command.toml`, `policy/secret.toml`, `policy/mcp-write.toml`,
-`policy/write-secret.toml`, `policy/protected-write.toml`, and
-`policy/prompt.toml`. Each file's own top-level TOML header
-(`[[rules.command.bash]]`, `[rules.secret...]`, ...) already scopes it to
-its family, so merging the six at build time is a plain shallow merge — no
-file ever contributes to another's key.
+**Baseline** — seven files in this repository, one per rule family plus
+harness declarations, compiled into the binary at build time (`bun build
+--compile`): `policy/command.toml`, `policy/secret.toml`,
+`policy/mcp-write.toml`, `policy/write-secret.toml`,
+`policy/protected-write.toml`, `policy/prompt.toml`, and
+`policy/harness.toml`. Each rule file's top-level TOML header
+(`[[rules.command.bash]]`, `[rules.secret...]`, ...) scopes it to its
+family; `[[harness]]` is top-level. The rule families merge shallowly, then
+harness declarations derive protected-write rows.
 Always present, never edited at runtime. The vetted starting point.
 
 **Overlay** — two named layers on top of the baseline (ADR-0001), each a
@@ -57,7 +58,7 @@ Every entry in the six regex tables below shares this shape:
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | string | yes | Unique across ALL SIX tables combined (ids resolve globally, not per-table). Lint-enforced against two things: an id already owned by an embedded BASELINE rule, in either overlay layer, is rejected — use `[[override]]` (§ below) to touch a baseline rule instead of shadowing it; an id shared between two DIFFERENT FILES of the SAME layer is rejected too (§ Cross-file conflicts). The same id repeated twice WITHIN one file is not a lint error — it stays the existing `[[override]]` batch semantics, an override naming that id applies to every row carrying it. |
+| `id` | string | yes | Unique across every effective row in ALL SIX tables combined (ids resolve globally, not per-table). Lint rejects a duplicate from the same file, different files, either overlay layer, derived harness rows, or the embedded baseline. Use `[[override]]` (§ below) to change a baseline row instead of adding a same-id row. |
 | `regex` | string | yes | Must compile and stay inside the RE2-like dialect (§ below). |
 | `reason` | string | yes | Shown in `bouncer check`/`rules list` output and in the degraded Claude Code verdict text. |
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
@@ -159,11 +160,12 @@ elsewhere"` without removing the baseline guard.
   an executable write segment.
 - protected-write: `sed -f` can name a script that writes a protected path,
   but the script's contents are not parsed.
-- protected-write: a glob whose two readings match no protected-write row,
-  such as `~/.zsh*`, `~/.claude/set*`, or `~/.claude/*`, is not a recognized
-  target. This is the same residual class as `*.p*m` in the secret scan; the
-  protected `.claude` directory itself is a candidate baseline row, not a
-  parser exception.
+- Harness declarations do not expand truncated globs (`~/.cla*` or
+  `~/.claude/set*`), same-line assignments (`D=~/.claude; rm -rf
+  $D/hooks`), nested braces, or brace ranges. A single pure comma-brace
+  token such as `~/.{claude,codex}` is expanded; `~/.claude/*` confirms
+  because its empty-name glob reading is the declared configuration
+  directory.
 
 Example row (from the baseline):
 
@@ -341,6 +343,69 @@ in. Path-bearing quoted strings and shell command strings under an unknown
 head therefore reach the conservative fallback. See [Known limits](#known-limits)
 for heredoc and `sed -f` boundaries.
 
+## `[[harness]]`: assistant configuration declarations
+
+`[[harness]]` is a top-level table, outside `[rules]`. It records the
+configuration-directory convention of one assistant; the loader derives
+the protected-write regex rows from that record before it appends the
+hand-written `rules.protected_write` rows.
+
+```toml
+[[harness]]
+id = "claude-code"
+dir = ["(^|/)\\.claude"]
+witness = "~/.claude"
+env = ["CLAUDE_CONFIG_DIR"]
+reason = "Claude Code configuration directory"
+
+[[harness.persistent]]
+id = "harness-hooks"
+path = "hooks(/|$)"
+reason = "Claude Code hooks can alter future tool-call enforcement"
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `id` | string | yes | Stable declaration id. It produces `<id>-config-dir`. |
+| `dir` | string[] | yes for a baseline or new overlay declaration | RE2-like regex fragments for configuration directories, with no trailing slash. |
+| `witness` | string | no | Concrete path for `dir[0]`. Lint requires it to match `dir[0]`; if omitted, a narrow derived fallback must also match or lint instructs the author to declare it. |
+| `parents` | string[] | no | Directories whose deletion removes a configuration directory. They derive only the directory row. |
+| `env` | string[] | yes for a baseline or new declaration; `[]` is valid | Upper-case environment names that represent the first `dir`. |
+| `reason` | string | yes for a baseline or new declaration | Explanation shown for the derived directory row. |
+| `persistent` | `[[harness.persistent]]` | no | Persistent paths below every `dir`. Each entry has unique `id`, `path`, and consequence-oriented `reason`. |
+
+The effective declaration creates one `<id>-config-dir` row matching every
+`dir` and `parents` fragment with `/?$`, then one row per `persistent`
+entry matching every `dir` plus its `path`. The row ids are part of the
+normal protected-write namespace. `bouncer rules list` marks each derived
+row with `[harness:<id>]`; `doctor` includes them in the effective rule
+count.
+
+In Bash, `$NAME` and `${NAME}` expand only when `NAME` is declared in
+some effective `env` array and the token is unquoted or double-quoted.
+Single-quoted and escaped environment syntax stays literal. The token is
+replaced with that declaration's validated `witness`, then normal target
+extraction and matching continue. An undeclared `$CONFIG/hooks` remains
+literal. The tokenizer also expands one non-nested comma brace expression
+only when unquoted and unescaped, so `~/.{claude,codex}` yields both path
+candidates. It expands at most 64 alternatives per token; a larger
+expression does not touch the filesystem and returns a conservative
+confirmation with `brace expansion exceeds the cap`.
+
+An overlay block with an existing `id` appends `dir`, `parents`, and `env`
+to the baseline declaration and inherits its `reason` and persistent
+entries. It must not declare `persistent`; that prevents a profile from
+silently dropping or changing a baseline persistence boundary. A new
+`id` supplies `dir`, `env`, and `reason` itself and may add persistent
+entries. Invalid fragments, an unverified witness, lower-case environment
+names, repeated declaration ids in one layer, or any duplicate effective
+rule id reject the containing layer, so the baseline remains active.
+
+Directory rows protect only the directory token. They deliberately do not
+protect children such as `agents/`, `agent/`, `commands/`, `skills/`,
+`projects/**/memory/`, logs, caches, or sessions: those locations are
+written regularly and are not session-start persistence. OMP
+`extensions/` is explicit persistent state because it loads at boot.
+
 ## `mcp_write.read_prefixes`
 
 A plain string list — an MCP tool call is a silent read when its
@@ -498,6 +563,10 @@ Three different orders, by scope:
   baseline entry by position — UNLESS a later layer's row shares the
   earlier layer's row's `id` (§ Precedence), in which case the earlier
   layer's row is dropped rather than both surviving side by side.
+- **`[[harness]]` declarations** — baseline declarations start the set.
+  Matching overlay ids append `dir`, `parents`, and `env`; new ids append
+  whole declarations. Derived protected-write rows are rebuilt from that
+  effective set before the handwritten protected-write rows.
 - **`ask_flags` / `safe_first_arg` / `safe_grammar`** — overlay entries
   come first. Every consumer looks a `sub` up by `Array.find()`, so an
   overlay entry for an already-governed `sub` wins over the baseline
@@ -551,10 +620,11 @@ carrying the row is enough:
   files of the same layer.
 - Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
   `sub`, in two different files of the same layer.
-- Two regex-table rows (any of the six families) sharing the same `id`,
-  in two different files of the same layer — ids resolve GLOBALLY, not
-  per-family, so this is checked across all six tables combined, not
-  per-table.
+- Two regex-table rows (any of the six families) sharing the same `id`
+  anywhere in one effective policy — whether they came from one file,
+  several files, the baseline, or derived harness rows. Ids resolve
+  GLOBALLY, not per-family; the only same-id mechanism is
+  `[[override]] action = "replace"` against its existing row.
 - A regex-table row whose `id` already names an embedded BASELINE rule
   (ADR-0001 § Precedence) — in EITHER layer, and regardless of whether any
   other file is involved at all: without this check, the row would
@@ -581,21 +651,13 @@ what's at fault, so `layers:`'s per-layer file pointer falls back to
 naming the layer itself; the full conflict message (both filenames) still
 appears in the warning line above.
 
-Multiple entries for the same target WITHIN one file are unaffected by
-the cross-file check specifically — that's existing, single-file behavior
-(sequential override chaining, e.g. `replace` then `relax` on the same
-rule; first-entry-wins table lookup), unchanged by this rule. This
-includes two regex-table rows sharing the same `id` inside ONE file: not
-a CROSS-FILE lint error (id uniqueness across files/layers is what the
-bullets above check), and — because `[[override]]` matches by id alone,
-across every entry that carries it — an override targeting that shared id
-applies to BOTH rows, in the same file or not. Stated as the batch
-semantics it is, not a bug: `[[override]]` never resolves to "exactly
-one" row, only to "every row currently carrying this id". The
-baseline-id check above is independent of this and applies per-ROW: a row
-inside a multi-row file is rejected on its own merits the moment its `id`
-equals a baseline one, whether or not any sibling row in that same file
-shares it.
+Every effective regex-table id is unique. Repeating an id inside one file
+is rejected just like a cross-file collision, before `[[override]]`
+application. Sequential override chaining remains valid because several
+`[[override]]` rows can target the one effective rule; two override
+entries targeting the same rule in different files of one layer remain a
+conflict as listed above. A baseline-id addition is likewise rejected
+before merge; use `[[override]] action = "replace"` instead.
 
 Fail-closed rejection is per LAYER (ADR-0001 § Rejection): a broken file
 in one layer rejects that layer alone, exactly like a broken file within
@@ -634,8 +696,9 @@ $ bouncer rules lint
 lint: OK (overlay: common/policy.d/100-personal.toml, profile/policy.toml)
 ```
 
-A `baseline`-provenance line has no file to name (the embedded baseline
-has no file on disk) and carries no suffix.
+A baseline-derived row carries `[harness:<id>]` instead of a filename.
+Other `baseline`-provenance lines have no suffix because the embedded
+baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, src/adapter/policy.ts, src/adapter/log-path.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness.toml, src/adapter/policy.ts, src/adapter/log-path.ts

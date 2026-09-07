@@ -398,7 +398,7 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
     expect(result.warnings.join(' ')).toContain('shared-id');
   });
 
-  test('the SAME id defined TWICE within one file is unaffected (existing single-file semantics)', () => {
+  test('the SAME id defined TWICE within one file rejects the complete layer', () => {
     const files = [
       file(
         'policy.toml',
@@ -416,15 +416,11 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
       ),
     ];
     const result = loadPolicyFromOverlayFiles(files);
-    expect(result.warnings).toEqual([]);
-    expect(result.overlayApplied).toBe(true);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('not globally unique');
   });
 
-  test('an [[override]] targeting an id duplicated WITHIN one file strikes BOTH entries (batch semantics, documented)', () => {
-    // Not a bug: [[override]] resolves by id alone, across every entry
-    // that carries it (src/policy/load.ts's applyOverrides) — it never
-    // resolves to "exactly one" row. docs/reference/policy.md's
-    // Cross-file conflicts section states this explicitly.
+  test('a duplicate id rejects before an override can target two entries', () => {
     const files = [
       file(
         'policy.toml',
@@ -442,15 +438,13 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
         [[override]]
         rule = "repeated-in-one-file"
         action = "disable"
-        reason = "test: proving one override strikes both entries sharing this id"
+        reason = "the duplicate identity must fail before override application"
         `,
       ),
     ];
     const result = loadPolicyFromOverlayFiles(files);
-    expect(result.warnings).toEqual([]);
-    expect(result.overlayApplied).toBe(true);
-    const survivors = result.effectiveRules.filter((r) => r.rule.id === 'repeated-in-one-file');
-    expect(survivors).toHaveLength(0);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('not globally unique');
   });
 
   test('an overlay id colliding with a BASELINE id is rejected (ticket 22, ADR-0001 § Precedence)', () => {

@@ -1,9 +1,9 @@
-// The embedded baseline: six STATIC imports, one per rule family
-// (policy/command.toml, secret.toml, protected-write.toml, mcp-write.toml,
-// write-secret.toml, prompt.toml — split from one ~500-line
-// policy/baseline.toml for review/diff visibility, ticket 12), merged at
+// The embedded baseline: seven STATIC imports, one per rule family plus the
+// harness declarations (policy/command.toml, secret.toml, protected-write.toml,
+// mcp-write.toml, write-secret.toml, prompt.toml, harness.toml — split from one
+// ~500-line policy/baseline.toml for review/diff visibility, ticket 12), merged at
 // build time into the same shape a single file used to produce. `bun build --compile`
-// inlines all six parsed TOML files into the compiled binary — there is no on-disk
+// inlines all seven parsed TOML files into the compiled binary — there is no on-disk
 // file to find at runtime for any of them. This is deliberately separate
 // from the overlay, which is read from disk at runtime (see load.ts) —
 // the baseline can never be missing or unreadable, which is exactly the
@@ -12,17 +12,19 @@
 // Each family file's TOML header is `[[rules.<family>...]]`, so parsing
 // it alone yields an object shaped `{ rules: { <family>: ... } }` — every
 // family owns a DISTINCT top-level key under `rules` (command / secret /
-// protected_write / mcp_write / write_secret / prompt), so merging the six
-// is a single shallow spread, not a deep merge: no two files ever contribute
-// to the same key.
+// protected_write / mcp_write / write_secret / prompt); harness.toml owns
+// top-level `[[harness]]` declarations. The family keys remain distinct, so
+// merging the six rule families is a shallow spread.
 
 import commandData from '../../policy/command.toml';
+import harnessData from '../../policy/harness.toml';
 import mcpWriteData from '../../policy/mcp-write.toml';
 import promptData from '../../policy/prompt.toml';
 import protectedWriteData from '../../policy/protected-write.toml';
 import secretData from '../../policy/secret.toml';
 import writeSecretData from '../../policy/write-secret.toml';
-import type { RawPolicyFile, RulesPolicy } from './schema.ts';
+import { deriveHarnessRules, parseBaselineHarness } from './harness.ts';
+import type { HarnessDeclaration, RawPolicyFile, RegexRule, RulesPolicy } from './schema.ts';
 
 // assertExactlyOneFamily is the runtime check for each family file's
 // [rules] table: a stray extra key (a family file accidentally nesting a
@@ -59,10 +61,34 @@ export function assertExactlyOneFamily<K extends keyof RulesPolicy>(
   return { rules: rules as Pick<RulesPolicy, K> };
 }
 
+export function assertHarnessDeclarations(data: unknown, filename: string): readonly HarnessDeclaration[] {
+  if (data === null || typeof data !== 'object') {
+    throw new Error(`baseline harness file ${filename} has no [[harness]] declarations`);
+  }
+  const declarations = Reflect.get(data, 'harness');
+  if (!Array.isArray(declarations)) {
+    throw new Error(`baseline harness file ${filename} has no [[harness]] declarations`);
+  }
+
+  return declarations.map((raw, index) => {
+    const parsed = parseBaselineHarness(raw, `harness[${index}]`);
+    if (parsed.value === undefined) {
+      throw new Error(`baseline harness file ${filename}: ${parsed.issues.join('; ')}`);
+    }
+    return parsed.value;
+  });
+}
+
+const harnesses = assertHarnessDeclarations(harnessData, 'policy/harness.toml');
+
 const mergedRules: RulesPolicy = {
   ...assertExactlyOneFamily(commandData, 'command', 'policy/command.toml').rules,
   ...assertExactlyOneFamily(secretData, 'secret', 'policy/secret.toml').rules,
-  ...assertExactlyOneFamily(protectedWriteData, 'protected_write', 'policy/protected-write.toml').rules,
+  protected_write: [
+    ...deriveHarnessRules(harnesses),
+    ...assertExactlyOneFamily(protectedWriteData, 'protected_write', 'policy/protected-write.toml').rules.protected_write,
+  ],
+  harness: harnesses,
   ...assertExactlyOneFamily(mcpWriteData, 'mcp_write', 'policy/mcp-write.toml').rules,
   ...assertExactlyOneFamily(writeSecretData, 'write_secret', 'policy/write-secret.toml').rules,
   ...assertExactlyOneFamily(promptData, 'prompt', 'policy/prompt.toml').rules,
@@ -92,4 +118,26 @@ function withConfigValuesFilledIn(rules: RulesPolicy): RulesPolicy {
   };
 }
 
-export const BASELINE: RawPolicyFile = { rules: withConfigValuesFilledIn(mergedRules) };
+export function assertUniqueRuleIds(rules: RulesPolicy): RulesPolicy {
+  const ruleFamilies: readonly [string, readonly RegexRule[]][] = [
+    ['command.bash', rules.command.bash],
+    ['secret.path', rules.secret.path],
+    ['secret.bash', rules.secret.bash],
+    ['protected_write', rules.protected_write],
+    ['write_secret', rules.write_secret],
+    ['prompt', rules.prompt],
+  ];
+  const familyById = new Map<string, string>();
+  for (const [family, entries] of ruleFamilies) {
+    for (const rule of entries) {
+      const existing = familyById.get(rule.id);
+      if (existing !== undefined) {
+        throw new Error(`baseline rule id ${JSON.stringify(rule.id)} is not globally unique (${existing}, ${family})`);
+      }
+      familyById.set(rule.id, family);
+    }
+  }
+  return rules;
+}
+
+export const BASELINE: RawPolicyFile = { rules: assertUniqueRuleIds(withConfigValuesFilledIn(mergedRules)) };

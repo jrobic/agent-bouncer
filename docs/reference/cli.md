@@ -213,9 +213,10 @@ bouncer rules list
 **Output** (first lines, baseline-only account):
 
 ```
-summary: 50 rules, 0 overrides active
+summary: 99 rules, 0 overrides active
 rule command.bash dd-device-write baseline
 rule command.bash mkfs baseline
+rule protected_write claude-code-config-dir baseline [harness:claude-code]
 ...
 ```
 
@@ -228,17 +229,27 @@ instead of `... baseline`. With an active relaxation: an extra
 rejected overlay adds `warning: <message>` lines and the summary's count
 reflects the baseline it fell back to. `[<layer>:<file>]` is
 `common:policy.toml`, `profile:policy.d/<name>.toml`, etc. — whichever
-layer and file contributed that line; a `baseline`-provenance rule has no
-file to name and carries no suffix. An entry that won cross-layer
-precedence over an earlier layer's (ADR-0001 § Precedence) carries a
-trailing `shadows <layer>:<file>` naming the entry it replaced:
+layer and file contributed that line. Baseline rows normally have no file
+suffix, but every derived harness row retains `[harness:<id>]`. A baseline
+harness extended by an overlay reports both contributing sources:
+
+```
+rule protected_write harness-settings baseline+overlay [profile:policy.toml] [harness:claude-code]
+```
+
+A new harness declared only in an overlay reports `overlay`.
+
+An entry that won cross-layer precedence over an earlier layer's
+(ADR-0001 § Precedence) carries a trailing `shadows <layer>:<file>`
+naming the entry it replaced:
 
 ```
 rule command.bash curl-file-upload overlay [profile:policy.toml] shadows common:policy.d/100-personal.toml
 ```
 
-Provenance values: `baseline`, `overlay` (an overlay addition),
-`override(disable|replace|relax)`.
+Provenance values: `baseline`, `overlay` (an overlay addition or a new
+overlay harness), `baseline+overlay` (a baseline harness extended by an
+overlay), `override(disable|replace|relax)`.
 
 **Exit code:** always 0.
 

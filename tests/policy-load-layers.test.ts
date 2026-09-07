@@ -413,8 +413,8 @@ describe('loadPolicyFromLayers: an overlay id reusing a BASELINE id is rejected 
   });
 });
 
-describe('loadPolicyFromLayers: ticket-19 regression — same target repeated within one file, unaffected', () => {
-  test('the same regex id twice within one profile file still chains (existing single-file semantics)', () => {
+describe('loadPolicyFromLayers: duplicate identities within one layer are rejected', () => {
+  test('the same regex id twice within one profile file drops that profile layer', () => {
     const result = loadPolicyFromLayers([
       layer('common', []),
       layer('profile', [
@@ -425,8 +425,8 @@ describe('loadPolicyFromLayers: ticket-19 regression — same target repeated wi
         ),
       ]),
     ]);
-    expect(result.warnings).toEqual([]);
-    expect(result.overlayApplied).toBe(true);
-    expect(result.effectiveRules.filter((r) => r.rule.id === 'dup-in-file')).toHaveLength(2);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('not globally unique');
+    expect(result.effectiveRules.find((rule) => rule.rule.id === 'dup-in-file')).toBeUndefined();
   });
 });

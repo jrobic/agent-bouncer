@@ -18,6 +18,34 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
   of appending to one growing file. The steps below use `policy.toml`;
   everything they show works identically in a `policy.d/` file.
 
+## Declare an assistant
+
+Use `[[harness]]` when the path is an assistant's configuration directory or
+its session-start persistence. The loader derives protected-write rows from
+the declaration, so a directory move and each persistent file receive the
+same confirmation behavior.
+
+To add a profile-specific directory for a baseline assistant, append the
+known id. The persistent list is inherited and must not be copied:
+
+```toml
+[[harness]]
+id = "claude-code"
+dir = ["(^|/)\\.claude-[\\w.-]+"]
+witness = "~/.claude-client"
+```
+
+After `bouncer rules lint`, `rm -rf ~/.claude-client` and writes to its
+inherited `settings.json`, `hooks/`, `plugins/`, and `CLAUDE.md` confirm.
+Without this overlay, the baseline protects only `~/.claude`.
+
+For a new assistant id, provide `dir`, `env` (use `[]` when it has no
+documented environment variable), and `reason`. Add `witness` when the
+fragment's derived concrete path cannot be proved by lint; add one or more
+`[[harness.persistent]]` tables when it loads paths at startup. See
+[`policy.md`'s harness reference](../reference/policy.md#harness-assistant-configuration-declarations)
+for the full field table, merge rules, exclusions, and known shell limits.
+
 ## Steps
 
 1. Open (or create) the overlay file — `<configDir>/bouncer/policy.toml`,
@@ -33,13 +61,12 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
    | a shell command that leaks a secret | `rules.secret.bash` |
    | writing text matching a secret shape | `rules.write_secret` |
    | a submitted prompt matching an injection shape | `rules.prompt` |
-   | a harness, persistence, or shell-startup path being written | `rules.protected_write` |
+   | a handwritten harness, persistence, or shell-startup path being written | `rules.protected_write` |
 
-3. Add a `[[<table>]]` entry with `id`, `regex`, and `reason`. `id` must be
-   unique inside its table — `rules lint` (next step) doesn't enforce
-   this, but a duplicate id makes an `[[override]]` targeting either
-   entry apply to both. Example, blocking `npm publish` in
-   `rules.command.bash`:
+3. Add a `[[<table>]]` entry with `id`, `regex`, and `reason`. Every
+   effective regex-table id is global across the six tables; `rules lint`
+   rejects a duplicate so an `[[override]]` can never target two entries.
+   Example, blocking `npm publish` in `rules.command.bash`:
 
    ```toml
    [[rules.command.bash]]
@@ -97,4 +124,4 @@ Two places, merged together (`<configDir>` is `~/.claude` unless
   the file it came from.
 
 ---
-Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/adapter/policy.ts, src/cli-commands.ts
+Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/adapter/policy.ts, src/cli-commands.ts, policy/harness.toml

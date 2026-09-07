@@ -11,7 +11,7 @@
 // to baseline" the way a bad overlay can.
 
 import { describe, expect, test } from 'bun:test';
-import { assertExactlyOneFamily, BASELINE } from '../src/policy/baseline.ts';
+import { assertExactlyOneFamily, assertUniqueRuleIds, BASELINE } from '../src/policy/baseline.ts';
 import type { RulesPolicy } from '../src/policy/schema.ts';
 
 describe('assertExactlyOneFamily', () => {
@@ -37,6 +37,23 @@ describe('assertExactlyOneFamily', () => {
 
   test('a family file whose [rules] table is empty throws, naming the file', () => {
     expect(() => assertExactlyOneFamily({ rules: {} }, 'command', 'policy/command.toml')).toThrow(/policy\/command\.toml/);
+  });
+});
+
+describe('assertUniqueRuleIds', () => {
+  test('rejects a manual baseline collision with harness-global-config', () => {
+    const rules = {
+      ...BASELINE.rules,
+      protected_write: [
+        ...BASELINE.rules.protected_write,
+        {
+          id: 'harness-global-config',
+          regex: 'manual-baseline-collision$',
+          reason: 'Manual duplicate for the import-time validation test',
+        },
+      ],
+    };
+    expect(() => assertUniqueRuleIds(rules)).toThrow(/harness-global-config.*globally unique/);
   });
 });
 

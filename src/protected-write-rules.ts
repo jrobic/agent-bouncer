@@ -6,8 +6,9 @@ import {
   type ShellToken,
   tokenizeShellSegments,
 } from './command-rules.ts';
+import { harnessEnvWitnesses } from './policy/harness.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
-import type { RegexRule } from './policy/schema.ts';
+import type { HarnessDeclaration, RegexRule } from './policy/schema.ts';
 import { BASH_PATH_TOKEN, globPathReadings } from './secret-rules.ts';
 import { type Verdict, VERDICT_SEVERITY } from './types.ts';
 
@@ -582,10 +583,14 @@ function isKnownReader(tokens: readonly ShellToken[]): boolean {
 }
 
 function fallbackPathCandidates(token: ShellToken, masked: string): readonly string[] {
+  if (/^\w+=/.test(token.value)) return [];
   const candidates = masked.slice(token.start, token.end).match(BASH_PATH_TOKEN) ?? [];
+  const expanded = token.pathCandidates;
   const hasPathCandidate = candidates.some((candidate) => candidate.includes('/') || candidate.startsWith('~'));
-  if (!token.hasQuotedWhitespace || !hasPathCandidate) return candidates;
-  return [...candidates, token.value];
+  if (!token.hasQuotedWhitespace || !hasPathCandidate) {
+    return expanded === undefined ? candidates : [...candidates, ...expanded];
+  }
+  return expanded === undefined ? [...candidates, token.value] : [...candidates, token.value, ...expanded];
 }
 
 function bashPathHit(
@@ -607,13 +612,26 @@ function bashPathHit(
   };
 }
 
+function braceExpansionCapHit(command: string): Verdict {
+  return {
+    verdict: 'confirm',
+    ruleId: 'bash-brace-expansion-cap',
+    reason: 'brace expansion exceeds the cap',
+    target: command,
+  };
+}
+
 export interface ProtectedWriteChecker {
   readonly checkPath: (path: string) => Promise<Verdict | null>;
   readonly checkBashWrites: (command: string) => Promise<Verdict | null>;
 }
 
-export function createProtectedWriteChecker(rules: readonly RegexRule[]): ProtectedWriteChecker {
+export function createProtectedWriteChecker(
+  rules: readonly RegexRule[],
+  harnesses: readonly HarnessDeclaration[],
+): ProtectedWriteChecker {
   const compiled = compileRules(rules);
+  const witnesses = harnesses.length === 0 ? undefined : harnessEnvWitnesses(harnesses);
 
   const checkPath = async (path: string): Promise<Verdict | null> => {
     if (!path) return null;
@@ -623,32 +641,45 @@ export function createProtectedWriteChecker(rules: readonly RegexRule[]): Protec
     return strictestPathHit(raw, firstMatch(compiled, canonical, 'confirm'));
   };
 
-  const checkPathReadings = async (path: string): Promise<Verdict | null> => {
-    const readings = globPathReadings(path) ?? [path];
+  const checkPathReadings = async (path: string, sourceToken?: ShellToken): Promise<Verdict | null> => {
+    const tokenizedPath = sourceToken === undefined
+      ? tokenizeShellSegments(path, witnesses, { pathCandidates: true })
+      : undefined;
+    const segment = tokenizedPath?.segments[0];
+    const candidates = sourceToken !== undefined
+      ? sourceToken.pathCandidates ?? [path]
+      : tokenizedPath!.segments.length === 1 && segment?.length === 1
+      ? segment[0]?.pathCandidates ?? [path]
+      : [path];
+    const readings = candidates.flatMap((candidate) => globPathReadings(candidate) ?? [candidate]);
     const hits = await Promise.all(readings.map((reading) => checkPath(reading)));
     return hits.reduce<Verdict | null>((strictest, hit) => strictestPathHit(strictest, hit), null);
   };
 
   const checkBashWrites = async (command: string): Promise<Verdict | null> => {
     if (!command) return null;
-    const tokenized = tokenizeShellSegments(command);
+    const tokenized = tokenizeShellSegments(command, witnesses, { pathCandidates: true });
     const masked = maskSearchPatternArguments(command, BASH_PATH_TOKEN, PROTECTED_WRITE_MASKED_HEADS);
 
     for (const tokens of tokenized.segments) {
       if (tokens.length === 0) continue;
       if (tokens.every((token) => tokenized.heredocBodies.some((body) => body.start <= token.start && token.end <= body.end))) continue;
       const structural = structuralWriteTargets(tokens, command);
+      if (tokens.some((token) => token.braceExpansionExceeded === true)) {
+        if (structural.recognized || !isKnownReader(tokens)) return braceExpansionCapHit(command);
+        continue;
+      }
       for (const target of structural.targets) {
         // Preserve shell order and avoid canonicalizing targets after the
         // first protected write in this command.
         // oxlint-disable-next-line no-await-in-loop
-        const hit = await checkPathReadings(target);
+        const hit = await checkPathReadings(target, tokens.find((token) => token.value === target));
         if (hit) return bashPathHit(hit, command, 'structural', structural.head);
       }
       for (const target of structural.sedScriptTargets) {
         // Script paths are write-capable sed operands, not search patterns.
         // oxlint-disable-next-line no-await-in-loop
-        const hit = await checkPathReadings(target);
+        const hit = await checkPathReadings(target, tokens.find((token) => token.value === target));
         if (hit) return bashPathHit(hit, command, 'sed-script', structural.head);
       }
       if (structural.recognized || isKnownReader(tokens)) continue;
@@ -658,7 +689,7 @@ export function createProtectedWriteChecker(rules: readonly RegexRule[]): Protec
         for (const candidate of candidates) {
           // Preserve shell order and stop at the first protected candidate.
           // oxlint-disable-next-line no-await-in-loop
-          const hit = await checkPathReadings(candidate);
+          const hit = await checkPathReadings(candidate, candidate === token.value ? token : undefined);
           if (hit) return bashPathHit(hit, command, 'fallback', structural.head);
         }
       }

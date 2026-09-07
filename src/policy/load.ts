@@ -38,6 +38,7 @@
 // loadPolicyFromLayers directly).
 
 import { BASELINE } from './baseline.ts';
+import { deriveHarnessRules, isDerivedHarnessRule, parseHarnessOverlay as parseOverlayHarness } from './harness.ts';
 import {
   lintAskFlagsShape,
   lintEffectiveDialect,
@@ -53,6 +54,8 @@ import {
 import type { LintIssue } from './lint.ts';
 import type {
   AskFlagsRule,
+  HarnessDeclaration,
+  HarnessOverlay,
   OverrideEntry,
   RegexRule,
   RelaxableList,
@@ -67,7 +70,7 @@ import type {
 // changes at runtime), see attemptCompose's use for the rationale.
 const BASELINE_RULE_IDS = resolvableRuleIds(BASELINE.rules);
 
-export type Provenance = 'baseline' | 'overlay' | 'override';
+export type Provenance = 'baseline' | 'overlay' | 'baseline+overlay' | 'override';
 
 export interface EffectiveRule {
   readonly family: string;
@@ -75,13 +78,16 @@ export interface EffectiveRule {
   readonly provenance: Provenance;
   readonly overrideAction?: 'replace' | 'relax';
   readonly overrideReason?: string;
-  // The overlay filename this entry came from — present for 'overlay'
-  // and 'override' provenance, absent for 'baseline' (the embedded
-  // baseline has no file on disk to name). Always layer-qualified
-  // ("common:policy.toml", "profile:policy.d/10-npm.toml") — every
-  // LoadResult comes from loadPolicyFromLayers now
-  // (loadPolicyFromOverlayFiles is its one-layer, `name: 'profile'` case).
+  // The most recent overlay filename contributing to this entry — present
+  // for overlay, baseline+overlay, and override provenance. Always
+  // layer-qualified ("common:policy.toml",
+  // "profile:policy.d/10-npm.toml") — every LoadResult comes from
+  // loadPolicyFromLayers now (loadPolicyFromOverlayFiles is its one-layer,
+  // `name: 'profile'` case).
   readonly sourceFile?: string;
+  // Every overlay filename contributing to a coalesced derived harness row.
+  // Normal overlay rows have one source, so they keep sourceFile alone.
+  readonly sourceFiles?: readonly string[];
   // The layer `sourceFile` came from ("common"/"profile") — absent
   // exactly when `sourceFile` is (a baseline entry has neither). Lets
   // lint.ts's lintEffectiveDialect tag an issue with its layer directly
@@ -93,6 +99,9 @@ export interface EffectiveRule {
   // the shadowed entry's qualified file (e.g. "common:policy.d/100-x.toml").
   // Only loadPolicyFromLayers ever sets this.
   readonly shadows?: string;
+  // Derived harness rows retain the declaration that produced them, so
+  // `rules list` can distinguish them from handwritten baseline rows.
+  readonly harnessId?: string;
 }
 
 export interface ActiveOverride extends OverrideEntry {
@@ -198,8 +207,10 @@ export type OverlayFile =
 interface Tagged {
   readonly family: string;
   readonly rule: RegexRule;
-  readonly provenance: 'baseline' | 'overlay';
+  readonly provenance: 'baseline' | 'overlay' | 'baseline+overlay';
+  readonly harnessId?: string;
   readonly sourceFile?: string;
+  readonly sourceFiles?: readonly string[];
   // Absent exactly when `sourceFile` is (a baseline entry has neither) —
   // threaded onto EffectiveRule by applyOverrides so lintEffectiveDialect
   // can tag its own issues without re-deriving a layer from `sourceFile`.
@@ -334,7 +345,12 @@ function mergeRegexFamily(
       ...(shadows !== undefined ? { shadows } : {}),
     };
   });
-  const baselineTagged: Tagged[] = baseline.map((rule) => ({ family, rule, provenance: 'baseline' as const }));
+  const baselineTagged: Tagged[] = baseline.map((rule) => ({
+    family,
+    rule,
+    provenance: 'baseline' as const,
+    ...(isDerivedHarnessRule(rule) ? { harnessId: rule.harnessId } : {}),
+  }));
   // Regex tables: pure hardening. An overlay addition only ever adds a new
   // BLOCK/confirm signature — it can never relax an existing one — so it
   // stays silently additive, appended after the vetted baseline set, in
@@ -384,6 +400,7 @@ interface MergedPolicy {
   };
   readonly secret: { readonly path: Tagged[]; readonly bash: Tagged[]; };
   readonly protected_write: Tagged[];
+  readonly harness: readonly HarnessDeclaration[];
   readonly mcp_write: { readonly read_prefixes: readonly string[]; };
   readonly write_secret: Tagged[];
   readonly prompt: Tagged[];
@@ -469,22 +486,46 @@ function allTagged(merged: MergedPolicy): Tagged[] {
   ];
 }
 
-// Applies every [[override]] to the tagged rule it names (by id — id is
-// not guaranteed unique within a family, e.g. a family with two entries
-// sharing an id, so an override touches every entry sharing it). Multiple
-// overrides on the same rule id WITHIN one file still chain sequentially
-// (e.g. replace then relax) — a cross-FILE conflict on the same rule id
-// (within one layer) is rejected before this function is ever called,
-// and a cross-LAYER one is resolved down to a single surviving entry by
-// the same point (see resolvePrecedence).
+function assertUniqueEffectiveRuleIds(merged: MergedPolicy): void {
+  const entryById = new Map<string, Tagged>();
+  for (const entry of allTagged(merged)) {
+    const existing = entryById.get(entry.rule.id);
+    if (existing === undefined) {
+      entryById.set(entry.rule.id, entry);
+      continue;
+    }
+    const responsible = entry.sourceFile !== undefined
+      ? entry
+      : existing.sourceFile !== undefined
+      ? existing
+      : undefined;
+    if (responsible === undefined) {
+      throw new Error(`baseline rule id ${JSON.stringify(entry.rule.id)} is not globally unique`);
+    }
+    throw new PolicyRejected([{
+      layer: responsible.layer!,
+      file: plainFile(responsible.layer!, responsible.sourceFile!),
+      detail: `effective rule id ${JSON.stringify(entry.rule.id)} is not globally unique`,
+    }]);
+  }
+}
+
+// Applies every [[override]] to the one globally unique tagged rule it
+// names. Multiple overrides on that rule within one file still chain
+// sequentially (e.g. replace then relax); a cross-file conflict on the
+// same rule within one layer is rejected before this function runs, and a
+// cross-layer one is resolved down to one surviving entry (see
+// resolvePrecedence).
 function applyOverrides(tagged: readonly Tagged[], overrides: readonly FileTagged<OverrideEntry>[]): EffectiveRule[] {
   let current: EffectiveRule[] = tagged.map((t) => ({
     family: t.family,
     rule: t.rule,
     provenance: t.provenance,
     ...(t.sourceFile !== undefined ? { sourceFile: t.sourceFile } : {}),
+    ...(t.sourceFiles !== undefined ? { sourceFiles: t.sourceFiles } : {}),
     ...(t.layer !== undefined ? { layer: t.layer } : {}),
     ...(t.shadows !== undefined ? { shadows: t.shadows } : {}),
+    ...(t.harnessId !== undefined ? { harnessId: t.harnessId } : {}),
   }));
   for (const { filename, raw: override, layer } of overrides) {
     current = current.flatMap((entry): EffectiveRule[] => {
@@ -498,6 +539,7 @@ function applyOverrides(tagged: readonly Tagged[], overrides: readonly FileTagge
           overrideAction: 'replace',
           overrideReason: override.reason,
           sourceFile: filename,
+          ...(entry.harnessId !== undefined ? { harnessId: entry.harnessId } : {}),
           ...(layer !== undefined ? { layer } : {}),
         }];
       }
@@ -509,6 +551,7 @@ function applyOverrides(tagged: readonly Tagged[], overrides: readonly FileTagge
         overrideAction: 'relax',
         overrideReason: override.reason,
         sourceFile: filename,
+        ...(entry.harnessId !== undefined ? { harnessId: entry.harnessId } : {}),
         ...(layer !== undefined ? { layer } : {}),
       }];
     });
@@ -546,6 +589,7 @@ function buildResult(
       bash: regexRulesOf(effective, 'secret.bash'),
     },
     protected_write: regexRulesOf(effective, 'protected_write'),
+    harness: merged.harness,
     mcp_write: merged.mcp_write,
     write_secret: regexRulesOf(effective, 'write_secret'),
     prompt: regexRulesOf(effective, 'prompt'),
@@ -567,6 +611,7 @@ function mergedBaselineOnly(): MergedPolicy {
       bash: mergeRegexFamily('secret.bash', baseline.secret.bash, []),
     },
     protected_write: mergeRegexFamily('protected_write', baseline.protected_write, []),
+    harness: baseline.harness,
     mcp_write: { read_prefixes: baseline.mcp_write.read_prefixes },
     write_secret: mergeRegexFamily('write_secret', baseline.write_secret, []),
     prompt: mergeRegexFamily('prompt', baseline.prompt, []),
@@ -655,9 +700,168 @@ function hasStringId(raw: unknown): raw is { readonly id: string; } {
   return raw !== null && typeof raw === 'object' && typeof (raw as Record<string, unknown>).id === 'string';
 }
 
+interface HarnessOverlayEntry {
+  readonly declaration: HarnessOverlay;
+  readonly filename: string;
+  readonly layer: string;
+}
+
+function rejectHarness(entry: { readonly filename: string; readonly layer: string; }, detail: string): never {
+  throw new PolicyRejected([{ layer: entry.layer, file: plainFile(entry.layer, entry.filename), detail }]);
+}
+
+function parseHarnessOverlayEntry(
+  raw: unknown,
+  entry: { readonly filename: string; readonly layer: string; },
+  index: number,
+): HarnessOverlayEntry {
+  const parsed = parseOverlayHarness(raw, `harness[${index}]`);
+  if (parsed.value === undefined) return rejectHarness(entry, parsed.issues.join('; '));
+  return { declaration: parsed.value, filename: entry.filename, layer: entry.layer };
+}
+
+type HarnessContribution = 'baseline' | HarnessOverlayEntry;
+
+interface MergedHarness extends HarnessDeclaration {
+  readonly configSources: readonly HarnessContribution[];
+  readonly persistentSources: ReadonlyMap<string, readonly HarnessContribution[]>;
+}
+
+function overlayContributions(sources: readonly HarnessContribution[]): readonly HarnessOverlayEntry[] {
+  return sources.filter((source): source is HarnessOverlayEntry => source !== 'baseline');
+}
+
+function derivedHarnessProvenance(
+  sources: readonly HarnessContribution[],
+): Pick<Tagged, 'provenance' | 'sourceFile' | 'sourceFiles' | 'layer'> {
+  const overlays = overlayContributions(sources);
+  if (overlays.length === 0) return { provenance: 'baseline' };
+  const source = overlays.at(-1)!;
+  return {
+    provenance: sources.includes('baseline') ? 'baseline+overlay' : 'overlay',
+    sourceFile: source.filename,
+    sourceFiles: overlays.map((overlay) => overlay.filename),
+    layer: source.layer,
+  };
+}
+
+function derivedHarnessRows(harnesses: readonly MergedHarness[]): Tagged[] {
+  return harnesses.flatMap((harness) =>
+    deriveHarnessRules([harness]).map((rule): Tagged => {
+      const sources = rule.id === `${harness.id}-config-dir`
+        ? harness.configSources
+        : harness.persistentSources.get(rule.id)!;
+      return {
+        family: 'protected_write',
+        rule,
+        ...derivedHarnessProvenance(sources),
+        harnessId: rule.harnessId,
+      };
+    })
+  );
+}
+
+function mergeHarnesses(
+  baseline: readonly HarnessDeclaration[],
+  overlayEntries: readonly HarnessOverlayEntry[],
+): readonly MergedHarness[] {
+  const persistentIds = new Set(baseline.flatMap((harness) => harness.persistent.map((persistent) => persistent.id)));
+  const merged = new Map<string, MergedHarness>(baseline.map((harness) => [
+    harness.id,
+    {
+      ...harness,
+      configSources: ['baseline'],
+      persistentSources: new Map(harness.persistent.map((persistent) => [persistent.id, ['baseline']])),
+    },
+  ]));
+  const declaredInLayer = new Set<string>();
+
+  for (const entry of overlayEntries) {
+    const overlay = entry.declaration;
+    const declarationKey = `${entry.layer}\u0000${overlay.id}`;
+    if (declaredInLayer.has(declarationKey)) {
+      return rejectHarness(entry, `harness id ${JSON.stringify(overlay.id)} is already declared by this overlay layer`);
+    }
+    declaredInLayer.add(declarationKey);
+
+    const current = merged.get(overlay.id);
+    if (current !== undefined) {
+      if (overlay.persistent !== undefined) {
+        return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} inherits persistent entries and cannot redefine them`);
+      }
+      if (overlay.reason !== undefined && overlay.reason !== current.reason) {
+        return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} inherits its baseline reason`);
+      }
+      if (overlay.dir === undefined && overlay.parents === undefined && overlay.env === undefined) {
+        return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} must append dir, parents, or env`);
+      }
+      const configChanged = overlay.dir !== undefined || overlay.parents !== undefined;
+      merged.set(overlay.id, {
+        ...current,
+        dir: appendedAfterBaseline(current.dir, overlay.dir ?? []),
+        ...(current.parents === undefined && overlay.parents === undefined
+          ? {}
+          : { parents: appendedAfterBaseline(current.parents ?? [], overlay.parents ?? []) }),
+        env: appendedAfterBaseline(current.env, overlay.env ?? []),
+        ...(configChanged ? { configSources: [...current.configSources, entry] } : {}),
+        ...(overlay.dir === undefined
+          ? {}
+          : {
+            persistentSources: new Map(
+              [...current.persistentSources].map(([id, sources]) => [id, [...sources, entry]]),
+            ),
+          }),
+      });
+      continue;
+    }
+
+    if (
+      overlay.dir === undefined || overlay.dir.length === 0 || overlay.env === undefined
+      || overlay.reason === undefined || overlay.witness === undefined
+    ) {
+      return rejectHarness(entry, `new harness ${JSON.stringify(overlay.id)} requires dir, witness, env, and reason`);
+    }
+    for (const persistent of overlay.persistent ?? []) {
+      if (persistentIds.has(persistent.id)) {
+        return rejectHarness(entry, `harness persistent id ${JSON.stringify(persistent.id)} is already declared`);
+      }
+      persistentIds.add(persistent.id);
+    }
+    merged.set(overlay.id, {
+      id: overlay.id,
+      dir: overlay.dir,
+      ...(overlay.parents === undefined ? {} : { parents: overlay.parents }),
+      env: overlay.env,
+      witness: overlay.witness,
+      reason: overlay.reason,
+      persistent: overlay.persistent ?? [],
+      configSources: [entry],
+      persistentSources: new Map((overlay.persistent ?? []).map((persistent) => [persistent.id, [entry]])),
+    });
+  }
+
+  const effective = [...merged.values()];
+  const derivedIds = new Map<string, MergedHarness>();
+  for (const harness of effective) {
+    for (const rule of deriveHarnessRules([harness])) {
+      const existing = derivedIds.get(rule.id);
+      if (existing === undefined) {
+        derivedIds.set(rule.id, harness);
+        continue;
+      }
+      const source = overlayContributions(
+        harness.configSources.concat(harness.persistentSources.get(rule.id) ?? []),
+      ).at(-1);
+      if (source !== undefined) return rejectHarness(source, `derived protected-write id ${JSON.stringify(rule.id)} is not unique`);
+      throw new Error(`baseline derived protected-write id ${JSON.stringify(rule.id)} is not unique`);
+    }
+  }
+  return effective;
+}
+
 interface ParsedFile {
   readonly filename: string;
-  readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown; };
+  readonly parsed: { rules?: unknown; override?: unknown; relax?: unknown; harness?: unknown; };
 }
 
 // Parses every file's TOML text, naming the ONE file at fault on the
@@ -703,6 +907,7 @@ interface FileEntries {
   readonly protectedWrite: readonly unknown[];
   readonly writeSecret: readonly unknown[];
   readonly prompt: readonly unknown[];
+  readonly harness: readonly unknown[];
   readonly rmRfTargets: readonly string[];
   readonly privilegeCommands: readonly string[];
 }
@@ -801,6 +1006,7 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
     secretBash: fileArray<unknown>(parsed, ['rules', 'secret', 'bash'], 'rules.secret.bash', layer, filename),
     protectedWrite: fileArray<unknown>(parsed, ['rules', 'protected_write'], 'rules.protected_write', layer, filename),
     writeSecret: fileArray<unknown>(parsed, ['rules', 'write_secret'], 'rules.write_secret', layer, filename),
+    harness: fileArray<unknown>(parsed, ['harness'], 'harness', layer, filename),
     prompt: fileArray<unknown>(parsed, ['rules', 'prompt'], 'rules.prompt', layer, filename),
     rmRfTargets: fileArray<string>(
       parsed,
@@ -1032,6 +1238,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   let rawProtectedWrite: L<unknown>[] = [];
   let rawWriteSecret: L<unknown>[] = [];
   let rawPrompt: L<unknown>[] = [];
+  const rawHarness: L<unknown>[] = [];
   // Layer- and file-tagged — dangerous_targets has no `id` of its own to
   // carry through resolvePrecedence like the six regex families, it is
   // purely additive across layers (ADR-0001 § Merge order); `layer` here
@@ -1056,6 +1263,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     for (const raw of entries.protectedWrite) rawProtectedWrite.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.writeSecret) rawWriteSecret.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.prompt) rawPrompt.push({ filename, layer, raw, seq: seq() });
+    for (const raw of entries.harness) rawHarness.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.rmRfTargets) rmRfTagged.push({ filename, layer, raw });
     privilegeCommands = privilegeCommands.concat(entries.privilegeCommands);
   }
@@ -1152,6 +1360,11 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   rawProtectedWrite = dropShadowed(rawProtectedWrite);
   rawWriteSecret = dropShadowed(rawWriteSecret);
   rawPrompt = dropShadowed(rawPrompt);
+  const mergedHarnesses = mergeHarnesses(
+    BASELINE.rules.harness,
+    rawHarness.map(({ raw, filename, layer }, index) => parseHarnessOverlayEntry(raw, { filename, layer }, index)),
+  );
+  const derivedRows = derivedHarnessRows(mergedHarnesses);
 
   const governedSubs = baselineGovernedSubs(BASELINE.rules.command.git);
   const gitConditionalEntries: GitConditionalEntries = { askFlags, safeFirstArg, safeGrammar };
@@ -1181,13 +1394,22 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
       path: mergeRegexFamily('secret.path', BASELINE.rules.secret.path, rawSecretPath),
       bash: mergeRegexFamily('secret.bash', BASELINE.rules.secret.bash, rawSecretBash),
     },
-    protected_write: mergeRegexFamily('protected_write', BASELINE.rules.protected_write, rawProtectedWrite),
+    protected_write: [
+      ...derivedRows,
+      ...mergeRegexFamily(
+        'protected_write',
+        BASELINE.rules.protected_write.filter((rule) => !isDerivedHarnessRule(rule)),
+        rawProtectedWrite,
+      ),
+    ],
+    harness: mergedHarnesses,
     mcp_write: {
       read_prefixes: appendedAfterBaseline(BASELINE.rules.mcp_write.read_prefixes, relaxedValuesFor(relax, 'mcp_write.read_prefixes')),
     },
     write_secret: mergeRegexFamily('write_secret', BASELINE.rules.write_secret, rawWriteSecret),
     prompt: mergeRegexFamily('prompt', BASELINE.rules.prompt, rawPrompt),
   };
+  assertUniqueEffectiveRuleIds(merged);
 
   const dialectIssues = [...lintMergedDialect(merged), ...lintRmRfTargets(rmRfTagged)];
   if (dialectIssues.length > 0) throw new PolicyRejected(dialectIssues);
@@ -1196,6 +1418,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     command: { ...merged.command, bash: merged.command.bash.map((t) => t.rule) },
     secret: { path: merged.secret.path.map((t) => t.rule), bash: merged.secret.bash.map((t) => t.rule) },
     protected_write: merged.protected_write.map((t) => t.rule),
+    harness: merged.harness,
     mcp_write: merged.mcp_write,
     write_secret: merged.write_secret.map((t) => t.rule),
     prompt: merged.prompt.map((t) => t.rule),

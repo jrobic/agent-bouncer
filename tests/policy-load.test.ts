@@ -611,4 +611,106 @@ describe('loadPolicyFromOverlayText: effectiveRules carries provenance for `rule
     const result = loadPolicyFromOverlayText(overlay);
     expect(result.effectiveRules.find((r) => r.rule.id === 'curl-file-upload')).toBeUndefined();
   });
+  test('a derived row from a new harness keeps its overlay source and harness identity', () => {
+    const result = loadPolicyFromOverlayText(`
+      [[harness]]
+      id = "new-agent"
+      dir = ["(^|/)new-agent"]
+      witness = "~/new-agent"
+      env = []
+      reason = "New agent configuration directory"
+    `);
+    const derived = result.effectiveRules.find((entry) => entry.rule.id === 'new-agent-config-dir');
+    expect(derived).toMatchObject({
+      provenance: 'overlay',
+      sourceFile: 'profile:policy.toml',
+      harnessId: 'new-agent',
+    });
+  });
+});
+
+describe('loadPolicyFromOverlayText: declarative harness witnesses', () => {
+  test('an unverifiable derived witness rejects the complete overlay with a declaration instruction', () => {
+    const result = loadPolicyFromOverlayText(`
+      [[harness]]
+      id = "numeric-agent"
+      dir = ["(^|/)agent-[0-9]+"]
+      env = []
+      reason = "Agent configuration directory"
+    `);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('declare witness');
+  });
+});
+
+describe('loadPolicyFromOverlayText: global harness rule identity', () => {
+  test('rejects a harness-derived id reused by a different regex family', () => {
+    const result = loadPolicyFromOverlayText(`
+      [[rules.command.bash]]
+      id = "harness-global-config"
+      regex = "manual collision"
+      reason = "Test collision"
+    `);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('harness-global-config');
+  });
+
+  test.each([
+    ['a baseline protected-write row', 'harness-global-config', ''],
+    ['a baseline command row', 'mkfs', ''],
+    [
+      'a normal row in the same overlay file',
+      'overlay-harness-collision',
+      '\n[[rules.command.bash]]\nid = "overlay-harness-collision"\nregex = "^overlay-harness-collision"\nreason = "Normal collision"\n',
+    ],
+  ])('rejects a new harness persistent id colliding with %s', (_kind, id, extra) => {
+    const result = loadPolicyFromOverlayText(`
+      [[harness]]
+      id = "collision-agent"
+      dir = ["(^|/)collision-agent"]
+      witness = "~/collision-agent"
+      env = []
+      reason = "Collision agent configuration"
+
+      [[harness.persistent]]
+      id = "${id}"
+      path = "settings"
+      reason = "Collision agent settings"${extra}
+    `);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain(id);
+  });
+
+  test('rejects a second harness declaration with the same id in one overlay layer', () => {
+    const result = loadPolicyFromOverlayText(`
+      [[harness]]
+      id = "duplicated-agent"
+      dir = ["(^|/)duplicated-agent"]
+      witness = "~/duplicated-agent"
+      env = []
+      reason = "Agent configuration directory"
+
+      [[harness]]
+      id = "duplicated-agent"
+      dir = ["(^|/)duplicated-agent-next"]
+      witness = "~/duplicated-agent-next"
+      env = []
+      reason = "Agent configuration directory"
+    `);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('already declared by this overlay layer');
+  });
+
+  test('rejects malformed harness fragments with the shared RE2-like dialect lint', () => {
+    const result = loadPolicyFromOverlayText(`
+      [[harness]]
+      id = "malformed-agent"
+      dir = ["(?=unsafe)"]
+      witness = "~/unsafe"
+      env = []
+      reason = "Agent configuration directory"
+    `);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('lookaround');
+  });
 });

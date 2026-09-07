@@ -96,10 +96,41 @@ export interface McpWritePolicy {
   readonly read_prefixes: readonly string[];
 }
 
+export interface HarnessPersistent {
+  readonly id: string;
+  readonly path: string;
+  readonly reason: string;
+}
+
+export interface HarnessDeclaration {
+  readonly id: string;
+  readonly dir: readonly string[];
+  readonly parents?: readonly string[];
+  readonly env: readonly string[];
+  readonly witness: string;
+  readonly reason: string;
+  readonly persistent: readonly HarnessPersistent[];
+}
+
+export interface DerivedHarnessRule extends RegexRule {
+  readonly harnessId: string;
+}
+
+export type HarnessOverlay = Readonly<{
+  id: string;
+  dir?: readonly string[];
+  parents?: readonly string[];
+  env?: readonly string[];
+  witness?: string;
+  reason?: string;
+  persistent?: readonly HarnessPersistent[];
+}>;
+
 export interface RulesPolicy {
   readonly command: CommandPolicy;
   readonly secret: SecretPolicy;
   readonly protected_write: readonly RegexRule[];
+  readonly harness: readonly HarnessDeclaration[];
   readonly mcp_write: McpWritePolicy;
   readonly write_secret: readonly RegexRule[];
   readonly prompt: readonly RegexRule[];

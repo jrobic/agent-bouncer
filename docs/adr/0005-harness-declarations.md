@@ -64,6 +64,7 @@ facts.
    [[harness]]
    id = "claude-code"
    dir = ["(^|/)\\.claude"]              # regex fragments; the directory, no trailing slash
+   witness = "~/.claude"                 # concrete path that lint proves against dir[0]
    env = ["CLAUDE_CONFIG_DIR"]           # variables that name that directory
    reason = "Claude Code configuration directory"
 
@@ -71,7 +72,6 @@ facts.
    id = "harness-hooks"                  # explicit: stable in logs, audit, docs
    path = "hooks(/|$)"                   # relative to each dir
    reason = "Claude Code hooks can alter future tool-call enforcement"
-   ```
 
    Optional `parents = [...]`: directories whose deletion takes the config
    dir with them but which carry no persistent files of their own
@@ -86,22 +86,26 @@ facts.
    - one row per `persistent` entry, id as declared, regex `D/<path>` for
      every `dir` fragment `D`.
    Derived rows carry provenance `[harness:<id>]` in `rules list` and
-   `doctor`; `rules lint` compiles every fragment, rejects duplicate harness
-   or persistent ids, and requires upper-case `env` names.
+   `doctor`; an overlay fragment that changes a derived row gives that row
+   overlay file provenance as well. `rules lint` compiles every fragment,
+   rejects duplicate harness or persistent ids, requires upper-case `env`
+   names, and proves a declared or fallback `witness` against `dir[0]`.
 
 3. **Environment expansion.** Before path matching, a Bash token of the form
    `$NAME`, `${NAME}`, `"$NAME…"` whose `NAME` is declared in some block's
-   `env` is rewritten to a canonical witness path for that block's first
-   `dir` (`CLAUDE_CONFIG_DIR` → `~/.claude`, `CODEX_HOME` → `~/.codex`,
-   `PI_CODING_AGENT_DIR` → `~/.omp/agent`). Only declared names expand; an
-   undeclared `$CONFIG/hooks` stays opaque. The rewrite feeds the existing
-   matchers, so the persistent rows cover `"$CLAUDE_CONFIG_DIR/hooks"`
-   without change. Same-line assignments (`D=~/.claude; rm -rf $D/hooks`)
-   are a known limit, not expanded.
+   `env` is rewritten to that block's validated witness path
+   (`CLAUDE_CONFIG_DIR` → `~/.claude`, `CODEX_HOME` → `~/.codex`,
+   `PI_CODING_AGENT_DIR` → `~/.omp/agent`). Single-quoted and escaped
+   tokens remain literal. The rewrite feeds the existing matchers, so the
+   persistent rows cover `"$CLAUDE_CONFIG_DIR/hooks"` without change.
+   Same-line assignments (`D=~/.claude; rm -rf $D/hooks`) are a known
+   limit, not expanded.
 
 4. **Brace expansion** in the Bash tokenizer: `~/.{claude,codex}` yields one
-   candidate token per alternative, each matched independently. A pure
-   function on the token; nested braces and ranges stay unsupported.
+   candidate token per alternative, each matched independently. It is pure,
+   unquoted/unenescaped only, and capped at 64 alternatives per token;
+   exceeding the cap confirms conservatively without filesystem access.
+   Nested braces and ranges stay unsupported.
 
 5. **Baseline harnesses** — the ones with a documented directory convention
    (the build cites the source for each in the row `reason` or the policy
@@ -180,3 +184,5 @@ facts.
 | Date | Change |
 |---|---|
 | 2026-09-05 | Proposed after the design session (two rounds, seven decisions); accepted the same day. |
+| 2026-09-05 | Built on `feat/37-harness-declarations`; gate commit pending human approval. |
+| 2026-09-07 | Added the optional witness field, lint-checked against `dir[0]` with a verified fallback; gate commit remains pending human approval. |

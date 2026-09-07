@@ -50,6 +50,73 @@ describe('runCheck: dry-runs a command without a session', () => {
     const { text } = await runCheck('ls -la');
     expect(text.trim()).toBe('allow');
   });
+
+  test('an applied harness extension changes the persistent write boundary', async () => {
+    const dir = await freshAccountDir();
+    const command = 'echo x > ~/.claude-x/settings.json';
+
+    await expect(runCheck(command)).resolves.toMatchObject({ text: 'allow' });
+    await writeOverlay(
+      dir,
+      '[[harness]]\nid = "claude-code"\ndir = ["(^|/)\\\\.claude-x"]\nwitness = "~/.claude-x"\n',
+    );
+
+    await expect(runCheck(command)).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-harness-settings]'),
+    });
+    await expect(runRulesList()).resolves.toMatchObject({
+      text: expect.stringContaining(
+        'rule protected_write harness-settings baseline+overlay [profile:policy.toml] [harness:claude-code]',
+      ),
+    });
+  });
+  test('expands only the eligible fragments of a concatenated shell token', async () => {
+    await freshAccountDir();
+
+    await expect(runCheck('rm -rf "$CLAUDE_CONFIG_DIR"\'/hooks\'')).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-harness-hooks]'),
+    });
+    await expect(runCheck('rm -rf ~/.{claude,codex}\'/hooks\'')).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-harness-hooks]'),
+    });
+    await expect(runCheck('rm -rf \'$CLAUDE_CONFIG_DIR\'"/hooks"')).resolves.toMatchObject({ text: 'allow' });
+    await expect(runCheck('rm -rf "$CLAUDE_CONFIG_DIR/hooks"')).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-harness-hooks]'),
+    });
+  });
+
+  test('keeps literal syntax literal while expanding declared environment and brace fragments', async () => {
+    await freshAccountDir();
+
+    await expect(runCheck('rm -rf $CLAUDE_CONFIG_DIR')).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-claude-code-config-dir]'),
+    });
+    await expect(runCheck('rm -rf $CONFIG')).resolves.toMatchObject({ text: 'allow' });
+    await expect(runCheck('rm -rf \'$CLAUDE_CONFIG_DIR\'')).resolves.toMatchObject({ text: 'allow' });
+    await expect(runCheck('rm -rf \\$CLAUDE_CONFIG_DIR')).resolves.toMatchObject({ text: 'allow' });
+    await expect(runCheck('rm -rf ~/.{claude,codex}')).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-claude-code-config-dir]'),
+    });
+    await expect(runCheck('rm -rf \'~/.{claude,codex}\'')).resolves.toMatchObject({ text: 'allow' });
+    await expect(runCheck('rm -rf ~/.\\{claude,codex\\}')).resolves.toMatchObject({ text: 'allow' });
+  });
+
+  test.each([
+    ['optional group', '(^|/)\\\\.group(-agent)?', '~/.group-agent', 'GROUP_AGENT_HOME'],
+    ['alternation', '(^|/)\\\\.(alternate|variant)-agent', '~/.alternate-agent', 'ALTERNATE_AGENT_HOME'],
+    ['character class', '(^|/)\\\\.numeric-[0-9]+', '~/.numeric-7', 'NUMERIC_AGENT_HOME'],
+    ['absolute path', '^/var/lib/absolute-[0-9]+', '/var/lib/absolute-7', 'ABSOLUTE_AGENT_HOME'],
+  ])('uses the derived rule matcher for a %s witness through runCheck', async (_kind, dir, witness, env) => {
+    const accountDir = await freshAccountDir();
+    await writeOverlay(
+      accountDir,
+      `[[harness]]\nid = "shape-agent"\ndir = ["${dir}"]\nwitness = "${witness}"\nenv = ["${env}"]\nreason = "Shape witness"\n\n[[harness.persistent]]\nid = "shape-settings"\npath = "config\\\\.json$"\nreason = "Shape settings"\n`,
+    );
+
+    await expect(runCheck(`echo x > $${env}/config.json`)).resolves.toMatchObject({
+      text: expect.stringContaining('confirm [bash-shape-settings]'),
+    });
+  });
 });
 
 describe('runRulesLint', () => {
@@ -90,6 +157,19 @@ describe('runRulesLint', () => {
     const { ok } = await runRulesLint();
     expect(ok).toBe(false);
   });
+
+  test('rejects a witness that only matches a directory prefix', async () => {
+    const dir = await freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[harness]]\nid = "numeric-agent"\ndir = ["(^|/)\\\\.numeric-[0-9]+"]\nwitness = "~/.numeric-7oops"\nenv = ["NUMERIC_AGENT_HOME"]\nreason = "Numeric agent configuration"\n',
+    );
+
+    await expect(runRulesLint()).resolves.toMatchObject({
+      ok: false,
+      text: expect.stringContaining('declare witness'),
+    });
+  });
 });
 
 describe('runRulesList', () => {
@@ -99,7 +179,30 @@ describe('runRulesList', () => {
     expect(ok).toBe(true);
     expect(text).toContain('rule command.bash mkfs baseline');
     expect(text).toContain('rule secret.path dotenv baseline');
-    expect(text).toMatch(/^summary: \d+ rules, 0 overrides active/m);
+    expect(text).toContain('rule protected_write claude-code-config-dir baseline [harness:claude-code]');
+    expect(text).toMatch(/^summary: 99 rules, 0 overrides active/m);
+  });
+
+  test('lists a new overlay harness and its companion normal rule as overlay', async () => {
+    const dir = await freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[harness]]\nid = "new-agent"\ndir = ["(^|/)\\\\.new-agent"]\nwitness = "~/.new-agent"\nenv = ["NEW_AGENT_HOME"]\nreason = "New agent configuration"\n\n[[harness.persistent]]\nid = "new-agent-settings"\npath = "settings\\\\.json$"\nreason = "New agent settings"\n\n[[rules.command.bash]]\nid = "new-agent-command"\nregex = "^new-agent-command"\nreason = "New agent command"\n',
+    );
+
+    await expect(runRulesList()).resolves.toMatchObject({
+      text: expect.stringContaining(
+        'rule protected_write new-agent-config-dir overlay [profile:policy.toml] [harness:new-agent]',
+      ),
+    });
+    await expect(runRulesList()).resolves.toMatchObject({
+      text: expect.stringContaining(
+        'rule protected_write new-agent-settings overlay [profile:policy.toml] [harness:new-agent]',
+      ),
+    });
+    await expect(runRulesList()).resolves.toMatchObject({
+      text: expect.stringContaining('rule command.bash new-agent-command overlay [profile:policy.toml]'),
+    });
   });
 
   test('an active override is visible with its provenance and reason, counted in the summary', async () => {

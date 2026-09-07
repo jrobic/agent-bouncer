@@ -1,0 +1,402 @@
+{
+  "family": "harness",
+  "event": "PreToolUse",
+  "cases": [
+    {
+      "id": "claude-code-config-dir",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "claude-settings",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.claude/settings.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-settings" }]
+    },
+    {
+      "id": "claude-hooks",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/hooks" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-hooks" }]
+    },
+    {
+      "id": "claude-plugins",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/plugins" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-plugins" }]
+    },
+    {
+      "id": "claude-instructions",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -f ~/.claude/CLAUDE.md" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-instructions" }]
+    },
+    {
+      "id": "codex-config-dir",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.codex" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-config-dir" }]
+    },
+    {
+      "id": "codex-config",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.codex/config.toml" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-config" }]
+    },
+    {
+      "id": "codex-instructions",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.codex/AGENTS.md" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-instructions" }]
+    },
+    {
+      "id": "opencode-config-dir",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.config/opencode" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-opencode-config-dir" }]
+    },
+    {
+      "id": "opencode-config",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.config/opencode/opencode.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-opencode-config" }]
+    },
+    {
+      "id": "opencode-instructions",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.config/opencode/AGENTS.md" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-opencode-instructions" }]
+    },
+    {
+      "id": "opencode-plugins",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.config/opencode/plugin" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-opencode-plugins" }]
+    },
+    {
+      "id": "omp-config-dir-parent",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.omp" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config-dir" }]
+    },
+    {
+      "id": "omp-config-dir-agent",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.pi/agent" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config-dir" }]
+    },
+    {
+      "id": "omp-config",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.omp/agent/config.yml" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config" }]
+    },
+    {
+      "id": "omp-models",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.pi/agent/models.yaml" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-models" }]
+    },
+    {
+      "id": "omp-extensions",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.omp/agent/extensions" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-extensions" }]
+    },
+    {
+      "id": "gemini-cli-config-dir",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.gemini" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-gemini-cli-config-dir" }]
+    },
+    {
+      "id": "gemini-cli-settings",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.gemini/settings.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-gemini-cli-settings" }]
+    },
+    {
+      "id": "gemini-cli-instructions",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.gemini/GEMINI.md" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-gemini-cli-instructions" }]
+    },
+    {
+      "id": "cursor-config-dir",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.cursor" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-cursor-config-dir" }]
+    },
+    {
+      "id": "cursor-hooks",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.cursor/hooks.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-cursor-hooks" }]
+    },
+    {
+      "id": "cursor-mcp",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.cursor/mcp.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-cursor-mcp" }]
+    },
+    {
+      "id": "directory-token-slash",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-dot",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/." },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-end-options",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf -- ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-home",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf $HOME/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-braced-home",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ${HOME}/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-absolute",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf /Users/x/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-glob",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/*" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-mv",
+      "toolName": "Bash",
+      "toolInput": { "command": "mv ~/.claude ~/.claude.bak" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-cp",
+      "toolName": "Bash",
+      "toolInput": { "command": "cp /tmp/config ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-rsync",
+      "toolName": "Bash",
+      "toolInput": { "command": "rsync -a /tmp/config/ ~/.claude/" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-ln",
+      "toolName": "Bash",
+      "toolInput": { "command": "ln -s /tmp/config ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-chmod",
+      "toolName": "Bash",
+      "toolInput": { "command": "chmod -R 777 ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "directory-token-chown",
+      "toolName": "Bash",
+      "toolInput": { "command": "chown -R user ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "fallback-trash",
+      "toolName": "Bash",
+      "toolInput": { "command": "trash ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "fallback-ditto",
+      "toolName": "Bash",
+      "toolInput": { "command": "ditto /tmp/config ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "fallback-tar",
+      "toolName": "Bash",
+      "toolInput": { "command": "tar -C ~/.claude -xf archive.tar" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "fallback-unzip",
+      "toolName": "Bash",
+      "toolInput": { "command": "unzip archive.zip -d ~/.claude" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "declared-env-directory",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf \"$CLAUDE_CONFIG_DIR\"" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "declared-env-persistent",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf $CLAUDE_CONFIG_DIR/hooks" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-hooks" }]
+    },
+    {
+      "id": "declared-env-mixed-quoted-fragments",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf \"$CLAUDE_CONFIG_DIR\"'/hooks'" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-hooks" }]
+    },
+    {
+      "id": "literal-env-mixed-quoted-fragments",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf '$CLAUDE_CONFIG_DIR'\"/hooks\"" },
+      "expected": []
+    },
+    {
+      "id": "declared-env-double-quoted-persistent",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf \"$CLAUDE_CONFIG_DIR/hooks\"" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-hooks" }]
+    },
+    {
+      "id": "declared-env-codex",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ${CODEX_HOME}/config.toml" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-config" }]
+    },
+    {
+      "id": "declared-env-omp",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > $PI_CODING_AGENT_DIR/config.yml" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config" }]
+    },
+    {
+      "id": "brace-expansion",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.{claude,codex}" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-claude-code-config-dir" }]
+    },
+    {
+      "id": "brace-expansion-mixed-quoted-suffix",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.{claude,codex}'/hooks'" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-harness-hooks" }]
+    },
+    {
+      "id": "negative-readers",
+      "toolName": "Bash",
+      "toolInput": { "command": "find ~/.claude/hooks -name hook.sh" },
+      "expected": []
+    },
+    {
+      "id": "negative-excluded-claude-subtrees",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm -rf ~/.claude/skills ~/.claude/agents ~/.claude/commands ~/.claude/projects/work/memory"
+      },
+      "expected": []
+    },
+    {
+      "id": "negative-excluded-omp-subtrees",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.omp/cache ~/.omp/logs ~/.pi/node_modules" },
+      "expected": []
+    },
+    {
+      "id": "negative-excluded-opencode-subtrees",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.config/opencode/commands ~/.config/opencode/agent" },
+      "expected": []
+    },
+    {
+      "id": "negative-near-misses",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rm -rf ~/.claude_backup ~/.claudette ~/.claude-code.log ~/.config/opencode-old ~/.claude-work"
+      },
+      "expected": []
+    },
+    {
+      "id": "negative-unknown-env",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf $CONFIG/hooks" },
+      "expected": []
+    },
+    {
+      "id": "literal-single-quoted-declared-env",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf '$CLAUDE_CONFIG_DIR'" },
+      "expected": []
+    },
+    {
+      "id": "literal-escaped-declared-env",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf \\$CLAUDE_CONFIG_DIR" },
+      "expected": []
+    },
+    {
+      "id": "literal-single-quoted-brace",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf '~/.{claude,codex}'" },
+      "expected": []
+    },
+    {
+      "id": "literal-escaped-brace",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.\\{claude,codex\\}" },
+      "expected": []
+    },
+    {
+      "id": "negative-echo-env",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo $CLAUDE_CONFIG_DIR" },
+      "expected": []
+    },
+    {
+      "id": "known-limit-truncated-glob-directory",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.cla*" },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "Truncated globs do not identify a declared configuration directory."
+    },
+    {
+      "id": "known-limit-truncated-glob-file",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.claude/set*" },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "The glob reading cannot infer a persistent filename from a prefix."
+    },
+    {
+      "id": "known-limit-assignment",
+      "toolName": "Bash",
+      "toolInput": { "command": "D=~/.claude; rm -rf $D/hooks" },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "Same-line shell assignments are intentionally not evaluated."
+    },
+    {
+      "id": "known-limit-nested-braces",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm -rf ~/.{claude,{codex,cursor}}" },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "Only one non-nested comma brace expression is expanded."
+    }
+  ]
+}

@@ -86,6 +86,48 @@ describe('run(): a valid overlay override actually changes the live verdict', ()
   });
 });
 
+describe('loadCurrentPolicy(): harness overlays use a real temporary layer', () => {
+  test('an existing harness appends directories while inheriting its persistent entries', async () => {
+    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-harness-overlay-'));
+    cleanupDirs.push(accountDir);
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+    const overlayEnvelope = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'echo x > ~/.claude-x/settings.json' },
+    });
+
+    expect((await run(overlayEnvelope)).stdout).toBeNull();
+    await mkdir(join(accountDir, 'bouncer', 'policy.d'), { recursive: true });
+    await writeFile(
+      join(accountDir, 'bouncer', 'policy.d', '20-claude-x.toml'),
+      '[[harness]]\nid = "claude-code"\ndir = ["(^|/)\\\\.claude-[\\\\w.-]+"]\nwitness = "~/.claude-x"\n',
+      'utf8',
+    );
+
+    const result = await run(overlayEnvelope);
+    const output = JSON.parse(result.stdout!).hookSpecificOutput;
+    expect(output.permissionDecision).toBe('ask');
+    expect(output.permissionDecisionReason).toContain('bash-harness-settings');
+  });
+
+  test('a persistent entry on an existing harness rejects its complete overlay layer', async () => {
+    await accountWithOverlay(`
+      [[harness]]
+      id = "claude-code"
+      dir = ["(^|/)\\\\.claude-x"]
+      [[harness.persistent]]
+      id = "unexpected"
+      path = "config\\\\.json$"
+      reason = "test"
+    `);
+
+    const loaded = await loadCurrentPolicy();
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain('inherits persistent entries');
+  });
+});
+
 describe('run(): Story 19 — the audit log opens with a header naming active overrides/relaxations', () => {
   test('the first log entry on a fresh account with an active override is the audit header', async () => {
     const accountDir = await accountWithOverlay(`

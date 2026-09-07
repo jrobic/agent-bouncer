@@ -432,6 +432,8 @@ export type ShellToken =
   & SourceRange
   & Readonly<{
     value: string;
+    pathCandidates?: readonly string[];
+    braceExpansionExceeded?: true;
     kind: 'word' | 'bang-operator';
     hasLiteralizingSyntax: boolean;
     hasQuotedWhitespace: boolean;
@@ -447,6 +449,10 @@ type TokenizedShell = Readonly<{
   segments: readonly ShellToken[][];
   heredocBodies: readonly SourceRange[];
   hasUnquotedShellOperator: boolean;
+}>;
+
+export type ShellTokenizeOptions = Readonly<{
+  pathCandidates?: true;
 }>;
 
 type HeredocDelimiter = Readonly<{
@@ -527,7 +533,80 @@ function isInsideHeredocBody(position: number, bodies: readonly SourceRange[]): 
   return bodies.some((body) => body.start <= position && position < body.end);
 }
 
-export function tokenizeShellSegments(cmd: string): TokenizedShell {
+const MAX_BRACE_ALTERNATIVES = 64;
+
+type PathCandidateExpansion = Readonly<{
+  candidates: readonly string[];
+  braceExpansionExceeded?: true;
+}>;
+
+type ShellExpansionFragment = Readonly<{
+  value: string;
+  environment: boolean;
+  brace: boolean;
+}>;
+
+function expandEnvironmentFragment(
+  fragment: ShellExpansionFragment,
+  witnesses: ReadonlyMap<string, string> | undefined,
+): string {
+  if (!fragment.environment || witnesses === undefined) return fragment.value;
+  return fragment.value.replace(/\$\{([A-Z][A-Z0-9_]*)\}|\$([A-Z][A-Z0-9_]*)/g, (match, braced, bare) => {
+    const witness = witnesses.get(braced ?? bare);
+    return witness ?? match;
+  });
+}
+
+// Expands only policy-declared environment variables and one non-nested,
+// comma-separated brace expression. A path whose expansion exceeds the cap
+// deliberately exposes no candidates: the protected-write caller confirms it
+// rather than scanning an unbounded synthetic path set.
+function expandPathTokenCandidates(
+  fragments: readonly ShellExpansionFragment[],
+  witnesses: ReadonlyMap<string, string> | undefined,
+): PathCandidateExpansion {
+  let candidates = [''];
+  let expandedBrace = false;
+
+  for (const fragment of fragments) {
+    const value = expandEnvironmentFragment(fragment, witnesses);
+    const brace = !expandedBrace && fragment.brace
+      ? value.match(/^([^{}]*)\{([^{}]+)\}([^{}]*)$/)
+      : null;
+    if (brace === null || !brace[2]!.includes(',')) {
+      candidates = candidates.map((candidate) => `${candidate}${value}`);
+      continue;
+    }
+    const alternatives = brace[2]!.split(',');
+    if (alternatives.some((alternative) => alternative.length === 0)) {
+      candidates = candidates.map((candidate) => `${candidate}${value}`);
+      continue;
+    }
+    if (candidates.length * alternatives.length > MAX_BRACE_ALTERNATIVES) {
+      return { candidates: [], braceExpansionExceeded: true };
+    }
+    candidates = candidates.flatMap((candidate) => alternatives.map((alternative) => `${candidate}${brace[1]!}${alternative}${brace[3]!}`));
+    expandedBrace = true;
+  }
+
+  return { candidates };
+}
+
+export function expandedPathTokenCandidates(
+  value: string,
+  witnesses?: ReadonlyMap<string, string>,
+): readonly string[] {
+  return expandPathTokenCandidates([{ value, environment: true, brace: true }], witnesses).candidates;
+}
+
+// The optional witnesses are policy data, never the process environment.
+// This keeps tokenization deterministic while allowing protected-write to
+// recognize a harness's declared configuration directory.
+export function tokenizeShellSegments(
+  cmd: string,
+  witnesses?: ReadonlyMap<string, string>,
+  options?: ShellTokenizeOptions,
+): TokenizedShell {
   const segments: ShellToken[][] = [];
   const heredocBodies: SourceRange[] = [];
   let tokens: ShellToken[] = [];
@@ -536,12 +615,41 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
   let tokenStarted = false;
   let tokenHasLiteralizingSyntax = false;
   let tokenHasQuotedWhitespace = false;
+  let fragments: ShellExpansionFragment[] = [];
+  let fragment = '';
+  let fragmentEnvironment = true;
+  let fragmentBrace = true;
   let quote: '"' | '\'' | null = null;
   let comment = false;
   let hasUnquotedShellOperator = false;
 
+  const flushFragment = (): void => {
+    if (!fragment) return;
+    fragments.push({ value: fragment, environment: fragmentEnvironment, brace: fragmentBrace });
+    fragment = '';
+  };
+  const append = (value: string): void => {
+    token += value;
+    fragment += value;
+  };
+  const appendLiteral = (value: string): void => {
+    flushFragment();
+    token += value;
+    fragments.push({ value, environment: false, brace: false });
+  };
+  const setFragmentSyntax = (environment: boolean, brace: boolean): void => {
+    flushFragment();
+    fragmentEnvironment = environment;
+    fragmentBrace = brace;
+  };
+
   const flushToken = (end: number): void => {
     if (!tokenStarted) return;
+    flushFragment();
+    const expansion = options?.pathCandidates === true && (token.includes('$') || token.includes('{'))
+      ? expandPathTokenCandidates(fragments, witnesses)
+      : undefined;
+    const candidates = expansion?.candidates;
     tokens.push({
       value: token,
       kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
@@ -550,12 +658,20 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
       hasLiteralizingSyntax: tokenHasLiteralizingSyntax,
       hasQuotedWhitespace: tokenHasQuotedWhitespace,
       hasUnterminatedQuote: quote !== null,
+      ...(candidates === undefined || (candidates.length === 1 && candidates[0] === token)
+        ? {}
+        : { pathCandidates: candidates }),
+      ...(expansion?.braceExpansionExceeded === true ? { braceExpansionExceeded: true } : {}),
     });
     token = '';
     tokenStart = 0;
     tokenStarted = false;
     tokenHasLiteralizingSyntax = false;
     tokenHasQuotedWhitespace = false;
+    fragments = [];
+    fragment = '';
+    fragmentEnvironment = true;
+    fragmentBrace = true;
   };
   const flushSegment = (end: number): ShellToken[] => {
     flushToken(end);
@@ -588,19 +704,20 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
       if (ch === '\\' && quote === '"') {
         const escaped = cmd[i + 1];
         if (escaped !== undefined && /[$`"\\\n]/.test(escaped)) {
-          if (escaped !== '\n') token += escaped;
+          if (escaped !== '\n') appendLiteral(escaped);
           i++;
         } else {
-          token += '\\';
+          append('\\');
         }
         continue;
       }
       if (ch === quote) {
+        setFragmentSyntax(true, true);
         quote = null;
         continue;
       }
       if (/\s/.test(ch)) tokenHasQuotedWhitespace = true;
-      token += ch;
+      append(ch);
       continue;
     }
 
@@ -613,14 +730,15 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
       if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
       tokenHasLiteralizingSyntax = true;
-      if (escaped === undefined) token += '\\';
+      if (escaped === undefined) appendLiteral('\\');
       else {
-        token += escaped;
+        appendLiteral(escaped);
         i++;
       }
       continue;
     }
     if (ch === '"' || ch === '\'') {
+      setFragmentSyntax(ch === '"', false);
       quote = ch;
       if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
@@ -649,11 +767,14 @@ export function tokenizeShellSegments(cmd: string): TokenizedShell {
     }
     if (!tokenStarted) tokenStart = i;
     tokenStarted = true;
-    token += ch;
+    append(ch);
   }
   flushSegment(cmd.length);
   return { segments, heredocBodies, hasUnquotedShellOperator };
 }
+
+// Tokenizer body moved above so the optional policy witnesses can enrich
+// path-bearing tokens without changing structural command parsing.
 
 const PROSE_COMMANDS: Readonly<Record<string, true>> = {
   echo: true,

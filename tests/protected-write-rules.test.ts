@@ -6,10 +6,137 @@ import { BASELINE } from '../src/policy/baseline.ts';
 import { createProtectedWriteChecker } from '../src/protected-write-rules.ts';
 
 const cleanupDirs: string[] = [];
-const checker = createProtectedWriteChecker(BASELINE.rules.protected_write);
+const checker = createProtectedWriteChecker(BASELINE.rules.protected_write, BASELINE.rules.harness);
 
 afterEach(async () => {
   await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+describe('protected-write rules: harness declarations', () => {
+  test('ruleId claude-code-config-dir: the Claude Code directory itself confirms on write', async () => {
+    await expect(checker.checkPath('~/.claude')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'claude-code-config-dir',
+    });
+  });
+
+  test('ruleId codex-config: Codex configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.codex/config.toml')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'codex-config',
+    });
+  });
+
+  test('ruleId codex-config-dir: the Codex directory itself confirms on write', async () => {
+    await expect(checker.checkPath('~/.codex')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'codex-config-dir' });
+  });
+
+  test('ruleId codex-instructions: Codex instructions confirm on write', async () => {
+    await expect(checker.checkPath('~/.codex/AGENTS.md')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'codex-instructions' });
+  });
+
+  test('ruleId opencode-config-dir: the OpenCode directory itself confirms on write', async () => {
+    await expect(checker.checkPath('~/.config/opencode')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'opencode-config-dir' });
+  });
+
+  test('ruleId opencode-config: OpenCode configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.config/opencode/opencode.jsonc')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'opencode-config',
+    });
+  });
+
+  test('ruleId opencode-instructions: OpenCode instructions confirm on write', async () => {
+    await expect(checker.checkPath('~/.config/opencode/AGENTS.md')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'opencode-instructions',
+    });
+  });
+
+  test('ruleId opencode-plugins: OpenCode plugins confirm on write', async () => {
+    await expect(checker.checkPath('~/.config/opencode/plugin/example.ts')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'opencode-plugins',
+    });
+  });
+
+  test('ruleId omp-config-dir: Oh My Pi directories confirm on write', async () => {
+    await expect(checker.checkPath('~/.omp')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-config-dir' });
+  });
+
+  test('ruleId omp-config: Oh My Pi configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.omp/agent/config.yml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-config' });
+  });
+
+  test('ruleId omp-models: Oh My Pi models confirm on write', async () => {
+    await expect(checker.checkPath('~/.pi/agent/models.yaml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-models' });
+  });
+
+  test('ruleId omp-extensions: Oh My Pi extensions confirm on write', async () => {
+    await expect(checker.checkPath('~/.omp/agent/extensions/example.ts')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'omp-extensions',
+    });
+  });
+
+  test('ruleId gemini-cli-config-dir: the Gemini CLI directory itself confirms on write', async () => {
+    await expect(checker.checkPath('~/.gemini')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'gemini-cli-config-dir' });
+  });
+
+  test('ruleId gemini-cli-settings: Gemini CLI settings confirm on write', async () => {
+    await expect(checker.checkPath('~/.gemini/settings.json')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'gemini-cli-settings',
+    });
+  });
+
+  test('ruleId gemini-cli-instructions: Gemini CLI instructions confirm on write', async () => {
+    await expect(checker.checkPath('~/.gemini/GEMINI.md')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'gemini-cli-instructions',
+    });
+  });
+
+  test('ruleId cursor-config-dir: the Cursor directory itself confirms on write', async () => {
+    await expect(checker.checkPath('~/.cursor')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'cursor-config-dir' });
+  });
+
+  test('ruleId cursor-hooks: Cursor hooks configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.cursor/hooks.json')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'cursor-hooks' });
+  });
+
+  test('ruleId cursor-mcp: Cursor MCP configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.cursor/mcp.json')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'cursor-mcp' });
+  });
+
+  test('declared environment variables and brace alternatives resolve before write matching', async () => {
+    await expect(checker.checkBashWrites('rm -rf "$CLAUDE_CONFIG_DIR"')).resolves.toMatchObject({ ruleId: 'bash-claude-code-config-dir' });
+    await expect(checker.checkBashWrites('rm -rf $CLAUDE_CONFIG_DIR/hooks')).resolves.toMatchObject({ ruleId: 'bash-harness-hooks' });
+    await expect(checker.checkBashWrites('echo x > ${CODEX_HOME}/config.toml')).resolves.toMatchObject({ ruleId: 'bash-codex-config' });
+    await expect(checker.checkBashWrites('echo x > $PI_CODING_AGENT_DIR/config.yml')).resolves.toMatchObject({ ruleId: 'bash-omp-config' });
+    await expect(checker.checkBashWrites('rm -rf $CONFIG/hooks')).resolves.toBeNull();
+    await expect(checker.checkBashWrites('echo $CLAUDE_CONFIG_DIR')).resolves.toBeNull();
+    await expect(checker.checkBashWrites('rm -rf ~/.{claude,codex}')).resolves.toMatchObject({ ruleId: 'bash-claude-code-config-dir' });
+  });
+
+  test('quoted and escaped environment or brace syntax stays literal', async () => {
+    await expect(checker.checkBashWrites('rm -rf \'$CLAUDE_CONFIG_DIR\'')).resolves.toBeNull();
+    await expect(checker.checkBashWrites('rm -rf \\$CLAUDE_CONFIG_DIR')).resolves.toBeNull();
+    await expect(checker.checkBashWrites('rm -rf \'~/.{claude,codex}\'')).resolves.toBeNull();
+  });
+
+  test('expands at most 64 brace alternatives before confirming conservatively', async () => {
+    const withinCap = ['claude', ...Array.from({ length: 63 }, (_, index) => `entry-${index}`)].join(',');
+    const overCap = Array.from({ length: 65 }, (_, index) => `entry-${index}`).join(',');
+
+    await expect(checker.checkBashWrites(`rm -rf ~/.{${withinCap}}`)).resolves.toMatchObject({
+      ruleId: 'bash-claude-code-config-dir',
+    });
+    await expect(checker.checkBashWrites(`rm -rf ~/.{${overCap}}`)).resolves.toMatchObject({
+      verdict: 'confirm',
+      reason: 'brace expansion exceeds the cap',
+    });
+  });
 });
 
 describe('protected-write rules: baseline rows', () => {
@@ -32,8 +159,9 @@ describe('protected-write rules: baseline rows', () => {
     await expect(checker.checkPath('~/.claude/CLAUDE.md')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'harness-instructions' });
   });
 
-  test('ruleId harness-global-config: protected paths confirm on write', async () => {
-    await expect(checker.checkPath('~/.claude-work.json')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'harness-global-config' });
+  test('ruleId harness-global-config: only the baseline global configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.claude.json')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'harness-global-config' });
+    await expect(checker.checkPath('~/.claude-work.json')).resolves.toBeNull();
   });
 
   test('ruleId project-mcp-config: protected paths confirm on write', async () => {

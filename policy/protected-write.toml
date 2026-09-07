@@ -2,28 +2,8 @@
 # freely but must not modify without human confirmation).
 
 [[rules.protected_write]]
-id = "harness-settings"
-regex = "(^|/)\\.claude(-[\\w.-]+)?/settings(\\.local)?\\.json$"
-reason = "Claude Code settings persist tool and hook configuration across sessions"
-
-[[rules.protected_write]]
-id = "harness-hooks"
-regex = "(^|/)\\.claude(-[\\w.-]+)?/hooks(/|$)"
-reason = "Claude Code hooks can alter future tool-call enforcement"
-
-[[rules.protected_write]]
-id = "harness-plugins"
-regex = "(^|/)\\.claude(-[\\w.-]+)?/plugins(/|$)"
-reason = "Claude Code plugins can alter future session behavior"
-
-[[rules.protected_write]]
-id = "harness-instructions"
-regex = "(^|/)\\.claude(-[\\w.-]+)?/CLAUDE\\.md$"
-reason = "Claude Code instructions persist across future sessions"
-
-[[rules.protected_write]]
 id = "harness-global-config"
-regex = "(^|/)\\.claude(-[\\w.-]+)?\\.json$"
+regex = "(^|/)\\.claude\\.json$"
 reason = "Claude Code global configuration controls harness behavior"
 
 [[rules.protected_write]]
