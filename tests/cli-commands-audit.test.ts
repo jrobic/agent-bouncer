@@ -72,6 +72,12 @@ describe('parseAuditArgs', () => {
     expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true, diff: false } });
   });
 
+  test('--sessions-only enables the session-entry filter', () => {
+    expect(parseAuditArgs(['--sessions-only'])).toEqual({
+      options: { days: 30, suggest: false, diff: false, sessionsOnly: true },
+    });
+  });
+
   test('--days N overrides the window', () => {
     expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false, diff: false } });
   });
@@ -204,6 +210,45 @@ describe('runAudit: report mode', () => {
   });
 });
 
+describe('runAudit: --sessions-only across modes', () => {
+  test('filters a mixed log and labels the active filter in every mode', async () => {
+    const dir = await freshAccountDir();
+    const timestamp = new Date().toISOString();
+    await writeLog(dir, [
+      verdictLine({ timestamp, session_id: null, rule_id: 'cli-only-rule', target: 'cli-only-target', mode: 'shadow' }),
+      verdictLine({ timestamp, session_id: 'session-1', rule_id: 'session-only-rule', target: 'session-only-target', mode: 'shadow' }),
+    ]);
+
+    const modes = [
+      { options: { days: 1, suggest: false, diff: false, sessionsOnly: true }, header: '1 entries, 1 CLI entries excluded' },
+      { options: { days: 1, suggest: true, diff: false, sessionsOnly: true }, header: '1 entries, 1 CLI entries excluded' },
+      {
+        options: { days: 1, suggest: false, diff: true, sessionsOnly: true },
+        header: 'bouncer shadow: 1 entries, 1 CLI entries excluded · TS: 0 entries, 0 CLI entries excluded',
+      },
+    ];
+
+    const filteredResults = await Promise.all(
+      modes.map(async ({ options, header }) => ({ options, header, result: await runAudit(options) })),
+    );
+    for (const { options, header, result: { text, ok } } of filteredResults) {
+      expect(ok).toBe(true);
+      expect(text).toContain('session-only-rule');
+      expect(text).not.toContain('cli-only-rule');
+      expect(text).toStartWith(options.suggest ? `# ${header}` : header);
+      if (options.suggest) expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
+    }
+
+    const unfilteredResults = await Promise.all(
+      modes.map(async ({ options }) => runAudit({ days: options.days, suggest: options.suggest, diff: options.diff })),
+    );
+    for (const { text } of unfilteredResults) {
+      expect(text).toContain('cli-only-rule');
+      expect(text.split('\n').slice(0, 3).join('\n')).not.toMatch(/exclud/i);
+    }
+  });
+});
+
 describe('runAudit: --suggest mode', () => {
   test('produces TOML that `rules lint` accepts as-is (AC3)', async () => {
     const dir = await freshAccountDir();
@@ -211,7 +256,7 @@ describe('runAudit: --suggest mode', () => {
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
     ]);
-    const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true, diff: false });
+    const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true, diff: false, sessionsOnly: true });
     expect(suggestOk).toBe(true);
     // git-protected friction ships commented out (round-3 review item 2) —
     // the literal substring still appears (inside the comment), the active

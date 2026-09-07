@@ -7,6 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   clusterEntries,
   conditionalRuleIdsOf,
+  filterSessionEntries,
   findDeadConditionalRules,
   MCP_TOOL_NAME,
   normalizeTarget,
@@ -129,6 +130,19 @@ describe('withinWindow', () => {
   test('drops entries with an unparseable timestamp', () => {
     const bad = entry({ timestamp: 'not-a-date' });
     expect(withinWindow([bad], 30, now)).toHaveLength(0);
+  });
+});
+
+describe('filterSessionEntries', () => {
+  test('keeps session entries and counts excluded CLI probes from a mixed log', () => {
+    const cliProbe = entry({ sessionId: null, ruleId: 'cli-probe' });
+    const firstSession = entry({ sessionId: 'sess-1', ruleId: 'first-session' });
+    const secondSession = entry({ sessionId: 'sess-2', ruleId: 'second-session' });
+
+    expect(filterSessionEntries([cliProbe, firstSession, secondSession])).toEqual({
+      entries: [firstSession, secondSession],
+      excludedCliEntryCount: 1,
+    });
   });
 });
 

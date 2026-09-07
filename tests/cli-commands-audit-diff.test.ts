@@ -159,6 +159,34 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     expect(sectionOf(text, 'bouncer would deny/ask, TS allowed')).toContain('none');
   });
 
+  test('--sessions-only removes CLI-only divergences on both sides and labels each filtered stream', async () => {
+    const dir = await freshAccountDir();
+    const timestamp = new Date().toISOString();
+    await writeBouncerLog(dir, [
+      shadowVerdict({ timestamp, session_id: 'session-1', rule_id: 'session-bouncer-rule', target: 'session-bouncer-target' }),
+      shadowVerdict({ timestamp, session_id: null, rule_id: 'cli-shadow-rule', target: 'cli-shadow-target' }),
+      shadowVerdict({ timestamp, session_id: null, rule_id: 'cli-enforce-rule', target: 'cli-enforce-target', mode: undefined }),
+    ]);
+    await writeTsLog(dir, 'command-guard.log', [
+      tsDeny({ timestamp, session_id: 'session-1', rule_id: 'session-ts-rule', target: 'session-ts-target' }),
+      tsDeny({ timestamp, session_id: null, rule_id: 'cli-ts-rule', target: 'cli-ts-target' }),
+    ]);
+
+    const filtered = await runAudit({ days: 1, suggest: false, diff: true, sessionsOnly: true });
+    expect(filtered.text).toStartWith(
+      'bouncer shadow: 1 entries, 1 CLI entries excluded · TS: 1 entries, 1 CLI entries excluded',
+    );
+    expect(filtered.text).toContain('session-bouncer-rule');
+    expect(filtered.text).toContain('session-ts-rule');
+    expect(filtered.text).not.toContain('cli-shadow-rule');
+    expect(filtered.text).not.toContain('cli-ts-rule');
+
+    const unfiltered = await runAudit({ days: 1, suggest: false, diff: true });
+    expect(unfiltered.text).toContain('cli-shadow-rule');
+    expect(unfiltered.text).toContain('cli-ts-rule');
+    expect(unfiltered.text.split('\n').slice(0, 3).join('\n')).not.toMatch(/exclud/i);
+  });
+
   test('--ts-logs overrides the TS log directory (a DIFFERENT account entirely)', async () => {
     await freshAccountDir(); // sets CLAUDE_CONFIG_DIR — the bouncer-log side of the diff
     const tsDir = await mkdtemp(join(tmpdir(), 'bouncer-audit-diff-ts-'));

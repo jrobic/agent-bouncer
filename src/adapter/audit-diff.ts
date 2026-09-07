@@ -138,14 +138,6 @@ const TS_EVENT_GAP_MS = 2000;
 // (see diffLogs below).
 const CORRELATION_WINDOW_MS = 2000;
 
-function withinTsWindow(entries: readonly TsLogEntry[], days: number, now: Date): TsLogEntry[] {
-  const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
-  return entries.filter((e) => {
-    const t = Date.parse(e.timestamp);
-    return !Number.isNaN(t) && t >= cutoff;
-  });
-}
-
 // ─── TS event grouping — severity-max across the 4 independent hooks ───
 
 interface TsEvent {
@@ -191,7 +183,7 @@ function buildTsEvent(entries: readonly TsLogEntry[]): TsEvent {
 // for grouping already-classified divergences into report rows below.
 // An entry with an unparseable timestamp is always its own isolated
 // singleton event — proximity to neighbors cannot be judged without one
-// (in practice this never fires: withinTsWindow, always run first, has
+// (in practice this never fires: withinWindow, always run first, has
 // already dropped every unparseable-timestamp entry — kept here as a
 // defensive fallback for any future caller that skips that step).
 function groupIntoTsEvents(entries: readonly TsLogEntry[]): TsEvent[] {
@@ -289,8 +281,18 @@ export function diffLogs(
   days: number,
   now: Date = new Date(),
 ): DiffResult {
-  const tsEvents = groupIntoTsEvents(withinTsWindow(tsEntries, days, now));
-  const shadowEntries = withinWindow(bouncerEntries.filter((e) => e.mode === 'shadow'), days, now);
+  return diffWindowedLogs(
+    withinWindow(tsEntries, days, now),
+    withinWindow(bouncerEntries.filter((entry) => entry.mode === 'shadow'), days, now),
+  );
+}
+
+/** Compares one window of TS entries against one window of bouncer shadow entries. */
+export function diffWindowedLogs(
+  tsEntries: readonly TsLogEntry[],
+  shadowEntries: readonly AuditEntry[],
+): DiffResult {
+  const tsEvents = groupIntoTsEvents(tsEntries);
 
   const usedBouncer = new Set<number>();
   const divergences: DiffDivergence[] = [];

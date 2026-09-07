@@ -5,10 +5,11 @@
 
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { clusterDivergences, diffLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
+import { clusterDivergences, diffWindowedLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
 import type { TsLogEntry } from './adapter/audit-diff.ts';
 import {
   clusterEntries,
+  filterSessionEntries,
   findDeadConditionalRules,
   parseLogEntries,
   renderReport,
@@ -234,6 +235,8 @@ export async function runPrintCanary(settingsPath?: string): Promise<PrintCanary
 
 export interface AuditOptions {
   readonly days: number;
+  // Omitting the flag preserves the complete audit, including direct CLI probes.
+  readonly sessionsOnly?: boolean;
   readonly suggest: boolean;
   // Ticket 08: `bouncer audit --diff [--ts-logs <dir>]`. `diff` and
   // `suggest` are mutually exclusive modes (parseAuditArgs rejects
@@ -261,11 +264,16 @@ export type ParsedAuditArgs =
   | { readonly options?: undefined; readonly error: string; };
 
 const DEFAULT_AUDIT_DAYS = 30;
-const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days', '--diff', '--ts-logs']);
+
+function sessionFilterHeader(entryCount: number, excludedCliEntryCount: number, label?: string): string {
+  const prefix = label === undefined ? '' : `${label}: `;
+  return `${prefix}${entryCount} entries, ${excludedCliEntryCount} CLI entries excluded`;
+}
+const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set(['--suggest', '--days', '--diff', '--ts-logs', '--sessions-only']);
 
 /**
  * Parses `audit`'s own flags (`--days N`, `--suggest`, `--diff`,
- * `--ts-logs <dir>`) — deliberately tiny rather than pulling in a general
+ * `--ts-logs <dir>`, `--sessions-only`) — deliberately tiny rather than pulling in a general
  * arg-parsing dependency for one subcommand. An unrecognized token
  * (`--sugest`, `--dayz`, a stray positional, ...) is an explicit error, not
  * silently ignored — a typo'd flag must not fall through to "30-day report,
@@ -277,6 +285,7 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
   let suggest = false;
   let diff = false;
   let tsLogsDir: string | undefined;
+  let sessionsOnly = false;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]!;
     if (arg === '--suggest') {
@@ -285,6 +294,10 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
     }
     if (arg === '--diff') {
       diff = true;
+      continue;
+    }
+    if (arg === '--sessions-only') {
+      sessionsOnly = true;
       continue;
     }
     if (arg === '--days') {
@@ -309,7 +322,7 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
     if (!KNOWN_AUDIT_FLAGS.has(arg)) {
       return {
         error: `audit: unrecognized argument ${JSON.stringify(arg)} `
-          + `(expected: --days <n> | --suggest | --diff [--ts-logs <dir>])`,
+          + `(expected: --days <n> | --sessions-only | --suggest | --diff [--ts-logs <dir>])`,
       };
     }
   }
@@ -319,7 +332,9 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
   if (tsLogsDir !== undefined && !diff) {
     return { error: 'audit: --ts-logs requires --diff' };
   }
-  return { options: { days, suggest, diff, ...(tsLogsDir !== undefined ? { tsLogsDir } : {}) } };
+  return {
+    options: { days, suggest, diff, ...(tsLogsDir !== undefined ? { tsLogsDir } : {}), ...(sessionsOnly ? { sessionsOnly } : {}) },
+  };
 }
 
 /**
@@ -368,7 +383,22 @@ async function runAuditDiff(options: AuditOptions): Promise<CommandResult> {
     }
   }
 
-  const diffResult = diffLogs(tsEntries, bouncerEntries, options.days);
+  const now = new Date();
+  const bouncerShadowEntries = withinWindow(
+    bouncerEntries.filter((entry) => entry.mode === 'shadow'),
+    options.days,
+    now,
+  );
+  const tsWindowEntries = withinWindow(tsEntries, options.days, now);
+  const sessionFilteredBouncerEntries = options.sessionsOnly
+    ? filterSessionEntries(bouncerShadowEntries)
+    : null;
+  const sessionFilteredTsEntries = options.sessionsOnly
+    ? filterSessionEntries(tsWindowEntries)
+    : null;
+  const diffBouncerEntries = sessionFilteredBouncerEntries?.entries ?? bouncerShadowEntries;
+  const diffTsEntries = sessionFilteredTsEntries?.entries ?? tsWindowEntries;
+  const diffResult = diffWindowedLogs(diffTsEntries, diffBouncerEntries);
   const clusters = clusterDivergences(diffResult.divergences);
   const text = renderDiffReport(clusters, {
     days: options.days,
@@ -382,7 +412,24 @@ async function runAuditDiff(options: AuditOptions): Promise<CommandResult> {
     ...(bouncerLogWarning !== null ? [`warning: ${bouncerLogWarning}`] : []),
     ...tsWarnings.map((w) => `warning: ${w}`),
   ];
-  return { text: [...warningLines, text].join('\n'), ok: true };
+  const filterHeader = sessionFilteredBouncerEntries === null || sessionFilteredTsEntries === null
+    ? []
+    : [
+      `${
+        sessionFilterHeader(
+          diffBouncerEntries.length,
+          sessionFilteredBouncerEntries.excludedCliEntryCount,
+          'bouncer shadow',
+        )
+      } · ${
+        sessionFilterHeader(
+          diffTsEntries.length,
+          sessionFilteredTsEntries.excludedCliEntryCount,
+          'TS',
+        )
+      }`,
+    ];
+  return { text: [...warningLines, ...filterHeader, text].join('\n'), ok: true };
 }
 
 /**
@@ -416,8 +463,13 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
       logWarning = `audit log unreadable: ${message}`;
     }
   }
-  const entries = withinWindow(parseLogEntries(logText), options.days);
+  const windowEntries = withinWindow(parseLogEntries(logText), options.days);
+  const sessionFilteredEntries = options.sessionsOnly ? filterSessionEntries(windowEntries) : null;
+  const entries = sessionFilteredEntries?.entries ?? windowEntries;
   const clusters = clusterEntries(entries);
+  const filterHeader = sessionFilteredEntries === null
+    ? []
+    : [sessionFilterHeader(sessionFilteredEntries.entries.length, sessionFilteredEntries.excludedCliEntryCount)];
 
   if (options.suggest) {
     const resolvable = resolvableRuleIds(loaded.policy);
@@ -426,7 +478,7 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
     // straight into an overlay (AC3) — a bare `warning: ...` line ahead of
     // it would not parse as TOML and would corrupt that contract.
     const warningLines = logWarning !== null ? [`# warning: ${logWarning}`] : [];
-    return { text: [...warningLines, text].join('\n'), ok: true };
+    return { text: [...warningLines, ...filterHeader.map((header) => `# ${header}`), text].join('\n'), ok: true };
   }
 
   const firedObserveRuleIds = new Set(
@@ -435,5 +487,5 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
   const deadRuleIds = findDeadConditionalRules(loaded.policy, firedObserveRuleIds);
   const text = renderReport(clusters, deadRuleIds, { days: options.days });
   const warningLines = logWarning !== null ? [`warning: ${logWarning}`] : [];
-  return { text: [...warningLines, text].join('\n'), ok: true };
+  return { text: [...warningLines, ...filterHeader, text].join('\n'), ok: true };
 }

@@ -317,7 +317,7 @@ for the visible one; evaluating both lets the baseline stay universal.
       `RTK.md`, `~/.agents/` in the common layer.
 - [ ] `ask: Edit(<configDir>/settings.json)` and siblings removed from
       both `settings.json`; THREAT_MODEL line updated.
-- [ ] One day of `bouncer audit --days 1` on both profiles: count
+- [ ] One day of `bouncer audit --days 1 --sessions-only` on both profiles: count
       `protected-write` fallback prompts, extend the readers set by fixture
       if a legitimate read repeats.
 
@@ -353,3 +353,4 @@ for the visible one; evaluating both lets the baseline stay universal.
 | Date | Action | By |
 |---|---|---|
 | 2026-09-04 | Created, Accepted — two grilling rounds, fourteen decisions; Phase 1 is ticket 35 | Jonathan Robic |
+| 2026-09-07 | Ticket 36: the one-day audit step names `--sessions-only` | Jonathan Robic |

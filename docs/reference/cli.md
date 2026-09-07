@@ -336,18 +336,26 @@ runnability. A passing `wiring:canary` line says so explicitly; never append
 
 Clusters the account's log entries over a time window into a friction
 report, or (`--suggest`) candidate overlay snippets — see
-`docs/how-to/tune-rules-with-audit.md`. `--diff` (ticket 08) is a third,
-mutually exclusive mode: compares bouncer's `--shadow` log entries
-against the TS generation's own guard logs over the same window.
+`docs/how-to/tune-rules-with-audit.md`. `--sessions-only` removes
+CLI-originated entries before either aggregation; it remains opt-in so a
+complete audit can retain direct checks and `run < file` probes. `--diff`
+(ticket 08) is a third, mutually exclusive mode: compares bouncer's
+`--shadow` log entries against the TS generation's own guard logs over the
+same window.
 
 ```sh
-bouncer audit [--days <n>] [--suggest]
-bouncer audit --diff [--days <n>] [--ts-logs <dir>]
+bouncer audit [--days <n>] [--sessions-only] [--suggest]
+bouncer audit --diff [--days <n>] [--sessions-only] [--ts-logs <dir>]
 ```
 
 **Flags:**
 - `--days <n>` — window size, default 30. `<n>` must be a positive
   number. Applies to every mode.
+- `--sessions-only` — exclude entries whose `session_id` is `null` before
+  aggregation. Report and suggest state `N entries, M CLI entries excluded`;
+  diff identifies each input separately as `bouncer shadow: N entries, M CLI
+  entries excluded · TS: N' entries, M' CLI entries excluded`. Omit the flag
+  to retain direct CLI checks and `run < file` probes in the complete audit.
 - `--suggest` — print candidate `[[relax]]`/`[[override]]` TOML
   snippets instead of the human report. Mutually exclusive with `--diff`.
 - `--diff` — compare bouncer's shadow-mode log entries (`mode:"shadow"`

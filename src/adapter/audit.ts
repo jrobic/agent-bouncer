@@ -78,10 +78,23 @@ export function parseLogEntries(text: string): AuditEntry[] {
   return entries;
 }
 
+/** Removes CLI-originated entries while preserving each entry's concrete type. */
+export function filterSessionEntries<Entry extends { readonly sessionId: string | null; }>(
+  entries: readonly Entry[],
+): { entries: Entry[]; excludedCliEntryCount: number; } {
+  const sessionEntries = entries.filter((entry) => entry.sessionId !== null);
+  return {
+    entries: sessionEntries,
+    excludedCliEntryCount: entries.length - sessionEntries.length,
+  };
+}
+
 /** Keeps only entries whose timestamp falls within the last `days` days of
  * `now` (defaults to the real current time). An unparseable timestamp is
  * dropped, not kept — a corrupt date must not silently count as "recent". */
-export function withinWindow(entries: readonly AuditEntry[], days: number, now: Date = new Date()): AuditEntry[] {
+export function withinWindow<Entry extends { readonly timestamp: string; }>(entries: readonly Entry[], days: number,
+  now: Date = new Date()): Entry[]
+{
   const cutoff = now.getTime() - days * 24 * 60 * 60 * 1000;
   return entries.filter((e) => {
     const t = Date.parse(e.timestamp);

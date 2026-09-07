@@ -6,17 +6,15 @@ that into policy changes — reviewed by hand, never applied automatically.
 
 ## Steps
 
-1. Read the report for the default 30-day window:
+1. The day after a ship, read the report for session traffic only:
 
    ```sh
-   bouncer audit
+   bouncer audit --days 7 --sessions-only
    ```
 
-   Narrow the window with `--days`:
-
-   ```sh
-   bouncer audit --days 7
-   ```
+   The flag removes direct CLI checks and `run < file` probes before
+   aggregation, so post-ship friction reflects hook traffic. Omit it when
+   those probes belong in the audit.
 
    The report has three sections, in order:
    - **Frequent friction** — deny/ask clusters, most-fired first. Each
@@ -32,7 +30,7 @@ that into policy changes — reviewed by hand, never applied automatically.
 2. Generate candidate overlay snippets for the friction section:
 
    ```sh
-   bouncer audit --suggest
+   bouncer audit --days 7 --sessions-only --suggest
    ```
 
    Output is TOML, one `[[relax]]` or `[[override]]` block per frequent
@@ -76,9 +74,9 @@ that into policy changes — reviewed by hand, never applied automatically.
 
 ## Verify
 
-- `bouncer audit --suggest`'s output, pasted as-is into a scratch
-  overlay, passes `bouncer rules lint` with `lint: OK` — every emitted
-  block (commented or not) is valid TOML.
+- `bouncer audit --days 7 --sessions-only --suggest`'s output, pasted as-is
+  into a scratch overlay, passes `bouncer rules lint` with `lint: OK` — every
+  emitted block (commented or not) is valid TOML.
 - After copying a block into your real overlay: `bouncer rules list`
   shows it (`override ...` or `overlay-relax ...`), and a commented git
   block you did NOT uncomment shows nothing for that subcommand.
