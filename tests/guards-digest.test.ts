@@ -28,9 +28,14 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/pol
 // ─────────────────────────────────────────────────────────────────────────
 
 function ruleDigest(
-  rules: readonly { readonly id: string; readonly regex: string; readonly flags?: string; }[],
+  rules: readonly {
+    readonly id: string;
+    readonly regex: string;
+    readonly flags?: string;
+    readonly except?: string;
+  }[],
 ): string[] {
-  return rules.map((r, i) => `${i} ${r.id} ${r.regex} ${r.flags ?? ''}`);
+  return rules.map((r, i) => `${i} ${r.id} ${r.regex} ${r.flags ?? ''}${r.except === undefined ? '' : ` except=${r.except}`}`);
 }
 
 function orderedValueDigest(values: Iterable<string>): string[] {
@@ -134,10 +139,10 @@ describe('guards-digest: every wrapper policy is effective and unknown options f
   }
 });
 
-// policy/command.toml `rules.command.bash` — regex-only rules. Privilege
-// escalation is intentionally outside this table: it shares the structural
-// tokenizer and wrapper consumer with Git, and is locked by behavioral
-// mutations (above) rather than a table digest.
+// policy/command.toml `rules.command.bash` — regex rows and row-local
+// exceptions. Privilege escalation is intentionally outside this table: it
+// shares the structural tokenizer and wrapper consumer with Git, and is locked
+// by behavioral mutations (above) rather than a table digest.
 const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '0 dd-device-write \\bdd\\s+[^|;&\\n]*\\bof=\\/dev\\/ ',
   '1 mkfs \\bmkfs(\\.\\w+)?\\b ',
@@ -160,14 +165,14 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '18 find-exec-destructive \\bfind\\b[^|;&\\n]*\\s(?:-delete\\b|(?:-exec|-execdir|-ok)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b) ',
   '19 xargs-destructive \\b(?:xargs|parallel)\\b[^|;&\\n]*\\s(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b ',
   '20 rg-pre-exec \\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+ ',
-  '21 publish \\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+create\\b ',
+  '21 publish \\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\bdocker\\s+compose\\s+push\\b|\\bdocker-compose\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+(?:create|delete|upload)\\b  except=^\\s*(?:npm|pnpm|yarn)\\s+publish\\s+--dry-run\\s*$',
   '22 forge-api-write \\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b ',
   '23 base64-decode-exec \\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b ',
   '24 direnv-trust \\bdirenv\\s+(?:allow|permit|grant)\\b ',
-  '25 persistence-scheduler \\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|(?:^|[|;&]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d) ',
+  '25 persistence-scheduler \\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit|kickstart)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start|(?:--user\\s+)?(?:restart|reload|daemon-reload))\\b|(?:^|[|;&\\n]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)|(?:^|[|;&\\n]\\s*)batch\\b ',
   '26 terraform-mutating \\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b ',
-  '27 kubectl-mutating \\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b ',
-  '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b ',
+  '27 kubectl-mutating \\bkubectl\\b[^|;&\\n]*\\s(?:apply|create|delete|drain|cordon|taint|replace|patch|scale|rollout\\s+(?:restart|undo))\\b  except=^[^|;&\\n]*\\b(?:apply|create)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$',
+  '28 helm-mutating \\bhelm\\s+(?:install|upgrade|uninstall|delete|rollback)\\b  except=^[^|;&\\n]*\\b(?:install|upgrade)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$',
   '29 docker-destructive \\b(?:docker\\s+(?:system\\s+prune|volume\\s+(?:rm|prune))|(?:docker\\s+compose|docker-compose)\\s+down\\b[^|;&\\n]*\\s(?:-v|--volumes)\\b) ',
   '30 sql-destructive-inline (?:\\b(?:psql|mysql)\\b[^|;&\\n]*\\s(?:-c|-e)\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b|\\bsqlite3\\b[^|;&\\n]*\\s+["\'][^"\']*\\b(?:DROP|TRUNCATE|DELETE\\s+FROM|ALTER)\\b) i',
   '31 harness-self-config \\bclaude\\b\\s+(?:mcp\\s+(?:add|remove)|plugin\\s+(?:install|enable|disable|uninstall)|config\\s+set)\\b ',
@@ -186,7 +191,7 @@ const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '2 bash-git-leak-credential \\bgit\\s+config\\b[^\\n]*\\b(credential|user\\.signingkey)\\b ',
   '3 bash-git-leak-remote-url \\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b ',
   '4 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
-  '5 keychain-dump \\bsecurity\\s+(?:find-(?:generic|internet)-password|export|dump-keychain)\\b ',
+  '5 keychain-dump \\bsecurity\\s+(?:find-(?:generic|internet)-password|export|dump-keychain)\\b  except=^\\s*security\\s+find-generic-password(?:\\s+-(?:a|c|C|D|G|j|l|s)\\s+[^\\s|;&<>-][^\\s|;&<>]*)*(?:\\s+[^\\s|;&<>-][^\\s|;&<>]*)?\\s*$',
   '6 credential-printer \\bgh\\s+auth\\s+token\\b|\\bglab\\s+auth\\s+status\\b[^|;&\\n]*\\s--show-token\\b|\\bop\\s+read\\b|\\bop\\s+item\\s+get\\b[^|;&\\n]*\\s(?:--reveal|--fields)\\b|\\bgcloud\\s+auth\\s+print-(?:access|identity)-token\\b|\\baws\\s+sts\\s+(?:get-session-token|assume-role)\\b|\\bvault\\s+(?:read|kv\\s+get)\\b|\\bdoppler\\s+secrets\\s+download\\b ',
 ];
 
@@ -323,8 +328,8 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '12 secret-dir (^|/)(\\.?secrets|credentials)(/|$) flags= except= verdict=',
   '13 ssh-dir (^|/)\\.ssh(/|$) flags= except= verdict=',
   '14 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
-  '15 shell-history (^|/)\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)$ flags= except= verdict=confirm',
-  '16 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl$ flags= except= verdict=confirm',
+  '15 shell-history (^|/)(?:\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)|fish_history)$ flags= except= verdict=confirm',
+  '16 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl(?:\\.[\\w-]+)?$ flags= except= verdict=confirm',
 ];
 
 describe('guards-digest: tamper lock — protected_write and secret.path path guards', () => {

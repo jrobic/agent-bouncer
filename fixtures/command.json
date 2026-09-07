@@ -2078,6 +2078,87 @@
       ]
     },
     {
+      "id": "publish-gh-release-delete",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release delete v1.2.0 --yes"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-glab-release-upload",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "glab release upload v1 build.tar.gz"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-gh-release-delete-asset",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release delete-asset v1 build.tar.gz --yes"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-gh-release-view-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gh release view v1"
+      },
+      "expected": []
+    },
+    {
+      "id": "publish-docker-compose-push",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-docker-compose-legacy-push",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker-compose push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "publish"
+        }
+      ]
+    },
+    {
+      "id": "publish-docker-compose-build-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker compose build"
+      },
+      "expected": []
+    },
+    {
       "id": "forge-api-gh-post",
       "toolName": "Bash",
       "toolInput": {
@@ -2598,6 +2679,150 @@
           "ruleId": "persistence-scheduler"
         }
       ]
+    },
+    {
+      "id": "persistence-scheduler-at-newline-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x\nat now"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-batch-newline-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x\nbatch"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-batch-pipe-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"rm -rf /tmp/x\" | batch"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-launchctl-kickstart-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "launchctl kickstart -k gui/501/com.x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-restart-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl restart nginx"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-user-reload-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl --user reload agent.service"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-systemctl-daemon-reload-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl daemon-reload"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-npm-run-batch-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "npm run batch"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-cat-batch-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat batch.txt"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-sbatch-job-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sbatch job.sh"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-batch-stdin-confirm",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "batch < jobs.txt"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "persistence-scheduler"
+        }
+      ]
+    },
+    {
+      "id": "persistence-scheduler-gpg-batch-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "gpg --batch --list-keys"
+      },
+      "expected": []
+    },
+    {
+      "id": "persistence-scheduler-systemctl-list-units-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "systemctl list-units"
+      },
+      "expected": []
     },
     {
       "id": "direnv-status-allowed",

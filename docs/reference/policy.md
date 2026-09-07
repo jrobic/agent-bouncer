@@ -77,21 +77,28 @@ Every entry in the six regex tables below shares this shape:
 | `rules.protected_write` | protected-write | paths whose mutation changes harness behavior, persistence, or shell startup |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
 
-The command baseline also confirms outbound `publish` actions (package registries, Docker images, and `gh`/`glab` releases) and `forge-api-write` actions (a mutating HTTP verb or body-field flag on `gh api`/`glab api`). `forge-api-write` deliberately confirms `gh api graphql -f query=...` reads: flag-only matching cannot distinguish their query body from a mutation. `base64-decode-exec` blocks Base64, `xxd -r`, or `openssl enc -d` output piped directly into a shell or interpreter.
+The command baseline also confirms outbound `publish` actions (package registries, Docker image pushes including Compose, and `gh`/`glab` release creation, upload, or withdrawal) and `forge-api-write` actions (a mutating HTTP verb or body-field flag on `gh api`/`glab api`). `forge-api-write` deliberately confirms `gh api graphql -f query=...` reads: flag-only matching cannot distinguish their query body from a mutation. `base64-decode-exec` blocks Base64, `xxd -r`, or `openssl enc -d` output piped directly into a shell or interpreter.
 
 The secret baseline names `keychain-dump` for macOS Security commands that
-print passwords or private keys. `credential-printer`, `shell-history`, and
-`session-transcripts` confirm before exposing a live credential, a shell
-history file, or a live Claude Code transcript; the `dotenv` row also covers
-direnv's `.envrc`. `session-transcripts` targets only
-`.claude[-profile]/projects/<slug>/<session>.jsonl`, leaving memory notes
-available. A transcript observer is a workstation-specific workflow, so it
-can relax that row in its profile overlay with a reason; no such override is
-part of the baseline.
+print passwords or private keys; its enumerated `find-generic-password`
+metadata-only form stays allow only as a standalone command. Chained, piped,
+or redirected forms fall back to the block, and `find-internet-password`
+remains blocked. `credential-printer`, `shell-history`, and
+`session-transcripts` confirm before exposing a live credential, a shell history
+file (including Fish's XDG `fish_history`), or a live Claude Code transcript; the
+`dotenv` row also covers direnv's `.envrc`.
+`session-transcripts` targets only
+`.claude[-profile]/projects/<slug>/<session>.jsonl` and immediate extension
+copies such as `.jsonl.bak`, leaving memory notes available. A copy moved
+outside `projects/` is intentionally outside the row: the directory is its
+only reliable anchor. A transcript observer is a workstation-specific workflow,
+so it can relax that row in its profile overlay with a reason; no such override
+is part of the baseline.
 
 `direnv-trust` confirms before trusting a project `.envrc` to run on later
-directory changes. `persistence-scheduler` confirms before `crontab`,
-launchd, user-systemd, or `at` can schedule or start work beyond the session.
+directory changes. `persistence-scheduler` confirms before `crontab`, `at` or
+`batch`, `launchctl` activation, or systemd activation or reload can start work
+beyond the session.
 When `direnv allow` names a guarded path such as `.envrc`, the secret family
 judges that path first; its block verdict wins over `direnv-trust`'s confirm.
 
@@ -155,7 +162,6 @@ elsewhere"` without removing the baseline guard.
 - `sql-destructive-inline` sees SQL quoted directly after `-c` or `-e`, or
   SQLite's positional statement argument; statements passed with `-f` or stdin
   remain a known limit.
-- A renamed live transcript such as `.jsonl.bak` is outside `session-transcripts`: the row protects active session files ending in `.jsonl`, not copies.
 - protected-write: a redirect embedded in a heredoc body is source text, not
   an executable write segment.
 - protected-write: `sed -f` can name a script that writes a protected path,

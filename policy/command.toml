@@ -158,9 +158,9 @@ verdict = "confirm"
 # Ticket 30: confirm rather than block — publishing is intentional only after a human checks the target.
 [[rules.command.bash]]
 id = "publish"
-regex = "\\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+create\\b"
+regex = "\\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\bdocker\\s+compose\\s+push\\b|\\bdocker-compose\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+(?:create|delete|upload)\\b"
 except = "^\\s*(?:npm|pnpm|yarn)\\s+publish\\s+--dry-run\\s*$"
-reason = "Publishing sends a package or artifact to a public registry"
+reason = "publishes or withdraws a package or artifact on a public registry"
 verdict = "confirm"
 
 # Ticket 30: confirm rather than block — forge API writes can be intended but affect remote state.
@@ -185,7 +185,7 @@ verdict = "confirm"
 # Ticket 32: scheduled jobs and services run later with the human's rights.
 [[rules.command.bash]]
 id = "persistence-scheduler"
-regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start)\\b|(?:^|[|;&]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)"
+regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit|kickstart)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start|(?:--user\\s+)?(?:restart|reload|daemon-reload))\\b|(?:^|[|;&\\n]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)|(?:^|[|;&\\n]\\s*)batch\\b"
 reason = "installs a schedule or service that can run later outside this session"
 verdict = "confirm"
 
