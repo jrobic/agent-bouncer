@@ -2,8 +2,9 @@
 // what src/cli.ts pipes through. One case per family plus the fail-open
 // contract on a malformed envelope.
 
-import { describe, expect, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnvelope, run } from '../src/adapter/run.ts';
 
@@ -299,5 +300,202 @@ describe('run: unrecognized tokens (ticket 08 review) — enforce stays on, the 
 
     const entry = await lastLogEntry();
     expect(entry.kind).not.toBe('policy-warning');
+  });
+});
+
+// Review round 1 S-3: `on_malformed` was mandatory, typed, and documented,
+// but read nowhere — run() always fell through to silence regardless of
+// what a harness declared. Fixture parity for Claude Code itself (whose
+// own `on_malformed = "allow"`) is already covered by "run: fail-open on
+// a malformed envelope" above and tests/fixtures-protocol.test.ts; this
+// block proves the OTHER value actually renders, by replacing claude-
+// code's protocol wholesale in a temp overlay (ADR-0006 § 5: an existing
+// baseline id MAY replace its protocol — never merged field by field).
+describe('run: on_malformed honored (review round 1 S-3)', () => {
+  const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+  const cleanupDirs: string[] = [];
+
+  afterEach(async () => {
+    process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function accountWithOnMalformed(onMalformed: 'allow' | 'deny'): Promise<void> {
+    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-on-malformed-'));
+    cleanupDirs.push(accountDir);
+    await mkdir(join(accountDir, 'bouncer'), { recursive: true });
+    await writeFile(
+      join(accountDir, 'bouncer', 'policy.toml'),
+      `
+      [[harness]]
+      id = "claude-code"
+
+      [harness.protocol]
+      transport = "stdin-json"
+      wiring = "hook-file"
+
+      [harness.protocol.input]
+      event = "hook_event_name"
+      tool = "tool_name"
+      input = "tool_input"
+      session = "session_id"
+      prompt = "prompt"
+      cwd = "cwd"
+
+      [harness.protocol.events]
+      pre_tool = "PreToolUse"
+      prompt = "UserPromptSubmit"
+      session_start = "SessionStart"
+
+      [harness.protocol.tools]
+      Bash = { role = "command", command = "command" }
+
+      [harness.protocol.output]
+      block = "deny"
+      confirm = "ask"
+      observe = "silent"
+      flag = "context"
+      on_malformed = "${onMalformed}"
+      ask_probe = "test probe, review round 1 S-3 coverage"
+
+      [harness.protocol.output.deny]
+      stdout = '{"decision":"deny","reason":\${reason},"rule":\${rule}}'
+      [harness.protocol.output.ask]
+      stdout = '{"decision":"ask","reason":\${reason}}'
+      [harness.protocol.output.context]
+      stdout = '{"context":\${context}}'
+      [harness.protocol.output.session_start]
+      stdout = '{"sessionContext":\${context}}'
+      `,
+      'utf8',
+    );
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+  }
+
+  test('on_malformed = "deny": empty stdin renders the deny template, not silence', async () => {
+    await accountWithOnMalformed('deny');
+    const { stdout, exit } = await run('');
+    expect(stdout).not.toBeNull();
+    expect(JSON.parse(stdout!)).toEqual({
+      decision: 'deny',
+      reason: 'envelope-malformed: unreadable or malformed hook envelope — failing closed',
+      rule: 'envelope-malformed',
+    });
+    expect(exit).toBeUndefined();
+  });
+
+  test('on_malformed = "deny": invalid JSON renders the deny template', async () => {
+    await accountWithOnMalformed('deny');
+    const { stdout } = await run('{not json');
+    expect(stdout).not.toBeNull();
+    expect(JSON.parse(stdout!).decision).toBe('deny');
+  });
+
+  test('on_malformed = "deny" logs a policy-warning entry for the malformed envelope', async () => {
+    await accountWithOnMalformed('deny');
+    await run('{not json');
+    const content = await readFile(currentLogPath(), 'utf-8');
+    const lines = content.trim().split('\n').map((l) => JSON.parse(l));
+    const warning = lines.find((l) =>
+      l.kind === 'policy-warning' && typeof l.message === 'string' && l.message.includes('envelope-malformed')
+    );
+    expect(warning).toBeDefined();
+  });
+
+  test('on_malformed = "allow": empty stdin stays silent, same as the unmodified default', async () => {
+    await accountWithOnMalformed('allow');
+    expect((await run('')).stdout).toBeNull();
+  });
+
+  test('on_malformed = "deny": a well-formed PostToolUse envelope (unjudged event, not malformed) stays silent', async () => {
+    await accountWithOnMalformed('deny');
+    const envelope = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'rm -rf /' },
+    });
+    expect((await run(envelope)).stdout).toBeNull();
+  });
+
+  test('on_malformed = "deny": a well-formed envelope with no hook_event_name at all stays silent', async () => {
+    await accountWithOnMalformed('deny');
+    const envelope = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } });
+    expect((await run(envelope)).stdout).toBeNull();
+  });
+
+  test('on_malformed = "deny" in shadow mode: logged, but stdout stays suppressed like every other shadow verdict', async () => {
+    await accountWithOnMalformed('deny');
+    const { stdout } = await run('{not json', { shadow: true });
+    expect(stdout).toBeNull();
+    const entry = await lastLogEntry();
+    expect(entry.kind).toBe('policy-warning');
+    expect(entry.mode).toBe('shadow');
+  });
+});
+
+// Review round 2 C-1: run.ts's OWN normal verdict path (runPreToolUse,
+// not the malformed-envelope path S-3 above already covers) must supply
+// `rule`/`verdict` too — reproduces the reviewer's exact "toy" harness
+// scenario (a deny template naming both) against a REAL Bash block
+// verdict, proving run() actually fills them, not just that render.ts
+// CAN when handed them by hand (tests/adapter-render.test.ts).
+describe('run: ${rule}/${verdict} actually supplied for a real verdict (review round 2 C-1)', () => {
+  const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+  const cleanupDirs: string[] = [];
+
+  afterEach(async () => {
+    process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  test('a deny template naming ${rule}/${verdict} gets both filled for a real rm -rf / block', async () => {
+    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-rule-verdict-'));
+    cleanupDirs.push(accountDir);
+    await mkdir(join(accountDir, 'bouncer'), { recursive: true });
+    await writeFile(
+      join(accountDir, 'bouncer', 'policy.toml'),
+      `
+      [[harness]]
+      id = "claude-code"
+
+      [harness.protocol]
+      transport = "stdin-json"
+
+      [harness.protocol.input]
+      event = "hook_event_name"
+      tool = "tool_name"
+      input = "tool_input"
+      session = "session_id"
+      cwd = "cwd"
+
+      [harness.protocol.events]
+      pre_tool = "PreToolUse"
+
+      [harness.protocol.tools]
+      Bash = { role = "command", command = "command" }
+
+      [harness.protocol.output]
+      block = "deny"
+      confirm = "deny"
+      observe = "silent"
+      flag = "silent"
+      on_malformed = "allow"
+
+      [harness.protocol.output.deny]
+      stdout = '{"decision":"deny","reason":\${reason},"rule":\${rule},"verdict":\${verdict}}'
+      `,
+      'utf8',
+    );
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+
+    const envelope = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'rm -rf /' } });
+    const { stdout } = await run(envelope);
+    expect(stdout).not.toBeNull();
+    expect(JSON.parse(stdout!)).toEqual({
+      decision: 'deny',
+      reason: 'rm-rf-dangerous: rm -rf targeting a dangerous path: /',
+      rule: 'rm-rf-dangerous',
+      verdict: 'block',
+    });
   });
 });

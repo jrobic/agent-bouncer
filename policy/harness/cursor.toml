@@ -1,0 +1,22 @@
+# Declarative assistant configuration directory. Protected-write rows are
+# derived by src/policy/schema.ts before the hand-written protected-write
+# policy rows. One file per assistant (ADR-0006 § 2) — this file's `id` is
+# its own filename. See docs/reference/policy.md § harness.
+
+# Source: Cursor configuration documentation
+[[harness]]
+id = "cursor"
+dir = ["(^|/)\\.cursor"]
+witness = "~/.cursor"
+env = []
+reason = "Cursor configuration directory"
+
+[[harness.persistent]]
+id = "cursor-hooks"
+path = "hooks\\.json$"
+reason = "Cursor loads hooks at session startup"
+
+[[harness.persistent]]
+id = "cursor-mcp"
+path = "mcp\\.json$"
+reason = "Cursor loads MCP configuration at session startup"

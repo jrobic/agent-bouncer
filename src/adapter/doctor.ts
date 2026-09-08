@@ -1,6 +1,8 @@
-// The "the hook was cut by accident" detection layer. Claude-Code-specific
-// (it reads the CC settings.json hooks shape), so it lives in the adapter,
-// not in src/policy/ or src/*.ts.
+// The "the hook was cut by accident" detection layer. Declaration-driven
+// (ADR-0006 § 6): the wiring/canary/settings checks themselves are the
+// `hook-file` codec (src/adapter/codecs/hook-file.ts); this module owns
+// only what every harness shares regardless of its wiring codec — the
+// policy/log checks, the report assembly, and the two output forms.
 //
 // Two report shapes come out of the SAME checks (runDoctorChecks), never
 // two separate check passes — a SessionStart-mode divergence from the
@@ -15,16 +17,25 @@
 //     active, nothing is actually broken) — but never both silent AND
 //     something worth knowing.
 
-import { access, constants as fsConstants, mkdir, open, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
-import type { LoadResult } from '../policy/load.ts';
-import { buildCanaryCommand, inspectCanaryCommand } from './canary.ts';
+import { access, constants as fsConstants, mkdir, open, stat } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import type { EffectiveRule, LoadResult } from '../policy/load.ts';
+import type { HarnessDeclaration } from '../policy/schema.ts';
+import { checkCanary, checkSettings, checkWiring, readSettingsFile, settingsPathFor } from './codecs/hook-file.ts';
 import { HOOK_NAME } from './constants.ts';
-import { configDir, hookLogPath } from './log-path.ts';
+import { hookLogPathFor } from './log-path.ts';
 
 export interface DoctorCheck {
   readonly id: string;
   readonly ok: boolean;
+  // Review round 3 R3-1: a THIRD tag, `[warn]` — always paired with
+  // `ok: true` (exit 0: nothing is broken), reserved for a fact that is
+  // unprovable rather than unhealthy (today: a declared harness with no
+  // `wiring` codec, ADR-0006 § 6's "visible rather than silently green").
+  // `[pass]` alone would say the fact was actually verified, which it
+  // wasn't; `[fail]` would say something is broken, which it isn't
+  // either.
+  readonly warn?: true;
   readonly message: string;
 }
 
@@ -32,363 +43,49 @@ export interface DoctorReport {
   readonly checks: readonly DoctorCheck[];
   readonly overrideCount: number;
   readonly overrideLines: readonly string[];
+  // ADR-0006 § 5: every harness declared or extended by an overlay,
+  // named so it is impossible to overlook — never the baseline-only six,
+  // which need no announcement.
+  readonly overlayHarnessLines: readonly string[];
   readonly ok: boolean;
 }
 
-/** `<configDir>/settings.json` — the account's own settings file, same root as the policy overlay and the audit log. */
-export function defaultSettingsPath(): string {
-  return join(configDir(), 'settings.json');
+// ADR-0006 § 5/9: `harness <id> <provenance> transport=<t|none>
+// confirm=<ask|deny|none> [ask_probe]` — the one line format every
+// harness-naming surface (`doctor`, `rules list`, `harness list`) shares.
+// Provenance and its source-file bracket are read off the harness's own
+// `<id>-config-dir` derived protected-write row, which already carries
+// the real baseline/overlay/baseline+overlay provenance and contributing
+// file(s) (src/policy/load.ts's derivedHarnessRows) — never re-derived
+// here.
+export function harnessAnnouncementLine(harness: HarnessDeclaration, effectiveRules: readonly EffectiveRule[]): string {
+  const configDirRule = effectiveRules.find((r) => r.harnessId === harness.id && r.rule.id === `${harness.id}-config-dir`);
+  const provenance = configDirRule?.provenance ?? 'baseline';
+  const files = configDirRule?.sourceFiles ?? (configDirRule?.sourceFile === undefined ? [] : [configDirRule.sourceFile]);
+  const fileSuffix = files.length > 0 ? ` [${files.join(', ')}]` : '';
+  const protocol = harness.protocol;
+  const transport = protocol === undefined ? 'none' : protocol.transport;
+  const confirm = protocol === undefined ? 'none' : protocol.output.confirm;
+  const probeSuffix = protocol?.output.ask_probe !== undefined ? ` ask_probe=${JSON.stringify(protocol.output.ask_probe)}` : '';
+  return `harness ${harness.id} ${provenance}${fileSuffix} transport=${transport} confirm=${confirm}${probeSuffix}`;
 }
 
-// The three events a working install must wire: PreToolUse (the six guard
-// families), UserPromptSubmit (prompt injection), and SessionStart (doctor
-// itself — its own absence is exactly the "wiring was cut" case this
-// module exists to catch).
-const GUARDED_EVENTS = ['PreToolUse', 'UserPromptSubmit', 'SessionStart'] as const;
-type GuardedEvent = (typeof GUARDED_EVENTS)[number];
-
-// Representative tool names a PreToolUse matcher must cover. Exported so
-// tests/doctor-fixtures.ts can build its scratch-settings matcher FROM this
-// list (one source, not a hand-typed dual) instead of drifting apart from
-// it — see that file for the settings.json shape these names appear in.
-//
-// Two real MCP tool names, not one made-up literal: a matcher that only
-// happens to keep a synthetic `mcp__example-server__example_tool`-shaped
-// name alive can still silently drop every REAL MCP tool call (different
-// server-name punctuation, different segment count) — the false negative a
-// prior review round flagged. `ctx_execute` is context-mode's actual name
-// (this repo's own dev environment runs it); `filesystem`'s `read_file` is
-// a second, differently-shaped real server, so a matcher narrowly tuned to
-// one server's naming convention still gets caught.
-export const EXPECTED_PRETOOLUSE_TOOLS: readonly string[] = [
-  'Bash',
-  'Read',
-  'Edit',
-  'MultiEdit',
-  'Write',
-  'NotebookEdit',
-  'Grep',
-  'Glob',
-  'mcp__plugin_context-mode_context-mode__ctx_execute',
-  'mcp__filesystem__read_file',
-];
-
-type RawHookEntry = Readonly<Record<string, unknown>>;
-
-type SettingsReadResult =
-  | { readonly kind: 'absent'; }
-  | { readonly kind: 'ok'; readonly settings: RawHookEntry; }
-  | { readonly kind: 'corrupt'; readonly detail: string; };
-
-function recordFrom(value: unknown): RawHookEntry | null {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value as RawHookEntry;
+// Only the harnesses an overlay actually touched — the plain six-
+// baseline case announces nothing (ADR-0006 § 5: an overlay-touched
+// harness "is announced everywhere an override is", not every harness on
+// every invocation). Filtered against LoadResult.overlayHarnessIds
+// (review round 1 S-6) — the merge-time-authoritative list, never
+// re-derived here by matching a harness id against a derived
+// protected-write row id.
+function overlayHarnessLinesOf(loaded: LoadResult): string[] {
+  return loaded.policy.harness
+    .filter((h) => loaded.overlayHarnessIds.includes(h.id))
+    .map((h) => harnessAnnouncementLine(h, loaded.effectiveRules));
 }
 
-function ownValue(record: RawHookEntry, key: string): unknown {
-  return Object.hasOwn(record, key) ? record[key] : undefined;
-}
-
-// Absent and corrupt are NOT the same failure, and reporting them as one
-// ("hook missing") would name the wrong problem: a fresh account with no
-// settings.json yet is normal (the wiring checks below say so, correctly,
-// on their own), but an existing settings.json that fails to read or parse
-// means doctor genuinely cannot see the wiring — that is a distinct,
-// nameable fault (see checkSettings) the wiring checks must defer to
-// rather than lie about.
-async function readSettingsFile(settingsPath: string): Promise<SettingsReadResult> {
-  let text: string;
-  try {
-    text = await readFile(settingsPath, 'utf8');
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException | undefined)?.code;
-    if (code === 'ENOENT') return { kind: 'absent' };
-    const detail = err instanceof Error ? err.message : String(err);
-    return { kind: 'corrupt', detail: `unreadable: ${detail}` };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return { kind: 'corrupt', detail: `malformed JSON: ${detail}` };
-  }
-  const settings = recordFrom(parsed);
-  if (settings === null) {
-    return { kind: 'corrupt', detail: 'settings.json does not contain a JSON object' };
-  }
-  return { kind: 'ok', settings };
-}
-
-function checkSettings(result: SettingsReadResult, settingsPath: string): DoctorCheck {
-  if (result.kind === 'corrupt') {
-    return { id: 'settings', ok: false, message: `settings.json ${result.detail} (${settingsPath})` };
-  }
-  if (result.kind === 'absent') {
-    return { id: 'settings', ok: true, message: `settings.json not found at ${settingsPath} (no hooks configured yet)` };
-  }
-  return { id: 'settings', ok: true, message: `settings.json parsed (${settingsPath})` };
-}
-
-function entriesFor(settings: RawHookEntry, event: GuardedEvent): readonly RawHookEntry[] {
-  const hooks = recordFrom(ownValue(settings, 'hooks'));
-  if (hooks === null) return [];
-  const forEvent = ownValue(hooks, event);
-  if (!Array.isArray(forEvent)) return [];
-  return forEvent.flatMap((entry) => {
-    const parsed = recordFrom(entry);
-    return parsed === null ? [] : [parsed];
-  });
-}
-
-function commandsOf(entries: readonly RawHookEntry[]): string[] {
-  const commands: string[] = [];
-  for (const entry of entries) {
-    const hooks = ownValue(entry, 'hooks');
-    if (!Array.isArray(hooks)) continue;
-    for (const rawHook of hooks) {
-      const hook = recordFrom(rawHook);
-      const command = hook === null ? undefined : ownValue(hook, 'command');
-      if (typeof command === 'string') commands.push(command);
-    }
-  }
-  return commands;
-}
-
-// A hook entry "points at bouncer" if its command's executable basename is
-// this binary's own name and `run` is among its arguments — robust to
-// wherever the binary is actually installed (absolute path in the demo,
-// a PATH-resolved name in a real install), unlike a literal string match.
-function bouncerExecutable(command: unknown): string | undefined {
-  if (typeof command !== 'string') return undefined;
-  const [executable, ...args] = command.trim().split(/\s+/);
-  if (executable === undefined || basename(executable) !== HOOK_NAME || !args.includes('run')) return undefined;
-  return executable;
-}
-
-function pointsAtBouncer(command: unknown): boolean {
-  return bouncerExecutable(command) !== undefined;
-}
-
-function entriesPointingAtBouncer(entries: readonly RawHookEntry[]): readonly RawHookEntry[] {
-  return entries.filter((entry) => commandsOf([entry]).some(pointsAtBouncer));
-}
-
-// Shadow and typo checks consume only true `bouncer run` commands, never
-// the paired `sh -c … ping` canary: its shell tokens describe a separate
-// liveness grammar and must not affect primary-wiring diagnosis.
-function bouncerCommandsOf(entries: readonly RawHookEntry[]): string[] {
-  return commandsOf(entries).filter(pointsAtBouncer);
-}
-
-// Ticket 08: `run --shadow` already satisfies pointsAtBouncer above (it
-// only requires 'run' among the args, which --shadow doesn't remove) —
-// this is purely the "say so" half: an entry wired with --shadow is
-// healthy wiring, just worth naming in the manual checklist so a human
-// running `bouncer doctor` mid-shadow-window sees at a glance which
-// events are currently observe-only. Never affects `ok` — info, not fail.
-function wiredInShadowMode(entries: readonly RawHookEntry[]): boolean {
-  return bouncerCommandsOf(entries).some((command) => command.trim().split(/\s+/).includes('--shadow'));
-}
-
-// Ticket 08 review: `run()` itself treats an unrecognized argv token
-// safely (never disarms enforcement — see adapter/run.ts's RunOptions
-// comment), but a typo in the LIVE settings.json wiring (`--shadwo`
-// instead of `--shadow`) is exactly the kind of thing worth a scream at
-// SessionStart, not just a quiet log line: the account owner THINKS
-// they're in shadow mode and are actually enforcing (safe), or vice
-// versa in intent even if not in effect — either way the wiring doesn't
-// say what the human meant, and this is the one place (SessionStart) it
-// is actually actionable.
-const KNOWN_RUN_TOKENS: ReadonlySet<string> = new Set(['run', '--shadow']);
-
-function unrecognizedTokensIn(command: string): string[] {
-  const [, ...args] = command.trim().split(/\s+/);
-  return args.filter((arg) => !KNOWN_RUN_TOKENS.has(arg));
-}
-
-function unrecognizedTokensAmong(entries: readonly RawHookEntry[]): string[] {
-  return [...new Set(bouncerCommandsOf(entries).flatMap(unrecognizedTokensIn))];
-}
-
-type MatcherCoverage =
-  | { readonly kind: 'covers'; }
-  | { readonly kind: 'gap'; }
-  | { readonly kind: 'unparseable'; readonly matcher: string; readonly detail: string; };
-
-// Claude Code's own matcher semantics, not a generic regex reading: an
-// ABSENT matcher on a hook entry means "run for every tool" (the entry
-// applies unconditionally), and the literal string `"*"` is CC's
-// documented wildcard shorthand for the same thing — neither is a regex
-// fragment to compile. Treating them as regex source was a prior review
-// round's cry-wolf bug: `new RegExp('^(?:*)$')` throws (nothing to repeat),
-// screaming on a config that is actually fully healthy.
-function evaluateMatcherCoverage(entries: readonly RawHookEntry[]): MatcherCoverage {
-  const matcherFields = entries.map((entry) => ownValue(entry, 'matcher'));
-  if (matcherFields.some((m) => m === undefined)) return { kind: 'covers' };
-
-  const stringMatchers = matcherFields.filter((m): m is string => typeof m === 'string');
-  if (stringMatchers.some((m) => m === '*')) return { kind: 'covers' };
-
-  const compiled: RegExp[] = [];
-  for (const m of stringMatchers) {
-    try {
-      compiled.push(new RegExp(`^(?:${m})$`));
-    } catch (err) {
-      // An invalid matcher regex is a wiring fault to REPORT, not a
-      // program error to throw — the settings.json a user hand-edits is
-      // untrusted input like any other.
-      return { kind: 'unparseable', matcher: m, detail: err instanceof Error ? err.message : String(err) };
-    }
-  }
-  const allCovered = EXPECTED_PRETOOLUSE_TOOLS.every((tool) => compiled.some((re) => re.test(tool)));
-  return allCovered ? { kind: 'covers' } : { kind: 'gap' };
-}
-
-function checkWiring(settingsResult: SettingsReadResult, event: GuardedEvent): DoctorCheck {
-  const id = `wiring:${event}`;
-
-  if (settingsResult.kind === 'corrupt') {
-    return {
-      id,
-      ok: false,
-      message: `cannot verify — settings.json is unreadable/malformed (see the settings check)`,
-    };
-  }
-
-  const settings = settingsResult.kind === 'ok' ? settingsResult.settings : {};
-  const wired = entriesPointingAtBouncer(entriesFor(settings, event));
-
-  if (wired.length === 0) {
-    return {
-      id,
-      ok: false,
-      message: `${event} hook is missing or does not point at ${HOOK_NAME} — this event runs unguarded`,
-    };
-  }
-
-  const unrecognized = unrecognizedTokensAmong(wired);
-  if (unrecognized.length > 0) {
-    return {
-      id,
-      ok: false,
-      message: `${event} hook command has unrecognized token(s) ${unrecognized.map((t) => JSON.stringify(t)).join(', ')} `
-        + `— likely a typo (e.g. --shadwo instead of --shadow); the tool call itself still runs safely `
-        + `(enforce mode), but the wiring doesn't say what you meant`,
-    };
-  }
-
-  if (event === 'PreToolUse') {
-    const coverage = evaluateMatcherCoverage(wired);
-    if (coverage.kind === 'unparseable') {
-      return {
-        id,
-        ok: false,
-        message: `PreToolUse hook is wired but its matcher ${JSON.stringify(coverage.matcher)} is unparseable `
-          + `as a regex (${coverage.detail}) — treated as failing, never silently accepted`,
-      };
-    }
-    if (coverage.kind === 'gap') {
-      return {
-        id,
-        ok: false,
-        message: `PreToolUse hook is wired but its matcher does not cover every guarded tool `
-          + `(expected Bash/Read/Edit/MultiEdit/Write/NotebookEdit/Grep/Glob/mcp__*) — some tool calls run unguarded`,
-      };
-    }
-  }
-
-  const shadowSuffix = wiredInShadowMode(wired) ? ' (shadow mode)' : '';
-  return { id, ok: true, message: `${event} is correctly wired${shadowSuffix}` };
-}
-
-function checkCanary(settingsResult: SettingsReadResult): DoctorCheck {
-  const id = 'wiring:canary';
-  if (settingsResult.kind === 'corrupt') {
-    return {
-      id,
-      ok: false,
-      message: 'cannot verify — settings.json is unreadable/malformed (see the settings check)',
-    };
-  }
-
-  const settings = settingsResult.kind === 'ok' ? settingsResult.settings : {};
-  const preToolUseEntries = entriesFor(settings, 'PreToolUse');
-  const primaryEntries = entriesPointingAtBouncer(preToolUseEntries);
-  if (primaryEntries.length === 0) {
-    return {
-      id,
-      ok: false,
-      message: `cannot verify — the primary PreToolUse ${HOOK_NAME} entry is missing`,
-    };
-  }
-
-  for (const primaryEntry of primaryEntries) {
-    const binaryPaths = bouncerCommandsOf([primaryEntry])
-      .map((command) => bouncerExecutable(command))
-      .filter((path): path is string => path !== undefined);
-    const primaryMatcher = JSON.stringify(ownValue(primaryEntry, 'matcher'));
-    const pairedEntries = preToolUseEntries.filter(
-      (entry) => entry !== primaryEntry && JSON.stringify(ownValue(entry, 'matcher')) === primaryMatcher,
-    );
-    const canaryCommands = commandsOf(pairedEntries).map(inspectCanaryCommand);
-    for (const binaryPath of binaryPaths) {
-      if (canaryCommands.some((command) => command.kind === 'canonical' && command.binaryPath === binaryPath)) {
-        continue;
-      }
-      if (canaryCommands.some((command) => command.kind === 'ping-probe' && command.binaryPath === binaryPath)) {
-        return {
-          id,
-          ok: false,
-          message: `PreToolUse canary for ${binaryPath} has no canonical deny-on-failure branch`,
-        };
-      }
-      if (canaryCommands.some((command) => command.kind !== 'other')) {
-        return {
-          id,
-          ok: false,
-          message: `PreToolUse canary points at a different binary path than ${binaryPath}`,
-        };
-      }
-      return {
-        id,
-        ok: false,
-        message: `PreToolUse canary is missing for ${binaryPath}`,
-      };
-    }
-  }
-
-  const shadowSuffix = wiredInShadowMode(primaryEntries)
-    ? ' (primary wiring is in shadow mode; the canary remains enforcing)'
-    : '';
-  return { id, ok: true, message: `PreToolUse canary is correctly wired${shadowSuffix}` };
-}
-
-export type CanonicalCanaryEntry =
-  | { readonly entry: string; readonly error?: undefined; }
-  | { readonly entry?: undefined; readonly error: string; };
-
-export async function formatCanonicalCanaryEntry(settingsPath: string): Promise<CanonicalCanaryEntry> {
-  const settingsResult = await readSettingsFile(settingsPath);
-  if (settingsResult.kind !== 'ok') {
-    return { error: `cannot read a settings object from ${settingsPath}` };
-  }
-  const primaryEntry = entriesPointingAtBouncer(entriesFor(settingsResult.settings, 'PreToolUse'))[0];
-  if (primaryEntry === undefined) {
-    return { error: `no PreToolUse entry points at a bouncer binary in ${settingsPath}` };
-  }
-  const binaryPath = bouncerCommandsOf([primaryEntry])
-    .map((command) => bouncerExecutable(command))
-    .find((path): path is string => path !== undefined);
-  if (binaryPath === undefined) {
-    return { error: `no PreToolUse entry points at a bouncer binary in ${settingsPath}` };
-  }
-
-  const entry = {
-    ...(Object.hasOwn(primaryEntry, 'matcher') ? { matcher: ownValue(primaryEntry, 'matcher') } : {}),
-    hooks: [{ type: 'command', command: buildCanaryCommand(binaryPath) }],
-  };
-  return { entry: JSON.stringify(entry, null, 2) };
+/** `<configDir>/settings.json` for the given harness — same root as its policy overlay and audit log. */
+export function defaultSettingsPathFor(harness: HarnessDeclaration): string {
+  return settingsPathFor(harness);
 }
 
 // ADR-0001 § Provenance: "; common: 4 files, profile: 0 files". `absent`
@@ -465,8 +162,8 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-async function checkLogWritability(): Promise<DoctorCheck> {
-  const logFile = hookLogPath(HOOK_NAME);
+async function checkLogWritability(harness: HarnessDeclaration): Promise<DoctorCheck> {
+  const logFile = hookLogPathFor(harness, HOOK_NAME);
   const dir = dirname(logFile);
   try {
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -505,54 +202,79 @@ function overrideLinesOf(loaded: LoadResult): string[] {
  * `loaded` is the policy already loaded for this invocation (run.ts's
  * single per-invocation load, or cli-commands.ts's own `loadCurrentPolicy`
  * call for the manual command) — doctor never loads policy itself, so a
- * SessionStart invocation never pays for a second load.
+ * SessionStart invocation never pays for a second load. `harness` is the
+ * TARGET harness this invocation is checking (`--harness <id>`, default
+ * `claude-code`) — a harness declared without a `wiring` codec (ADR-0006
+ * § 6) gets one `wiring: not checkable (declared harness)` line instead of
+ * the settings/event/canary checks, which need a codec to mean anything.
  */
-export async function runDoctorChecks(settingsPath: string, loaded: LoadResult): Promise<DoctorReport> {
-  const settingsResult = await readSettingsFile(settingsPath);
+export async function runDoctorChecks(
+  settingsPathOverride: string | undefined,
+  loaded: LoadResult,
+  harness: HarnessDeclaration,
+): Promise<DoctorReport> {
+  const protocol = harness.protocol;
   const wiringChecks: DoctorCheck[] = [];
-  for (const event of GUARDED_EVENTS) {
-    wiringChecks.push(checkWiring(settingsResult, event));
-    if (event === 'PreToolUse') wiringChecks.push(checkCanary(settingsResult));
+  let settingsCheck: DoctorCheck | undefined;
+
+  if (protocol === undefined || protocol.wiring === undefined) {
+    wiringChecks.push({ id: 'wiring', ok: true, warn: true, message: 'not checkable (declared harness)' });
+  } else {
+    const settingsPath = settingsPathOverride ?? settingsPathFor(harness);
+    const settingsResult = await readSettingsFile(settingsPath);
+    settingsCheck = checkSettings(settingsResult, settingsPath);
+    for (const eventKind of ['pre_tool', 'prompt', 'session_start'] as const) {
+      if (protocol.events[eventKind] === undefined) continue;
+      wiringChecks.push(checkWiring(settingsResult, protocol, harness.id, eventKind));
+      if (eventKind === 'pre_tool') wiringChecks.push(checkCanary(settingsResult, protocol));
+    }
   }
+
   const checks: DoctorCheck[] = [
-    checkSettings(settingsResult, settingsPath),
+    ...(settingsCheck !== undefined ? [settingsCheck] : []),
     ...wiringChecks,
     checkPolicy(loaded),
-    await checkLogWritability(),
+    await checkLogWritability(harness),
   ];
   const overrideLines = overrideLinesOf(loaded);
   return {
     checks,
     overrideCount: overrideLines.length,
     overrideLines,
+    overlayHarnessLines: overlayHarnessLinesOf(loaded),
     ok: checks.every((c) => c.ok),
   };
 }
 
-/** The manual `bouncer doctor` form: every check, pass/fail, plus the override count — always printed, healthy or not. */
+/** The manual `bouncer doctor` form: every check, pass/fail/warn, plus the override count — always printed, healthy or not. */
 export function formatDoctorChecklist(report: DoctorReport): string {
-  const lines = report.checks.map((c) => `[${c.ok ? 'pass' : 'fail'}] ${c.id} — ${c.message}`);
+  const lines = report.checks.map((c) => `[${c.warn === true ? 'warn' : c.ok ? 'pass' : 'fail'}] ${c.id} — ${c.message}`);
   lines.push(
     report.overrideCount > 0
       ? `overrides: ${report.overrideCount} active`
       : 'overrides: none active',
   );
   lines.push(...report.overrideLines.map((l) => `  - ${l}`));
+  lines.push(...report.overlayHarnessLines);
   return lines.join('\n');
 }
 
 /**
  * The SessionStart hook form: `null` means fully silent (nothing on
  * stdout at all, indistinguishable from a healthy PreToolUse allow) —
- * reserved for the one case where every check passes AND no
- * override/relaxation is active. Anything else produces a message: a
- * genuine anomaly screams first (settings/wiring/policy/log), an override/
- * relaxation count is announced calmly after — Story 19's "impossible to
- * overlook, never silent" applies even when nothing is actually broken.
+ * reserved for the one case where every check passes, no check is a
+ * `[warn]`, AND no override/relaxation is active. Anything else produces
+ * a message: a genuine anomaly screams first (settings/wiring/policy/log
+ * FAILURES), then two calm blocks — an override/relaxation count, and
+ * (review round 3 R3-1) any `[warn]` check (unprovable, never unhealthy:
+ * `ok` stays true, so it never joins the scream) — Story 19's
+ * "impossible to overlook, never silent" applies even when nothing is
+ * actually broken.
  */
 export function buildSessionStartContext(report: DoctorReport): string | null {
   const failing = report.checks.filter((c) => !c.ok);
-  if (failing.length === 0 && report.overrideCount === 0) return null;
+  const warnings = report.checks.filter((c) => c.warn === true);
+  if (failing.length === 0 && report.overrideCount === 0 && warnings.length === 0) return null;
 
   const lines: string[] = [];
   if (failing.length > 0) {
@@ -566,6 +288,12 @@ export function buildSessionStartContext(report: DoctorReport): string | null {
       `${HOOK_NAME} doctor: ${report.overrideCount} active override(s)/relaxation(s) — the effective policy is relaxed from the vetted baseline:`,
     );
     lines.push(...report.overrideLines.map((l) => `  - ${l}`));
+  }
+  if (warnings.length > 0) {
+    lines.push(
+      `${HOOK_NAME} doctor: ${warnings.length} check(s) unprovable, not broken — visible rather than silently green:`,
+    );
+    lines.push(...warnings.map((w) => `  - ${w.id}: ${w.message}`));
   }
   return lines.join('\n');
 }

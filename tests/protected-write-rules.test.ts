@@ -60,22 +60,22 @@ describe('protected-write rules: harness declarations', () => {
     });
   });
 
-  test('ruleId omp-config-dir: Oh My Pi directories confirm on write', async () => {
-    await expect(checker.checkPath('~/.omp')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-config-dir' });
+  test('ruleId pi-agent-config-dir: pi-agent (Oh My Pi) directories confirm on write', async () => {
+    await expect(checker.checkPath('~/.omp')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'pi-agent-config-dir' });
   });
 
-  test('ruleId omp-config: Oh My Pi configuration confirms on write', async () => {
-    await expect(checker.checkPath('~/.omp/agent/config.yml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-config' });
+  test('ruleId pi-agent-config: pi-agent (Oh My Pi) configuration confirms on write', async () => {
+    await expect(checker.checkPath('~/.omp/agent/config.yml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'pi-agent-config' });
   });
 
-  test('ruleId omp-models: Oh My Pi models confirm on write', async () => {
-    await expect(checker.checkPath('~/.pi/agent/models.yaml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'omp-models' });
+  test('ruleId pi-agent-models: pi-agent (Oh My Pi) models confirm on write', async () => {
+    await expect(checker.checkPath('~/.pi/agent/models.yaml')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'pi-agent-models' });
   });
 
-  test('ruleId omp-extensions: Oh My Pi extensions confirm on write', async () => {
+  test('ruleId pi-agent-extensions: pi-agent (Oh My Pi) extensions confirm on write', async () => {
     await expect(checker.checkPath('~/.omp/agent/extensions/example.ts')).resolves.toMatchObject({
       verdict: 'confirm',
-      ruleId: 'omp-extensions',
+      ruleId: 'pi-agent-extensions',
     });
   });
 
@@ -113,7 +113,9 @@ describe('protected-write rules: harness declarations', () => {
     await expect(checker.checkBashWrites('rm -rf "$CLAUDE_CONFIG_DIR"')).resolves.toMatchObject({ ruleId: 'bash-claude-code-config-dir' });
     await expect(checker.checkBashWrites('rm -rf $CLAUDE_CONFIG_DIR/hooks')).resolves.toMatchObject({ ruleId: 'bash-harness-hooks' });
     await expect(checker.checkBashWrites('echo x > ${CODEX_HOME}/config.toml')).resolves.toMatchObject({ ruleId: 'bash-codex-config' });
-    await expect(checker.checkBashWrites('echo x > $PI_CODING_AGENT_DIR/config.yml')).resolves.toMatchObject({ ruleId: 'bash-omp-config' });
+    await expect(checker.checkBashWrites('echo x > $PI_CODING_AGENT_DIR/config.yml')).resolves.toMatchObject({
+      ruleId: 'bash-pi-agent-config',
+    });
     await expect(checker.checkBashWrites('rm -rf $CONFIG/hooks')).resolves.toBeNull();
     await expect(checker.checkBashWrites('echo $CLAUDE_CONFIG_DIR')).resolves.toBeNull();
     await expect(checker.checkBashWrites('rm -rf ~/.{claude,codex}')).resolves.toMatchObject({ ruleId: 'bash-claude-code-config-dir' });

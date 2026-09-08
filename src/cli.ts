@@ -1,21 +1,25 @@
 #!/usr/bin/env bun
-// bouncer — single guard binary. `run` speaks the Claude Code hook
+// bouncer — single guard binary. `run` speaks a harness's declared
 // protocol end to end (stdin JSON, verdict on stdout, silent exit on
-// allow) — this is also how SessionStart reaches `doctor`'s wiring/policy/
-// log check (ticket 07): no separate subcommand for the hook path, the
-// same `run` envelope dispatch routes SessionStart to it. `check`,
-// `rules lint`, `rules list`, and `doctor` are the policy/diagnostic
-// tooling subcommands — dry-run, validate, and inspect without a live
-// session. `audit` clusters the account's log for rule tuning.
+// allow, default `claude-code` — ADR-0006) — this is also how SessionStart
+// reaches `doctor`'s wiring/policy/log check (ticket 07): no separate
+// subcommand for the hook path, the same `run` envelope dispatch routes
+// SessionStart to it. `check`, `rules lint`, `rules list`, `doctor`, and
+// `harness list` are the policy/diagnostic tooling subcommands — dry-run,
+// validate, and inspect without a live session. `audit` clusters the
+// account's log for rule tuning. `--harness <id>` (default `claude-code`)
+// is accepted by `run`, `check`, `doctor`, and `audit`.
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunOptions, type RunResult } from './adapter/run.ts';
 import {
+  extractHarnessFlag,
   parseAuditArgs,
   parseDoctorArgs,
   runAudit,
   runCheck,
   runDoctor,
+  runHarnessList,
   runPing,
   runPrintCanary,
   runRulesLint,
@@ -50,6 +54,11 @@ async function main(): Promise<void> {
   const [command, ...rest] = Bun.argv.slice(2);
 
   if (command === 'run') {
+    const harnessFlag = extractHarnessFlag(rest);
+    if (harnessFlag.error !== undefined) {
+      console.error(`${HOOK_NAME}: ${harnessFlag.error}`);
+      process.exit(1);
+    }
     // Ticket 08: `bouncer run --shadow` — visible and greppable in the
     // settings.json command string that invokes it (no magic env var).
     // Belt-and-suspenders on the "never emits, absolute" contract: run()
@@ -64,11 +73,19 @@ async function main(): Promise<void> {
     // never silently disarm it — but it's not silently dropped either:
     // run() logs it as a policy-warning so the mistake is visible in the
     // audit trail (see RunOptions's own comment in adapter/run.ts).
-    const shadow = rest.includes('--shadow');
-    const unrecognizedTokens = rest.filter((t) => t !== '--shadow');
-    const { stdout } = await readAndRun(() => Bun.stdin.text(), { shadow, unrecognizedTokens });
+    const shadow = harnessFlag.rest.includes('--shadow');
+    const unrecognizedTokens = harnessFlag.rest.filter((t) => t !== '--shadow');
+    const { stdout, exit } = await readAndRun(() => Bun.stdin.text(), {
+      shadow,
+      unrecognizedTokens,
+      ...(harnessFlag.harness !== undefined ? { harness: harnessFlag.harness } : {}),
+    });
+    // ADR-0006 § 6: an unknown/protocol-less harness's exit 2 is a
+    // wiring-configuration failure, not a verdict shadow ever suppresses
+    // — it propagates even under --shadow (stdout stays gated on shadow
+    // regardless, unaffected here since that path never sets stdout).
     if (stdout !== null && !shadow) process.stdout.write(stdout);
-    process.exit(0);
+    process.exit(exit ?? 0);
   }
 
   if (command === 'ping') {
@@ -77,12 +94,17 @@ async function main(): Promise<void> {
   }
 
   if (command === 'check') {
-    const target = rest.join(' ');
+    const harnessFlag = extractHarnessFlag(rest);
+    if (harnessFlag.error !== undefined) {
+      console.error(`${HOOK_NAME}: ${harnessFlag.error}`);
+      process.exit(1);
+    }
+    const target = harnessFlag.rest.join(' ');
     if (target.trim() === '') {
       console.error(`${HOOK_NAME}: check requires a command argument, e.g. check "git push"`);
       process.exit(1);
     }
-    const { text, ok } = await runCheck(target);
+    const { text, ok } = await runCheck(target, harnessFlag.harness);
     console.log(text);
     process.exit(ok ? 0 : 1);
   }
@@ -100,6 +122,16 @@ async function main(): Promise<void> {
       process.exit(ok ? 0 : 1);
     }
     usageError(sub, 'lint | list');
+  }
+
+  if (command === 'harness') {
+    const [sub] = rest;
+    if (sub === 'list') {
+      const { text, ok } = await runHarnessList();
+      console.log(text);
+      process.exit(ok ? 0 : 1);
+    }
+    usageError(sub, 'list');
   }
 
   if (command === 'audit') {
@@ -120,7 +152,7 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     if (parsed.printCanary) {
-      const printed = await runPrintCanary(parsed.settingsPath);
+      const printed = await runPrintCanary(parsed.settingsPath, parsed.harness);
       if (!printed.ok) {
         console.error(`${HOOK_NAME}: ${printed.error}`);
         process.exit(1);
@@ -128,12 +160,12 @@ async function main(): Promise<void> {
       console.log(printed.text);
       process.exit(0);
     }
-    const { text, ok } = await runDoctor(parsed.settingsPath);
+    const { text, ok } = await runDoctor(parsed.settingsPath, parsed.harness);
     console.log(text);
     process.exit(ok ? 0 : 1);
   }
 
-  usageError(command, 'run | ping | check | rules | audit | doctor');
+  usageError(command, 'run | ping | check | rules | harness | audit | doctor');
 }
 
 if (import.meta.main) {

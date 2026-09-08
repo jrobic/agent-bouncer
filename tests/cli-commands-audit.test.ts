@@ -65,29 +65,29 @@ function sectionOf(report: string, heading: string): string {
 
 describe('parseAuditArgs', () => {
   test('defaults to a 30-day window and no --suggest', () => {
-    expect(parseAuditArgs([])).toEqual({ options: { days: 30, suggest: false, diff: false } });
+    expect(parseAuditArgs([])).toEqual({ options: { days: 30, suggest: false, diff: false, harness: 'claude-code' } });
   });
 
   test('--suggest sets the suggest flag', () => {
-    expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true, diff: false } });
+    expect(parseAuditArgs(['--suggest'])).toEqual({ options: { days: 30, suggest: true, diff: false, harness: 'claude-code' } });
   });
 
   test('--sessions-only enables the session-entry filter', () => {
     expect(parseAuditArgs(['--sessions-only'])).toEqual({
-      options: { days: 30, suggest: false, diff: false, sessionsOnly: true },
+      options: { days: 30, suggest: false, diff: false, sessionsOnly: true, harness: 'claude-code' },
     });
   });
 
   test('--days N overrides the window', () => {
-    expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false, diff: false } });
+    expect(parseAuditArgs(['--days', '7'])).toEqual({ options: { days: 7, suggest: false, diff: false, harness: 'claude-code' } });
   });
 
   test('both flags combine regardless of order', () => {
     expect(parseAuditArgs(['--suggest', '--days', '14'])).toEqual({
-      options: { days: 14, suggest: true, diff: false },
+      options: { days: 14, suggest: true, diff: false, harness: 'claude-code' },
     });
     expect(parseAuditArgs(['--days', '14', '--suggest'])).toEqual({
-      options: { days: 14, suggest: true, diff: false },
+      options: { days: 14, suggest: true, diff: false, harness: 'claude-code' },
     });
   });
 

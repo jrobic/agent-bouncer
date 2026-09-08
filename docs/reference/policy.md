@@ -4,15 +4,17 @@ The policy is TOML, in three layers.
 
 ## Baseline vs. overlay
 
-**Baseline** — seven files in this repository, one per rule family plus
-harness declarations, compiled into the binary at build time (`bun build
---compile`): `policy/command.toml`, `policy/secret.toml`,
+**Baseline** — twelve files in this repository, one per rule family plus
+one per baseline harness declaration, compiled into the binary at build
+time (`bun build --compile`): `policy/command.toml`, `policy/secret.toml`,
 `policy/mcp-write.toml`, `policy/write-secret.toml`,
 `policy/protected-write.toml`, `policy/prompt.toml`, and
-`policy/harness.toml`. Each rule file's top-level TOML header
-(`[[rules.command.bash]]`, `[rules.secret...]`, ...) scopes it to its
-family; `[[harness]]` is top-level. The rule families merge shallowly, then
-harness declarations derive protected-write rows.
+`policy/harness/claude-code.toml`, `codex.toml`, `opencode.toml`,
+`pi-agent.toml`, `gemini-cli.toml`, `cursor.toml` (ADR-0006 § 2 — one file
+per assistant, the file name IS the id). Each rule file's top-level TOML
+header (`[[rules.command.bash]]`, `[rules.secret...]`, ...) scopes it to
+its family; `[[harness]]` is top-level in its own file. The rule families
+merge shallowly, then harness declarations derive protected-write rows.
 Always present, never edited at runtime. The vetted starting point.
 
 **Overlay** — two named layers on top of the baseline (ADR-0001), each a
@@ -21,15 +23,16 @@ run`/`check`/`rules`/`doctor`/`audit` invocation (no caching, no restart
 needed after an edit):
 
 1. **common** — `~/.agents/bouncer/`, a harness-neutral product
-   convention: no file anywhere names this root, and every adapter reads
-   the same one (today only the Claude Code adapter exists; a future
-   harness's adapter — ticket 15 — reads it unchanged). Meant for rules
-   shared across every profile on a workstation (personal and client
-   seats alike) without a per-profile mount gesture.
-2. **profile** — `<configDir>/bouncer/`, resolved by the calling
-   harness's adapter (for Claude Code: `<configDir>` is `~/.claude`
-   unless the `CLAUDE_CONFIG_DIR` environment variable is set, in which
-   case it's that value — `~` expanded, trailing slash normalized).
+   convention: no file anywhere names this root, and every harness's
+   pipeline reads the same one.
+2. **profile** — `<configDir>/bouncer/`, resolved by the TARGET
+   harness's own declaration (ADR-0006 § 8: the first of its `env`
+   names that's actually set, falling back to its `witness`) — for
+   Claude Code (the default): `<configDir>` is `~/.claude` unless the
+   `CLAUDE_CONFIG_DIR` environment variable is set, in which case it's
+   that value (`~` expanded, trailing slash normalized). `--harness
+   codex` resolves against `CODEX_HOME`/`~/.codex` instead, its OWN
+   separate profile layer.
 
 Both layers have the identical internal shape:
 
@@ -38,6 +41,13 @@ Both layers have the identical internal shape:
    lexicographic FILENAME order (not write time), merged after
    `policy.toml`. A conf.d-style split for personal rules by theme
    (`10-npm.toml`, `20-client-x.toml`, ...).
+3. `<root>/harness.d/*.toml` (ADR-0006 § 2) — every `.toml` file in that
+   directory, same lexicographic order, each holding one `[[harness]]`
+   block that declares a NEW harness or extends an existing one (§
+   `[[harness]]` below). Discovery only — resolving a NEW harness's OWN
+   profile root needs its declaration first, so a brand-new harness must
+   be introduced through the COMMON layer (harness-neutral, no
+   chicken-and-egg); the profile layer can still extend it afterward.
 
 No files at all, in EITHER layer, is baseline only, silently — a fresh
 account with no overlay file is a normal, healthy state, not a warning.
@@ -351,10 +361,13 @@ for heredoc and `sed -f` boundaries.
 
 ## `[[harness]]`: assistant configuration declarations
 
-`[[harness]]` is a top-level table, outside `[rules]`. It records the
-configuration-directory convention of one assistant; the loader derives
-the protected-write regex rows from that record before it appends the
-hand-written `rules.protected_write` rows.
+`[[harness]]` is a top-level table, outside `[rules]`, ONE PER FILE
+(ADR-0006 § 2 — `policy/harness/<id>.toml`; the file name is the id).
+It records the configuration-directory convention of one assistant; the
+loader derives the protected-write regex rows from that record before it
+appends the hand-written `rules.protected_write` rows. It may also carry
+a `[harness.protocol]` sub-table (§ below) — the pipeline a generic
+adapter reads to speak that assistant's own hook protocol.
 
 ```toml
 [[harness]]
@@ -368,16 +381,18 @@ reason = "Claude Code configuration directory"
 id = "harness-hooks"
 path = "hooks(/|$)"
 reason = "Claude Code hooks can alter future tool-call enforcement"
+```
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `id` | string | yes | Stable declaration id. It produces `<id>-config-dir`. |
+| `id` | string | yes | Stable declaration id, matching the baseline file's own name. It produces `<id>-config-dir`. |
 | `dir` | string[] | yes for a baseline or new overlay declaration | RE2-like regex fragments for configuration directories, with no trailing slash. |
 | `witness` | string | no | Concrete path for `dir[0]`. Lint requires it to match `dir[0]`; if omitted, a narrow derived fallback must also match or lint instructs the author to declare it. |
 | `parents` | string[] | no | Directories whose deletion removes a configuration directory. They derive only the directory row. |
-| `env` | string[] | yes for a baseline or new declaration; `[]` is valid | Upper-case environment names that represent the first `dir`. |
+| `env` | string[] | yes for a baseline or new declaration; `[]` is valid | Upper-case environment names that represent the first `dir`. Also what routes the profile overlay layer and the audit log (ADR-0006 § 8) — the first name actually set in the environment, falling back to `witness`. |
 | `reason` | string | yes for a baseline or new declaration | Explanation shown for the derived directory row. |
 | `persistent` | `[[harness.persistent]]` | no | Persistent paths below every `dir`. Each entry has unique `id`, `path`, and consequence-oriented `reason`. |
+| `protocol` | `[harness.protocol]` | no | The pipeline a generic adapter reads to speak this harness's own hook protocol (§ below). Absent means `--harness <id>` fails closed (exit 2) — declared-but-unusable, same as undeclared. |
 
 The effective declaration creates one `<id>-config-dir` row matching every
 `dir` and `parents` fragment with `/?$`, then one row per `persistent`
@@ -399,18 +414,251 @@ confirmation with `brace expansion exceeds the cap`.
 
 An overlay block with an existing `id` appends `dir`, `parents`, and `env`
 to the baseline declaration and inherits its `reason` and persistent
-entries. It must not declare `persistent`; that prevents a profile from
-silently dropping or changing a baseline persistence boundary. A new
-`id` supplies `dir`, `env`, and `reason` itself and may add persistent
-entries. Invalid fragments, an unverified witness, lower-case environment
-names, repeated declaration ids in one layer, or any duplicate effective
-rule id reject the containing layer, so the baseline remains active.
+entries, and MAY replace its `protocol` wholesale (§ below — never
+merged field by field). It must not declare `persistent`; that prevents
+a profile from silently dropping or changing a baseline persistence
+boundary. A new `id` supplies `dir`, `env`, and `reason` itself (or, for
+a protocol-only extension of an existing id, `protocol` alone satisfies
+the "must append something" check) and may add persistent entries and a
+full `protocol`. Invalid fragments, an unverified witness, lower-case
+environment names, repeated declaration ids in one layer, or any
+duplicate effective rule id reject the containing layer, so the baseline
+remains active.
 
 Directory rows protect only the directory token. They deliberately do not
 protect children such as `agents/`, `agent/`, `commands/`, `skills/`,
 `projects/**/memory/`, logs, caches, or sessions: those locations are
-written regularly and are not session-start persistence. OMP
+written regularly and are not session-start persistence. pi-agent's
 `extensions/` is explicit persistent state because it loads at boot.
+
+### `[harness.protocol]`: the pipeline a generic adapter reads (ADR-0006)
+
+Since ticket 15a, `src/adapter/` names no harness, tool, or field —
+`policy/harness/claude-code.toml` is the first (and, in this ticket, only)
+declaration carrying one, and it reproduces the pre-15a hardcoded Claude
+Code adapter byte for byte (`fixtures/protocol/claude-code.json`,
+`tests/fixtures-protocol.test.ts`). A harness declared WITHOUT a
+`protocol` behaves exactly as before ADR-0006 (its `[[harness]]` block
+still protects its directory); `--harness <id>` naming it fails closed
+(exit 2, `docs/reference/cli.md`'s `run`).
+
+```toml
+[harness.protocol]
+transport = "stdin-json"
+wiring = "hook-file"
+
+[harness.protocol.input]
+event = "hook_event_name"
+tool = "tool_name"
+input = "tool_input"
+session = "session_id"
+prompt = "prompt"
+cwd = "cwd"
+
+[harness.protocol.events]
+pre_tool = "PreToolUse"
+prompt = "UserPromptSubmit"
+session_start = "SessionStart"
+
+[harness.protocol.tools]
+Bash = { role = "command", command = "command" }
+Read = { role = "read", path = "file_path" }
+"mcp__*" = { role = "mcp" }
+
+[harness.protocol.output]
+block = "deny"
+confirm = "ask"
+observe = "silent"
+flag = "context"
+on_malformed = "allow"
+ask_probe = "2026-08-16, workstation THREAT_MODEL §1: ..."
+
+[harness.protocol.output.deny]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":${reason}}}'
+```
+
+**`transport`** — the codec that reads the envelope. `"stdin-json"` (the
+only one this ticket declares): one JSON object on stdin, no framing.
+
+**`wiring`** — the codec `doctor` uses to prove the hook is actually
+installed. `"hook-file"` (the only one this ticket declares, generic):
+reads `<configDir>/settings.json`, checks each of `events.pre_tool`/
+`prompt`/`session_start` names a command whose executable basename is
+`bouncer`, whose args contain `run` and — for any harness other than
+`claude-code` — also `--harness <id>` (a bare `bouncer run` under a
+non-default harness would silently judge against claude-code's table
+instead). Optional: a harness declared without one gets `wiring: not
+checkable (declared harness)` in `doctor`, visible rather than silently
+green.
+
+**`[harness.protocol.input]`** — where things a hook invocation needs
+live in the raw envelope object, as top-level dotted keys: `event` (the
+field naming which hook event this is), `tool` (the tool name), `input`
+(the tool's own input bag), `session` (session id, logging only),
+`prompt` (UserPromptSubmit's text — OPTIONAL, required iff
+`events.prompt` is declared, § below), `cwd` (the session's working
+directory — used to resolve a RELATIVE `path` selector below; Claude
+Code sends absolute paths and no `cwd`, so this is a no-op for it —
+ALWAYS required, relative-path resolution needs it regardless of which
+events a harness declares).
+
+**`[harness.protocol.events]`** — the literal event-name strings `event`
+takes for each event this pipeline understands. `pre_tool` is always
+required. `prompt` and `session_start` are OPTIONAL (review round 2
+R2-1) — a harness that never judges a submitted prompt (or has no
+doctor-facing SessionStart surface, ADR-0006 § 7's pi-agent by design)
+declares neither, rather than being forced to name an event field it has
+no real envelope shape for. See "Optional surfaces" below for the
+coherence rules gating each.
+
+**`[harness.protocol.tools]`** — name → `{role, ...selectors}`. A name is
+an exact tool name or a trailing-`*` glob (`"mcp__*"`); exact rows win
+over glob rows regardless of table order. A name matching no row is not
+judged (same as before this ticket). `role` is the engine's whole
+vocabulary of a tool call:
+
+| Role | Families it reaches | Selectors it reads |
+|---|---|---|
+| `command` | command, secret (as a Bash-shaped string), protected-write (`checkBashWrites`, shell-syntax aware) | `command` (a string, or `field[].subfield` for a batch of them) |
+| `read` | secret only | `path` (canonicalised after resolving against `cwd`), `pattern` (matched LITERALLY, never canonicalised — Glob's own field) |
+| `write` | secret AND protected-write on `path`; write-secret on `text` | `path`, `text` (a string, or `field[].subfield` joined with `\n`) |
+| `fetch` | secret (URL-shaped) | `url` (single), `urls` (`field[].subfield`, appended after `url`) |
+| `mcp` | mcp-write, judged on the tool's own name | none — the row itself carries no selector |
+
+A selector is a dotted path into the input bag; `field[].subfield` maps
+over an array at `field`, reading `subfield` off each object element (a
+STRING element is taken as the value directly, skipping `subfield` —
+`ctx_batch_execute`'s `commands[].command` mixes both shapes in one
+call). A selector resolving to a non-string value logs `expected string
+for tool_input.<selector>, got <type> — allowing` on stderr and yields no
+value for that call — the exact diagnostic the pre-15a hardcoded readers
+used, now general to any selector string. `path` is resolved against
+`cwd` (when the harness's envelope sends one) BEFORE canonicalisation, so
+a relative reference (a future Codex declaration's `apply_patch` paths,
+relative to the session directory) still names a real file.
+
+**`[harness.protocol.output]`** — the abstract verdict → action table.
+Every action is one of `deny`, `ask`, `context`, `silent`. `rules lint`
+rejects the containing block AS A UNIT on any of:
+
+1. `block` mapped to anything but `"deny"`.
+2. `confirm` mapped to anything but `"deny"` or `"ask"`.
+3. `observe` mapped to anything but `"silent"`.
+4. `flag` mapped to anything but `"context"` or `"silent"`.
+5. `ask_probe` missing or empty when `confirm = "ask"` — lint cannot
+   verify a harness actually honours `ask`, so it forces the author to
+   write down, in the same spirit as a rule's own `reason`, the measured
+   evidence they believe it does.
+6. An overlay relaxing an EXISTING BASELINE harness's `confirm` from
+   `"deny"` to `"ask"` — a baseline `"deny"` is a measured fact (Codex's
+   own, once 15b lands it), never a default an overlay gets to loosen.
+   An overlay-declared harness (not itself baseline) carries no such
+   fact and may freely replace its own protocol.
+7. An unknown `transport` or `wiring`, or a tool row's `role` — plus, for
+   a tool row, any field lint does not recognize at all (a `codec` field
+   included: no tool row may declare one in this ticket, so it is caught
+   as an unrecognized field, the same as any other typo, not a dedicated
+   `codec`-shaped check).
+
+`on_malformed` (`"allow"` or `"deny"`) governs exactly one case: stdin
+`run()` could not read or parse at all — empty, or not valid JSON.
+A WELL-FORMED envelope naming an event this binary does not judge
+(`PostToolUse`, a missing `hook_event_name`) is a SEPARATE case and
+always stays silent regardless of `on_malformed` — it is not malformed,
+it is simply not ours to act on. `"allow"` is Claude Code's own fail-
+open-on-bad-envelope contract, kept explicit per harness — Claude Code's
+stays `"allow"`, silent, nothing logged. `"deny"` renders that harness's
+OWN `deny` template — the same template a real blocked tool call would
+get — with `${reason}` = `envelope-malformed: unreadable or malformed
+hook envelope — failing closed` (`${rule}` = `envelope-malformed`), exit
+0, and writes a `policy-warning` entry to the audit log (this harness
+always has a resolvable log path by the time this case is reached — the
+ADR-0006 § 6 exit-2 check for an unusable harness runs first). Every
+other baseline harness decides which value it wants in its own test
+phase.
+
+**Optional surfaces: `prompt` and `session_start` (review round 2 R2-1)**
+— `input.prompt`/`events.prompt` and `events.session_start`/
+`output.session_start` are pairs that must agree; `output.ask`/`confirm`
+and `output.context`/`flag` likewise. `rules lint` rejects the block AS A
+UNIT on any of:
+
+8. `events.prompt` declared without `input.prompt` — nothing would ever
+   read the prompt text.
+9. `events.prompt` NOT declared while `output.flag` is anything but
+   `"silent"` — this harness never judges a prompt, so `flag` cannot
+   degrade to a `"context"` it can never build.
+10. `output.ask` present in the raw table while `confirm` is not
+    `"ask"` — a dead template, never rendered.
+11. `output.context` present while `flag` is not `"context"` — a dead
+    template, never rendered.
+12. `events.session_start` declared without a matching
+    `[harness.protocol.output.session_start]` table.
+13. `output.session_start` present while `events.session_start` is NOT
+    declared — a dead template: `doctor`'s SessionStart announcement for
+    this harness has no event to reach it through.
+
+A minimal declaration — `pre_tool` + `deny` only, no `prompt`/
+`session_start` at all — is a complete, lint-clean, usable protocol
+(the how-to page's `harness.d/acme.toml` example is exactly this shape).
+`input.cwd` and `output.deny` are the two fields with no optional path:
+every declared harness needs both, unconditionally.
+
+**`[harness.protocol.output.<action>]`** — one template table per action
+the output table actually maps a verdict to (never `silent`, which
+renders nothing), plus `session_start` when `events.session_start` is
+declared (SessionStart's own doctor announcement, rendered through this
+same mechanism but never reached via the verdict table). Each sets
+`stdout` (a string), `exit` (an integer process exit code), or both —
+Claude Code's four templates only ever set `stdout`. Placeholders are
+JSON-encoded ON SUBSTITUTION (so an arbitrary reason/context string with
+quotes or newlines never breaks the surrounding JSON literal) — write
+them BARE, `${reason}` never `"${reason}"`: the value already carries
+its own quotes once substituted, so a hand-written quote around the
+placeholder doubles up and produces invalid JSON. `rules lint` rejects a
+`stdout` where a placeholder directly touches a `"`, and separately
+renders every template once with a worst-case probe value and requires
+the result to still parse as JSON when `stdout` looks like a JSON object
+or array literal — both belts reject the containing action's block as a
+unit, the same as any other rule 1–13 failure.
+
+**Placeholders — a fixed, PER-TEMPLATE set (review round 2 C-1)**: `run.ts`
+fills exactly these names and no others, so lint rejects any placeholder
+outside a template's own allowed set (naming the unknown placeholder and
+listing what IS allowed there) — a name lint let through but the renderer
+never fills would render as a literal, unsubstituted `${…}` string
+forever, silently invalid JSON:
+
+| Template | Allowed placeholders |
+|---|---|
+| `deny` | `${reason}` (`<ruleId>: <reason>`), `${rule}` (the bare ruleId), `${verdict}` (`block`/`confirm` — the abstract verdict before degradation) |
+| `ask` | same three as `deny` |
+| `context` | `${context}` only (the assembled UserPromptSubmit hit-list prose) |
+| `session_start` | `${context}` only (the assembled doctor announcement text) |
+
+### Codecs: the code a declaration names by string
+
+A declaration's `transport`/`wiring` strings, and a future tool row's
+`codec` (not used by any baseline harness in this ticket), name modules
+in `src/adapter/codecs/` — the ONLY code that knows a harness by name.
+Today: `stdin-json` (transport) and `hook-file` (wiring, ADR-0006 § 6). A
+new parser (Codex's `apply_patch` text) or a new wiring check (Codex's
+hook-trust table in `config.toml`) is a codec pull request; a new
+assistant that fits the existing codecs is a file.
+
+### Known limits (ADR-0006 § Consequences)
+
+- A declaration cannot express a parser — that is what a codec is for;
+  pretending a field map can parse `apply_patch` text or a hashline diff
+  would put a parser in TOML.
+- `rules lint` proves the SHAPE of an output table (every verdict maps to
+  a legal action, `ask` carries a probe) — it never proves the harness
+  actually HONOURS `ask`, `deny`, or any of it; that is what `ask_probe`
+  and a real test phase are for.
+- A shim installed by copy (in-process harnesses — pi-agent, opencode;
+  not built in this ticket) is a file the user maintains
+  themselves; `doctor` for one can only report what the shim itself
+  relays back.
 
 ## `mcp_write.read_prefixes`
 
@@ -707,4 +955,4 @@ Other `baseline`-provenance lines have no suffix because the embedded
 baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness.toml, src/adapter/policy.ts, src/adapter/log-path.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/hook-file.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts

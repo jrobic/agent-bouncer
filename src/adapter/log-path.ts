@@ -1,10 +1,12 @@
-// Per-account audit log routing. Pure path resolution — no file I/O.
+// Per-account audit log / profile-overlay routing. Pure path resolution —
+// no file I/O.
 //
-// Claude-Code-specific (moved out of the engine): `CLAUDE_CONFIG_DIR` and
-// the `~/.claude` convention are this harness's own account model. A future
-// adapter for a different harness would resolve its account/config
-// directory its own way — nothing in src/*.ts should assume this
-// convention, only this adapter.
+// ADR-0006 § 8: declaration-driven, not Claude-Code-specific any more — a
+// harness's OWN `env` names (in declaration order) give its account
+// directory, `witness` the fallback when none of them is set. Claude
+// Code's routing is unchanged (`CLAUDE_CONFIG_DIR`, falling back to
+// `~/.claude`); a different `--harness <id>` now resolves against THAT
+// harness's own declaration instead.
 //
 // Workstation delta folded into the engine convergence: the catalog
 // generation this repository otherwise ports verbatim always wrote its log
@@ -16,28 +18,38 @@
 
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import type { HarnessDeclaration } from '../policy/schema.ts';
 
-// Resolves the config dir of the account currently in use. Honoring
-// CLAUDE_CONFIG_DIR matters because a second account (client seat) runs the
-// *same* implementation through absolute paths, so without this the
-// client's state would land in the personal tree.
-//
-// `~` is expanded because the variable is often exported from a shell where a
-// quoted value keeps the tilde literal, and resolve() drops a trailing slash
-// so `.claude-x` and `.claude-x/` agree on one directory.
-export function configDir(): string {
-  const env = process.env.CLAUDE_CONFIG_DIR;
-  if (env && env.trim() !== '') {
-    return env.startsWith('~')
-      ? resolve(homedir(), env.replace(/^~[/\\]?/, ''))
-      : resolve(env);
-  }
-  return resolve(homedir(), '.claude');
+// `~` is expanded because a witness or an exported env value is often
+// written with a literal tilde a shell would otherwise expand, and
+// resolve() drops a trailing slash so `.claude-x` and `.claude-x/` agree
+// on one directory.
+function expandHome(path: string): string {
+  return path.startsWith('~') ? resolve(homedir(), path.replace(/^~[/\\]?/, '')) : resolve(path);
 }
 
-// Audit log path for a guard, scoped to the active account. Kept under the
-// config dir rather than beside the script — a shared implementation would
-// otherwise interleave two accounts' denials in one file.
-export function hookLogPath(hookName: string): string {
-  return resolve(configDir(), 'logs', 'hooks', `${hookName}.log`);
+/**
+ * Resolves the account directory of the harness currently in use: the
+ * first of its declared `env` names actually set (in declaration order),
+ * falling back to its `witness` when none is. Honoring the env names
+ * matters because a second account (client seat) runs the *same*
+ * implementation through absolute paths, so without this the client's
+ * state would land in the primary account's tree.
+ */
+export function configDirFor(harness: HarnessDeclaration): string {
+  for (const name of harness.env) {
+    const value = process.env[name];
+    if (value !== undefined && value.trim() !== '') return expandHome(value);
+  }
+  return expandHome(harness.witness);
+}
+
+/** Audit log path for a guard, scoped to the given harness's account. */
+export function hookLogPathFor(harness: HarnessDeclaration, hookName: string): string {
+  return resolve(configDirFor(harness), 'logs', 'hooks', `${hookName}.log`);
+}
+
+/** `<configDir>/bouncer/` — the profile overlay layer's root for the given harness. */
+export function profileRootFor(harness: HarnessDeclaration): string {
+  return resolve(configDirFor(harness), 'bouncer');
 }

@@ -3,9 +3,10 @@
 // that speaks in strings (Claude Code today, any future harness later).
 
 // The abstract verdict vocabulary every rule family emits directly — no
-// harness-specific decision string (no more "deny"/"ask"). An adapter maps
-// this vocabulary onto its own protocol via an explicit, written degradation
-// table (see src/adapter/degradation.ts for the Claude Code one):
+// harness-specific decision string (no more "deny"/"ask"). A harness maps
+// this vocabulary onto its own protocol via its declared output table
+// (ADR-0006 § 4 — `policy/harness/<id>.toml`'s `[harness.protocol.output]`;
+// src/adapter/degrade.ts is the pure lookup):
 //   block    hard-stop the tool call
 //   confirm  surface an interactive prompt instead of a hard block
 //   flag     warn without blocking (prompt-injection signatures)

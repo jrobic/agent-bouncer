@@ -46,6 +46,85 @@ fragment's derived concrete path cannot be proved by lint; add one or more
 [`policy.md`'s harness reference](../reference/policy.md#harness-assistant-configuration-declarations)
 for the full field table, merge rules, exclusions, and known shell limits.
 
+### Give it a protocol, so `bouncer run`/`check` can speak to it directly
+
+A brand-new assistant id needs its own `[harness.protocol]` table before
+`--harness <id>` works at all (ADR-0006) — without one, the id still
+protects its configuration directory, but `bouncer run --harness <id>`
+fails closed (exit 2, "declared harness has no usable protocol"). A new
+id can only be introduced through the COMMON layer (`~/.agents/bouncer/`,
+directly or via `harness.d/*.toml`), never the profile layer alone — a
+brand-new harness has no profile root to resolve yet.
+
+```toml
+# ~/.agents/bouncer/harness.d/acme.toml
+[[harness]]
+id = "acme"
+dir = ["(^|/)\\.acme"]
+witness = "~/.acme"
+env = ["ACME_CONFIG_DIR"]
+reason = "Acme CLI configuration directory"
+
+[harness.protocol]
+transport = "stdin-json"
+wiring = "hook-file"
+
+[harness.protocol.input]
+event = "hook_event_name"
+tool = "tool_name"
+input = "tool_input"
+session = "session_id"
+cwd = "cwd"
+
+[harness.protocol.events]
+pre_tool = "PreToolUse"
+
+[harness.protocol.tools]
+Bash = { role = "command", command = "command" }
+
+[harness.protocol.output]
+block = "deny"
+confirm = "deny"
+observe = "silent"
+flag = "silent"
+on_malformed = "allow"
+
+[harness.protocol.output.deny]
+stdout = '{"decision":"deny","reason":${reason}}'
+```
+
+This is the MINIMUM that lints (review round 2 R2-1) — `prompt` and
+`session_start` are both optional: `input.prompt`/`events.prompt` are
+needed together only once `acme`'s own hook sends a `UserPromptSubmit`-
+shaped event to inspect (add both, plus `output.flag = "context"` and an
+`[harness.protocol.output.context]` template, at that point — an
+overlay declaring `events.prompt` without `input.prompt`, or leaving
+`flag` at anything but `"silent"` without `events.prompt`, is rejected);
+`events.session_start`/`output.session_start` are needed together only
+once `doctor`'s wiring/policy/log checklist has a session-start hook to
+announce through for this harness. Neither is required to make
+`--harness acme` usable — a harness with just `pre_tool` + `deny` judges
+every guarded tool call exactly like Claude Code does, just without a
+prompt-injection surface or a doctor announcement.
+
+Note the `stdout` line above: `${reason}` is written BARE, never
+`"${reason}"` — `rules lint` JSON-encodes the substituted value itself
+(quotes included), so a hand-written quote around the placeholder would
+double up into invalid JSON the harness can't parse. `rules lint` rejects
+a quoted placeholder outright, and separately checks every template
+still parses as JSON after substitution.
+
+`confirm = "deny"` needs no `ask_probe` — only `confirm = "ask"` does
+(lint cannot verify a harness honours `ask`, so it forces the author to
+record the evidence). After `bouncer rules lint`, `bouncer harness list`
+shows `harness acme overlay [common:harness.d/acme.toml]
+transport=stdin-json confirm=deny`, and `bouncer check --harness acme "rm
+-rf /"` dry-runs the SAME dispatch a real `acme` hook invocation would
+get. See [`policy.md`'s `[harness.protocol]`
+reference](../reference/policy.md#harnessprotocol-the-pipeline-a-generic-adapter-reads-adr-0006)
+for the full field table (roles, selectors, output-table lint rules) and
+the codecs a `transport`/`wiring` string can name.
+
 ## Steps
 
 1. Open (or create) the overlay file — `<configDir>/bouncer/policy.toml`,
@@ -124,4 +203,4 @@ for the full field table, merge rules, exclusions, and known shell limits.
   the file it came from.
 
 ---
-Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/adapter/policy.ts, src/cli-commands.ts, policy/harness.toml
+Source: src/policy/schema.ts, src/policy/lint.ts, src/policy/load.ts, src/adapter/policy.ts, src/cli-commands.ts, policy/harness/claude-code.toml

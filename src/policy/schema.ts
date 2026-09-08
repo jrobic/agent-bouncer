@@ -102,6 +102,98 @@ export interface HarnessPersistent {
   readonly reason: string;
 }
 
+// ADR-0006 § 3: the vocabulary a `[harness.protocol.tools]` row judges a
+// tool call by. Every family a role names is exhaustive for that row —
+// `command` (command + secret families), `read` (secret family only;
+// `pattern` matched literally, `path` after canonicalisation), `write`
+// (secret AND protected-write families on `path`, write-secret on `text`),
+// `fetch` (secret family on `url`/`urls`), `mcp` (mcp-write family on the
+// tool's own name, for any name not claimed by an explicit row).
+export type HarnessRole = 'command' | 'read' | 'write' | 'fetch' | 'mcp';
+
+// One `[harness.protocol.tools]` row — an exact tool name, or a trailing-
+// `*` glob (`"mcp__*"`), mapped to a role plus the dotted-path selectors
+// (§ below) that pull its fields out of the envelope's input bag. A
+// selector is unset when the row's role has nothing to say about that
+// field (e.g. `read`'s `text` is never set) — never an empty string,
+// which would be a selector naming the input's own root.
+export interface HarnessToolRow {
+  readonly role: HarnessRole;
+  readonly command?: string;
+  readonly path?: string;
+  readonly pattern?: string;
+  readonly text?: string;
+  readonly url?: string;
+  readonly urls?: string;
+}
+
+// ADR-0006 § 4: the action a degraded abstract verdict renders as.
+// `silent` has no template — nothing reaches stdout.
+export type HarnessAction = 'deny' | 'ask' | 'context' | 'silent';
+
+export interface HarnessOutputTable {
+  readonly block: HarnessAction;
+  readonly confirm: HarnessAction;
+  readonly observe: HarnessAction;
+  readonly flag: HarnessAction;
+  readonly on_malformed: 'allow' | 'deny';
+  // Mandatory (lint-enforced) whenever any action above is "ask" — the
+  // written, measured reason a human believes this harness actually
+  // surfaces an interactive prompt for it (lint cannot verify the
+  // harness's own behavior, only that the author committed to a reason).
+  readonly ask_probe?: string;
+}
+
+// Keyed by the ACTION name (not the abstract verdict) — "silent" carries
+// no template, so this table only ever has up to four entries.
+export type HarnessTemplateKey = 'deny' | 'ask' | 'context' | 'session_start';
+
+// A template may render `stdout`, set the process `exit` code, or both —
+// Claude Code's four templates only ever set `stdout` (exit stays the
+// process default), a future shim-based harness may need `exit` instead.
+export interface HarnessTemplate {
+  readonly stdout?: string;
+  readonly exit?: number;
+}
+
+// Review round 2 R2-1: `prompt`/`session_start` are OPTIONAL — a harness
+// that never judges prompts (or has no doctor-facing SessionStart
+// surface) declares neither, rather than being forced to lie about
+// fields it has no envelope shape for. `src/policy/harness.ts`'s
+// coherence checks keep `input.prompt` and `events.prompt` in lockstep,
+// and gate `output.flag = "context"`/`output.session_start` on the
+// matching event being declared.
+export interface HarnessProtocolInput {
+  readonly event: string;
+  readonly tool: string;
+  readonly input: string;
+  readonly session: string;
+  readonly prompt?: string;
+  readonly cwd: string;
+}
+
+export interface HarnessProtocolEvents {
+  readonly pre_tool: string;
+  readonly prompt?: string;
+  readonly session_start?: string;
+}
+
+// ADR-0006 § 3/6: the full declaration a harness's `run()` pipeline reads
+// — transport, input map, event names, the tools map, the output table
+// and its templates, plus the wiring codec `doctor` uses to prove the
+// hook is actually installed. `wiring` is optional: a harness declared
+// without one gets `wiring: not checkable (declared harness)` in doctor,
+// visible rather than silently green.
+export interface HarnessProtocol {
+  readonly transport: string;
+  readonly wiring?: string;
+  readonly input: HarnessProtocolInput;
+  readonly events: HarnessProtocolEvents;
+  readonly tools: Readonly<Record<string, HarnessToolRow>>;
+  readonly output: HarnessOutputTable;
+  readonly templates: Readonly<Partial<Record<HarnessTemplateKey, HarnessTemplate>>>;
+}
+
 export interface HarnessDeclaration {
   readonly id: string;
   readonly dir: readonly string[];
@@ -110,6 +202,7 @@ export interface HarnessDeclaration {
   readonly witness: string;
   readonly reason: string;
   readonly persistent: readonly HarnessPersistent[];
+  readonly protocol?: HarnessProtocol;
 }
 
 export interface DerivedHarnessRule extends RegexRule {
@@ -124,6 +217,7 @@ export type HarnessOverlay = Readonly<{
   witness?: string;
   reason?: string;
   persistent?: readonly HarnessPersistent[];
+  protocol?: HarnessProtocol;
 }>;
 
 export interface RulesPolicy {

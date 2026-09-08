@@ -3,16 +3,21 @@
 // tests/cli-commands-doctor.test.ts all built the same three literals
 // independently before this round; a prior review round flagged the drift
 // risk (FULL_MATCHER hand-typed as a THIRD copy of the tool list doctor.ts
-// itself checks against). FULL_MATCHER is now built FROM
-// src/adapter/doctor.ts's own EXPECTED_PRETOOLUSE_TOOLS — one source, not
-// a dual that can silently fall out of step with the real check.
+// itself checks against). FULL_MATCHER is now built FROM the embedded
+// claude-code baseline declaration's own `protocol.tools` map (ADR-0006
+// § 3), through the SAME representativeToolNames the hook-file codec's
+// own coverage check uses (src/adapter/codecs/hook-file.ts) — one source,
+// not a dual that can silently fall out of step with the real check.
 //
 // This file also doubles as the tracked example doctor.ts's own comment
 // points readers at: scratch/demo-settings.json is real but gitignored (a
 // clone has no copy of it), while this fixture ships with the repo.
 
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
-import { EXPECTED_PRETOOLUSE_TOOLS } from '../src/adapter/doctor.ts';
+import { representativeToolNames } from '../src/adapter/codecs/hook-file.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
+
+const CLAUDE_CODE_PROTOCOL = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!.protocol!;
 
 export const BOUNCER_COMMAND = '/fake/checkout/dist/bouncer run';
 export const CANARY_COMMAND = buildCanaryCommand('/fake/checkout/dist/bouncer');
@@ -38,7 +43,7 @@ function escapeRegExp(literal: string): string {
 // A matcher that covers every tool doctor.ts's own PreToolUse coverage
 // check expects — derived, not hand-typed, so this fixture cannot drift
 // out of sync with the list it exists to satisfy.
-export const FULL_MATCHER = EXPECTED_PRETOOLUSE_TOOLS.map(escapeRegExp).join('|');
+export const FULL_MATCHER = representativeToolNames(CLAUDE_CODE_PROTOCOL.tools).map(escapeRegExp).join('|');
 
 export const HEALTHY_HOOKS = {
   PreToolUse: [

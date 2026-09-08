@@ -127,11 +127,17 @@ assistant, the rows derived, overlays merging by `id`.
    wiring    = "hook-file"          # doctor: a JSON hook file naming the events
 
    [harness.protocol.input]
-   event = "hook_event_name"; tool = "tool_name"; input = "tool_input"
-   session = "session_id";    prompt = "prompt";      cwd = "cwd"
+   event   = "hook_event_name"
+   tool    = "tool_name"
+   input   = "tool_input"
+   session = "session_id"
+   prompt  = "prompt"
+   cwd     = "cwd"
 
    [harness.protocol.events]
-   pre_tool = "PreToolUse"; prompt = "UserPromptSubmit"; session_start = "SessionStart"
+   pre_tool      = "PreToolUse"
+   prompt        = "UserPromptSubmit"
+   session_start = "SessionStart"
 
    [harness.protocol.tools]                  # name → role + field selectors
    Bash         = { role = "command", command = "command" }
@@ -150,7 +156,10 @@ assistant, the rows derived, overlays merging by `id`.
    "mcp__*"     = { role = "mcp" }
 
    [harness.protocol.output]
-   block = "deny"; confirm = "ask"; observe = "silent"; flag = "context"
+   block = "deny"
+   confirm = "ask"
+   observe = "silent"
+   flag = "context"
    on_malformed = "allow"
    ask_probe = "2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
 
@@ -338,3 +347,4 @@ assistant, the rows derived, overlays merging by `id`.
 |---|---|
 | 2026-09-07 | Proposed after the design session (facts 1–5 measured the same day; decisions on file-declared adapters, overlay-declared harnesses with guard rails, dumb printed shims, flag CLI, codex then pi-agent). |
 | 2026-09-07 | Accepted the same day; build starts with ticket 15a on `feat/15a-adapter-seam`. |
+| 2026-09-07 | Built on `feat/15a-adapter-seam` (ticket 15a): § 1–6, § 8–9 for Claude Code only, `policy/harness.toml` split into `policy/harness/<id>.toml` × 6, `omp` renamed `pi-agent`, `--harness <id>` on `run`/`check`/`doctor`/`audit` plus `harness list`. Claude Code byte-identical, proven by replaying `fixtures/protocol/claude-code.json` (captured from installed binary `9ee2286`) through the refactored pipeline. Gate commit pending human approval. |

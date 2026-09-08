@@ -122,7 +122,7 @@ describe('loadCurrentPolicy(): harness overlays use a real temporary layer', () 
       reason = "test"
     `);
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('inherits persistent entries');
   });
@@ -149,8 +149,29 @@ describe('run(): Story 19 — the audit log opens with a header naming active ov
       { id: 'curl-file-upload', action: 'disable', reason: 'test: proving the audit header names this override' },
     ]);
     expect(lines[0].relaxations).toEqual([]);
+    // review round 1 S-2: snake_case, matching every other field in this
+    // file (session_id, tool_name, rule_id) — no harness was declared or
+    // extended by this overlay, so the list is empty even though the
+    // header itself fires (the override alone is enough to trigger it).
+    expect(lines[0].overlay_harnesses).toEqual([]);
     // The real verdict follows the header, not before it.
     expect(lines[1].rule_id).toBe('rm-rf-dangerous');
+  });
+
+  test('an overlay that only extends a harness declaration (no override/relaxation) still triggers the header, naming it in overlay_harnesses', async () => {
+    const accountDir = await accountWithOverlay(`
+      [[harness]]
+      id = "claude-code"
+      dir = ["(^|/)\\\\.claude-x"]
+    `);
+    await run(RM_RF_ENVELOPE);
+
+    const logContent = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8');
+    const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
+    expect(lines[0].kind).toBe('audit-header');
+    expect(lines[0].overrides).toEqual([]);
+    expect(lines[0].relaxations).toEqual([]);
+    expect(lines[0].overlay_harnesses).toEqual(['claude-code']);
   });
 
   test('an account with no active override/relaxation never gets a header, even across rotation-free runs', async () => {
@@ -219,10 +240,10 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
       '10-npm.toml',
       '[[rules.command.bash]]\nid = "block-npm-publish"\nregex = "npm publish"\nreason = "test"\n',
     );
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(true);
-    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy() always
+    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy('claude-code') always
     // reads the account's own overlay as the "profile" layer now.
     expect(loaded.overlayFiles).toEqual(['profile:policy.d/10-npm.toml']);
     const entry = loaded.effectiveRules.find((r) => r.rule.id === 'block-npm-publish');
@@ -242,7 +263,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
       '10-extra.toml',
       '[[rules.command.bash]]\nid = "from-policy-d"\nregex = "from-policy-d"\nreason = "test"\n',
     );
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayFiles).toEqual(['profile:policy.toml', 'profile:policy.d/10-extra.toml']);
     const ids = loaded.policy.command.bash.map((r) => r.id);
@@ -264,7 +285,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
       '10-a.toml',
       '[[rules.command.bash]]\nid = "rule-from-10-a"\nregex = "shared-trigger"\nreason = "first, should win"\n',
     );
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayFiles).toEqual(['profile:policy.d/10-a.toml', 'profile:policy.d/20-b.toml']);
     const hit = loaded.policy.command.bash.find((r) => r.regex === 'shared-trigger');
@@ -281,7 +302,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     );
     await writePolicyDFile(accountDir, '20-broken.toml', 'this is [not valid toml {{{');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('policy.d/20-broken.toml');
     expect(loaded.policy.command.bash.map((r) => r.id)).not.toContain('would-have-worked');
@@ -298,7 +319,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
 
   test('an empty/missing policy.d directory is not a failure', async () => {
     await freshAccountDir(); // no bouncer/ dir at all, let alone policy.d/
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(false);
   });
@@ -307,7 +328,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer', 'policy.d'), { recursive: true });
     await writeFile(join(accountDir, 'bouncer', 'policy.d', 'README.md'), '# not a policy file\n', 'utf8');
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(false);
   });
@@ -340,7 +361,7 @@ describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is
     await writeFile(lockedPath, 'this content is never actually read', 'utf8');
     await chmod(lockedPath, 0o000);
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('policy.d/20-locked.toml');
     // Not dropped as "absent" — the readdir-proved-present file's failure
@@ -363,7 +384,7 @@ describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is
       join(accountDir, 'bouncer', 'policy.d', '20-dangling.toml'),
     );
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('policy.d/20-dangling.toml');
     expect(loaded.policy.command.bash.map((r) => r.id)).not.toContain('would-have-worked');
@@ -378,7 +399,7 @@ describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is
       'utf8',
     );
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('policy.d/30-x.toml');
     expect(loaded.warnings.join(' ')).toContain('reason must not be empty');
@@ -393,7 +414,7 @@ describe('loadCurrentPolicy(): review round 2 — a blank policy.toml is "no ove
     await writeFile(join(accountDir, 'bouncer', 'policy.toml'), '   \n\n\t\n', 'utf8');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.overlayFiles).toEqual([]);
@@ -406,7 +427,7 @@ describe('loadCurrentPolicy(): review round 2 — a blank policy.toml is "no ove
     await writeFile(join(accountDir, 'bouncer', 'policy.toml'), '', 'utf8');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(false);
   });
 });

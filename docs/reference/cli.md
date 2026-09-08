@@ -6,22 +6,32 @@ prints a usage error to stderr and exits 1.
 Two output styles, by design: `rules list` (and every warning/summary
 line other subcommands print) is a stable, prefix-based, greppable
 contract — `^summary`, `^rule`, `^override`, `^overlay-relax`,
-`^warning`. `audit`'s report and `doctor`'s checklist are free-form
-prose for a human to read; their exact wording is not a contract and may
-change between versions.
+`^harness`, `^warning`. `audit`'s report and `doctor`'s checklist are
+free-form prose for a human to read; their exact wording is not a
+contract and may change between versions.
 
 ## `run`
 
-Reads one Claude Code hook envelope (JSON) from stdin, writes a verdict
-(JSON) to stdout if there's one to give, and always exits 0 — this is
-the hook entrypoint Claude Code itself invokes, and a non-zero exit or a
-crash reads to Claude Code as "no hook ran," the opposite of fail-closed.
+Reads one harness's declared stdin-json hook envelope, writes a verdict
+(JSON) to stdout if there's one to give, and exits 0 for a recognized
+harness — this is the hook entrypoint the target harness itself invokes,
+and a non-zero exit or a crash reads to most harnesses as "no hook ran,"
+the opposite of fail-closed. The specific envelope shape, event names,
+tool-name → judged-call mapping, and stdout template are ALL read from
+the target harness's own declaration (`policy/harness/<id>.toml`'s
+`[harness.protocol]`, ADR-0006) — this page describes Claude Code's
+(the default, `claude-code`), which reproduces the pre-ADR-0006 binary
+byte for byte.
 
 ```sh
-bouncer run < envelope.json
+bouncer run [--harness <id>] < envelope.json
 ```
 
 **Flags:**
+- `--harness <id>` — judge against `<id>`'s own declaration instead of
+  the default `claude-code`. Missing its value, or immediately followed
+  by another flag, is a usage error (exits 1) — the next flag is never
+  silently swallowed as if it were the id.
 - `--shadow` — observe-only mode (ticket 08). Evaluates every event
   exactly as normal (same dispatch, same policy, same logging) but NEVER
   writes to stdout, on any event shape: no deny, no ask, no
@@ -32,21 +42,47 @@ bouncer run < envelope.json
   entry instead — there is nowhere else for it to go once stdout is
   suppressed). See `docs/how-to/wire-into-claude-code.md`'s "shadow
   first" section for wiring it alongside the existing guards during a
-  migration window.
+  migration window. Does NOT suppress the unknown-harness exit-2 signal
+  below — that is a wiring-configuration failure, not a verdict shadow
+  ever monitors.
 
-**Dispatch by `hook_event_name`:** `PreToolUse`, `UserPromptSubmit`,
-`SessionStart` are handled; anything else (a future event, a typo, a
-missing field) produces no output — silent, by contract, never a guess.
+**Dispatch by the harness's own declared event names:** for Claude Code,
+`PreToolUse`, `UserPromptSubmit`, `SessionStart` are handled; anything
+else (a future event, a typo, a missing field) produces no output —
+silent, by contract, never a guess.
 
-**Fail-open contract:** empty stdin or invalid JSON produces no output,
-the same as an unrecognized event. A throw during policy dispatch (a
-policy-loading edge case) retries once against the embedded baseline
-before giving up silently — see `docs/reference/policy.md`'s
-fail-closed behavior for what "retry against the baseline" means at the
-policy level.
+**Malformed-envelope contract (ADR-0006 § 4, review round 1 S-3):** empty
+stdin or invalid JSON is governed by the TARGET harness's own declared
+`on_malformed` — `"allow"` (Claude Code's contract, unchanged) produces
+no output, silent; `"deny"` renders that harness's own `deny` template
+(`${reason}` = `envelope-malformed: unreadable or malformed hook
+envelope — failing closed`) and logs a `policy-warning` entry. An
+UNRECOGNIZED EVENT (a well-formed envelope naming a future event, a typo,
+a missing `hook_event_name`) is a separate case and always stays silent
+regardless of `on_malformed` — it is not malformed, it is simply not
+ours to act on. A throw during policy dispatch (a policy-loading edge
+case) retries once against the embedded baseline before giving up
+silently — see `docs/reference/policy.md`'s fail-closed behavior for
+what "retry against the baseline" means at the policy level.
+
+**Fail-closed contract (ADR-0006 § 6):** `--harness <id>` naming an id no
+layer declares, an id declared without a usable `[harness.protocol]`, or
+whose protocol block was rejected by `rules lint`, produces NO stdout, one
+stderr line, and exits 2 — the one signal that needs no declaration to
+interpret (every harness this repo targets reads a non-zero hook exit as
+a hard stop):
+
+```sh
+$ bouncer run --harness nope < envelope.json
+bouncer: harness "nope" has no usable protocol declaration — failing closed
+$ echo $?
+2
+```
 
 **Output shapes** (`hookSpecificOutput`, one object per line, only
-written when there's something to say):
+written when there's something to say — Claude Code's own four
+templates, `policy/harness/claude-code.toml`'s
+`[harness.protocol.output.*]`):
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"rm-rf-dangerous: rm -rf targeting a dangerous path: /"}}
@@ -64,7 +100,10 @@ written when there's something to say):
 An unremarkable tool call, a clean prompt, or a healthy `SessionStart`
 produces no stdout at all.
 
-**Exit code:** always 0.
+**Exit code:** 0 for a recognized harness (regardless of verdict); 2 for
+an unusable `--harness <id>` (see above). A future harness's template MAY
+set a different exit code (ADR-0006 § 3: "a template may set `exit`
+instead of, or with, `stdout`") — Claude Code's four templates never do.
 
 **Shadow mode example** — same `rm -rf /` envelope that would normally
 deny, run with `--shadow`:
@@ -74,7 +113,7 @@ $ bouncer run --shadow < envelope.json
 # nothing on stdout — the tool call proceeds; bouncer is only watching,
 # the TS guards are what's actually enforcing during a shadow window
 $ tail -1 <configDir>/logs/hooks/bouncer.log
-{"timestamp":"...","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","mode":"shadow"}
+{"timestamp":"...","harness":"claude-code","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","mode":"shadow"}
 ```
 
 ## `ping`
@@ -96,14 +135,34 @@ bouncer ping
 
 ## `check`
 
-Dry-runs a Bash command string against the effective policy (baseline +
-account overlay) and prints the verdict it would produce — the same
-`PreToolUse` dispatch `run` uses, so a command that also trips the
+Dry-runs a Bash-shaped command string against the effective policy
+(baseline + account overlay) and the TARGET harness's own declaration
+(default `claude-code`), printing the verdict it would produce — the
+same `PreToolUse` dispatch `run` uses, so a command that also trips the
 secret family is reported faithfully, not command-family-only.
+Dispatched through the harness's OWN first `[harness.protocol.tools]`
+row whose `role = "command"`, in declaration order (review round 3
+R3-2) — never a hardcoded `"Bash"` name, so this works identically for
+claude-code's `Bash` and a future harness's differently-named command
+tool (pi-agent's `bash`, 15c). The command string is placed at THAT
+row's own `command` selector (review round 4 R4-1) — a plain key, a
+selector containing a literal dot (a flat key, not nested traversal —
+`neutral-call.ts` never splits a selector on `.`), or a `[]` array
+selector (wrapped in a one-element array, as an object under the
+selector's own subfield, or as the bare string when there is no
+subfield) — never a hardcoded `command` key, so this works for a row
+whose selector is named anything at all. A harness declaring no
+`role = "command"` row with a usable `command` selector fails with an
+explicit error line, below.
 
 ```sh
-bouncer check "<command>"
+bouncer check [--harness <id>] "<command>"
 ```
+
+**Flags:**
+- `--harness <id>` — check against `<id>`'s own declaration and output
+  table instead of the default `claude-code`. Missing its value, or
+  immediately followed by another flag, is a usage error (exits 1).
 
 A missing or empty command argument is a usage error (exits 1 before
 even loading policy).
@@ -112,21 +171,36 @@ even loading policy).
 
 ```
 $ bouncer check "rm -rf /"
-block [rm-rf-dangerous] rm -rf targeting a dangerous path: /
+block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (claude-code)
 
 $ bouncer check "git push origin main"
-confirm [git-protected] git push can rewrite history, mutate a remote, or discard work — confirm before running
+confirm [git-protected] git push can rewrite history, mutate a remote, or discard work — confirm before running → ask (claude-code)
 
 $ bouncer check "ls -la"
 allow
+
+$ bouncer check --harness codex "rm -rf /"
+bouncer: harness "codex" has no usable protocol declaration
 ```
+
+The trailing ` → <action> (<id>)` names the DEGRADED action a `block`/
+`confirm` verdict maps to under the target harness's own output table
+(ADR-0006 § 9) — always present on a `block`/`confirm` line (the action
+vocabulary, `deny`/`ask`, never literally equals the verdict word), never
+on `allow`. A harness with no usable protocol (`--harness <id>` naming
+one that is undeclared, or declared without `[harness.protocol]`) fails
+with an explicit error line instead of a verdict — same for a harness
+whose protocol declares no `role = "command"` tool row at all
+(`bouncer: harness "<id>" declares no "role = \"command\"" tool row to
+check against`, review round 3 R3-2).
 
 A rejected overlay prepends `warning: <message>` lines before the
 verdict line.
 
 **Exit code:** 0 for every verdict (`block`, `confirm`, `allow`) — `check`
 reports what would happen, it never fails because the answer was
-"denied." Only a missing argument exits non-zero.
+"denied." A missing argument, or an unusable `--harness <id>`, exits
+non-zero.
 
 ## `rules lint`
 
@@ -251,16 +325,29 @@ Provenance values: `baseline`, `overlay` (an overlay addition or a new
 overlay harness), `baseline+overlay` (a baseline harness extended by an
 overlay), `override(disable|replace|relax)`.
 
+**Harness lines (ADR-0006 § 5):** one `harness <id> <provenance>
+[<layer>:<file>] transport=<t|none> confirm=<ask|deny|none> [ask_probe]`
+line per harness DECLARED OR EXTENDED BY AN OVERLAY — never the plain
+six-baseline case, which lists none (same filter, same source line
+format, as `doctor`'s own checklist; `harness list` below is the one
+surface that always shows the full inventory) — listed right after the
+override/relaxation lines, before the per-rule lines:
+
+```
+harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny
+```
+
 **Exit code:** always 0.
 
 ## `doctor`
 
-The wiring/policy/log checklist — see `docs/how-to/wire-into-claude-code.md`.
-Also reachable as a `SessionStart` hook through `run` (same checks,
-silent when healthy, `additionalContext` otherwise).
+The wiring/policy/log checklist for the TARGET harness (default
+`claude-code`) — see `docs/how-to/wire-into-claude-code.md`. Also
+reachable as a `SessionStart` hook through `run` (same checks, silent
+when healthy, `additionalContext` otherwise).
 
 ```sh
-bouncer doctor [--settings <path>] [--print-canary]
+bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
 ```
 
 **Flags:**
@@ -274,13 +361,19 @@ bouncer doctor [--settings <path>] [--print-canary]
   result, it writes the fixed `PreToolUse` deny envelope and exits 0. This
   mode prints no checklist and exits 1 when it cannot find a primary bouncer
   entry.
+- `--harness <id>` — check `<id>`'s own wiring/policy/log instead of the
+  default `claude-code`. Missing its value, or immediately followed by
+  another flag, is a usage error (exits 1). Fails outright (before any
+  check runs) when `<id>` is not declared by any layer.
 
-
-**Output:** without `--print-canary`, one `[pass]`/`[fail]` line per check
-(`settings`, `wiring:PreToolUse`, `wiring:canary`,
-`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `log`), then an
-`overrides: N active` line and, when `N > 0`, one indented line per active
-override/relaxation. Always printed in full, healthy or not.
+**Output:** without `--print-canary`, one `[pass]`/`[fail]`/`[warn]` line
+per check (`settings`, `wiring:PreToolUse`, `wiring:canary`,
+`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `log`), then
+an `overrides: N active` line and, when `N > 0`, one indented line per
+active override/relaxation, then one `harness <id> ...` line (ADR-0006
+§ 5) per harness the account's overlay declared or extended — never the
+plain baseline six, which need no announcement. Always printed in full,
+healthy or not.
 
 ```
 [pass] settings — settings.json parsed (/path/to/settings.json)
@@ -291,6 +384,36 @@ override/relaxation. Always printed in full, healthy or not.
 [pass] policy — overlay active (54 effective rules; common: 4 files, profile: 0 files)
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
+```
+
+**A harness declared without a `wiring` codec (ADR-0006 § 6):** the four
+`settings`/`wiring:*` checks collapse into ONE, tagged `[warn]` — never
+`[pass]` (that would claim the wiring was actually verified, which it
+wasn't) and never `[fail]` (nothing is broken; `ok` stays true, exit 0)
+— deliberately visible rather than silently green (review round 3
+R3-1). `--harness codex` in this ticket, since `codex.toml` carries no
+`[harness.protocol]` at all (15b's job), fails outright before doctor
+even runs (see `run`'s exit-2 contract above); an overlay-declared
+harness WITH a protocol but no `wiring` reads:
+
+```
+[warn] wiring — not checkable (declared harness)
+```
+
+Reached as a `SessionStart` hook (same checks, same tag) too: a `[warn]`
+alone, with every other check passing and no override/relaxation active,
+is NOT the fully-silent case — it joins the calm "announces" branch next
+to overrides (never the scream, since nothing is actually broken):
+
+```
+bouncer doctor: 1 check(s) unprovable, not broken — visible rather than silently green:
+  - wiring: not checkable (declared harness)
+```
+
+**Overlay-declared/extended harnesses (ADR-0006 § 5):**
+
+```
+harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny
 ```
 
 The `policy` line's trailing `; common: N files, profile: M files`
@@ -355,8 +478,8 @@ complete audit can retain direct checks and `run < file` probes. `--diff`
 same window.
 
 ```sh
-bouncer audit [--days <n>] [--sessions-only] [--suggest]
-bouncer audit --diff [--days <n>] [--sessions-only] [--ts-logs <dir>]
+bouncer audit [--days <n>] [--sessions-only] [--suggest] [--harness <id>]
+bouncer audit --diff [--days <n>] [--sessions-only] [--ts-logs <dir>] [--harness <id>]
 ```
 
 **Flags:**
@@ -379,6 +502,10 @@ bouncer audit --diff [--days <n>] [--sessions-only] [--ts-logs <dir>]
   under (same `logs/hooks/<name>.log` layout bouncer's own log uses).
   Only valid alongside `--diff`; defaults to the SAME config dir bouncer
   itself is reading from.
+- `--harness <id>` — resolve `<id>`'s own log instead of the default
+  `claude-code`'s (ADR-0006 § 9). Missing its value, or immediately
+  followed by another flag, is a usage error (exits 1). Fails outright
+  when `<id>` is not declared by any layer.
 
 Any other token (a typo'd flag, a stray positional, `--ts-logs` without
 `--diff`, `--diff` together with `--suggest`) is a usage error — never
@@ -436,5 +563,40 @@ malformed *line*, on either side, is skipped, not fatal). 1 only on a
 usage error (a bad `--days` value, an unrecognized flag, `--diff` and
 `--suggest` combined, `--ts-logs` without `--diff`).
 
+## `harness list`
+
+One greppable line per harness this account knows about (ADR-0006 § 9):
+every one of the six baseline files, plus any id the common layer
+declares or extends.
+
+```sh
+bouncer harness list
+```
+
+**Flags:** none.
+
+**Output:**
+
+```
+harness claude-code baseline transport=stdin-json confirm=ask ask_probe="2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
+harness codex baseline transport=none confirm=none
+harness opencode baseline transport=none confirm=none
+harness pi-agent baseline transport=none confirm=none
+harness gemini-cli baseline transport=none confirm=none
+harness cursor baseline transport=none confirm=none
+harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny
+```
+
+`transport=none`/`confirm=none` names a baseline harness with no
+`[harness.protocol]` yet (every baseline harness but `claude-code` in
+this ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit` fails
+closed for it (see `run`'s exit-2 contract above). Provenance —
+`baseline`, `overlay [<layer>:<file>]`, `baseline+overlay [<layer>:<file>]`
+— and the trailing `transport=`/`confirm=`/`ask_probe=` fields are the
+SAME line `rules list` and `doctor` announce an overlay-touched harness
+with (one source, `src/adapter/doctor.ts`'s `harnessAnnouncementLine`).
+
+**Exit code:** always 0.
+
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/envelopes.ts, src/adapter/policy.ts, src/adapter/log.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/codecs/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts

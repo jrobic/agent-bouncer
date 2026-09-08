@@ -1,4 +1,4 @@
-// End-to-end proof of ADR-0001 (ticket 20): the real `loadCurrentPolicy()`
+// End-to-end proof of ADR-0001 (ticket 20): the real `loadCurrentPolicy('claude-code')`
 // path reads a common layer (~/.agents/bouncer/, resolved through
 // src/adapter/policy.ts's commonRoot()) natively, with no symlink and no
 // per-profile configuration, and the profile layer wins on a shared
@@ -19,11 +19,13 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { HOOK_NAME } from '../src/adapter/constants.ts';
-import { hookLogPath } from '../src/adapter/log-path.ts';
+import { hookLogPathFor } from '../src/adapter/log-path.ts';
 import { loadCurrentPolicy } from '../src/adapter/policy.ts';
 import { run } from '../src/adapter/run.ts';
 import { runDoctor, runRulesLint, runRulesList } from '../src/cli-commands.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 
+const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 // tests/setup.ts's global preload always sets a throwaway HOME before any
 // test file runs — captured here, ORIGINAL_HOME is never legitimately
@@ -99,7 +101,7 @@ const RM_RF_ENVELOPE = JSON.stringify({
 describe('loadCurrentPolicy(): common absent is a normal, passing state', () => {
   test('no ~/.agents/bouncer/ at all: baseline alone, common file count is 0, never a warning', async () => {
     await sandbox(); // neither layer configured at all — neither root directory exists yet
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.layers).toEqual([{ name: 'common', files: [] }, { name: 'profile', files: [] }]);
   });
@@ -129,7 +131,7 @@ describe('loadCurrentPolicy(): a profile whose own overlay is empty runs on the 
       'policy.d/100-personal.toml',
       '[[relax]]\nlist = "command.git.safe_subcommands"\nvalue = "push"\nreason = "shared across every profile"\n',
     );
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.policy.command.git.safe_subcommands).toContain('push');
     expect(loaded.activeRelaxations).toHaveLength(1);
@@ -164,7 +166,7 @@ describe('loadCurrentPolicy(): a profile whose own overlay is empty runs on the 
     await mkdir(box.profilePolicyDir, { recursive: true });
     await writeCommon(box, 'policy.toml', '[[override]]\nrule = "mkfs"\naction = "disable"\nreason = "test"\n');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.layers).toEqual([
       { name: 'common', root: box.commonPolicyDir, files: ['policy.toml'] },
       { name: 'profile', root: box.profilePolicyDir, files: [] },
@@ -183,7 +185,7 @@ describe('loadCurrentPolicy(): the profile wins over the common layer on a share
       '[[rules.command.bash]]\nid = "shared-id"\nregex = "common-pattern"\nreason = "common"\n');
     await writeProfile(box, 'policy.toml', '[[rules.command.bash]]\nid = "shared-id"\nregex = "profile-pattern"\nreason = "profile"\n');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     const matches = loaded.effectiveRules.filter((r) => r.rule.id === 'shared-id');
     expect(matches).toHaveLength(1);
@@ -204,7 +206,7 @@ describe('loadCurrentPolicy(): the profile wins over the common layer on a share
       '[[override]]\nrule = "curl-file-upload"\naction = "relax"\nverdict = "confirm"\nreason = "profile relaxes instead"\n',
     );
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.activeOverrides).toHaveLength(1);
     expect(loaded.activeOverrides[0]).toMatchObject({
@@ -237,7 +239,7 @@ describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejec
     await writeProfile(box, 'policy.toml',
       '[[rules.command.bash]]\nid = "would-still-work"\nregex = "would-still-work-trigger"\nreason = "test"\n');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     // The common layer as a WHOLE is rejected (one broken file rejects
     // its layer, not just itself) — its relax does NOT survive — but the
     // profile layer, untouched by the fault, stays fully live.
@@ -292,7 +294,7 @@ describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejec
     await writeCommon(box, 'policy.toml', 'this is [not valid toml {{{');
     await writeProfile(box, 'policy.toml', '[[rules.command.bash]]\nid = "would-have-worked"\nregex = "x"\nreason = "test"\n');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.overlayApplied).toBe(true);
     expect(loaded.warnings.join(' ')).toContain('common layer rejected');
     expect(loaded.warnings.join(' ')).toContain('policy.toml');
@@ -311,7 +313,7 @@ describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejec
 
     await run(RM_RF_ENVELOPE);
 
-    const logContent = await readFile(hookLogPath(HOOK_NAME), 'utf8');
+    const logContent = await readFile(hookLogPathFor(CLAUDE_CODE_HARNESS, HOOK_NAME), 'utf8');
     const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
     const warnings = lines.filter((l) => l.kind === 'policy-warning');
     expect(warnings).toHaveLength(2);
@@ -334,7 +336,7 @@ describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is reje
       '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "another-shape"\nreason = "test"\n',
     );
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     // The common layer never contained the fault — it stays fully live,
     // per-layer rejection (ADR-0001 § Rejection), exactly as ticket 21.
     expect(loaded.overlayApplied).toBe(true);
@@ -383,7 +385,7 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
     await mkdir(box.profilePolicyDir, { recursive: true });
     await symlink(join(box.commonPolicyDir, 'policy.d'), join(box.profilePolicyDir, 'policy.d'));
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     // The shared rule still loads exactly once, as "common" — never
     // twice, never dropped outright.
     expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
@@ -403,7 +405,7 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
     await mkdir(box.profilePolicyDir, { recursive: true });
     await symlink(box.commonPolicyDir, join(box.profilePolicyDir, 'policy.d'));
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
     expect(loaded.warnings).toHaveLength(1);
     expect(loaded.warnings[0]).toContain('profile policy resolves to the common root');
@@ -416,7 +418,7 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
     await mkdir(dirname(box.profilePolicyDir), { recursive: true });
     await symlink(box.commonPolicyDir, box.profilePolicyDir);
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.policy.command.bash.filter((r) => r.id === 'shared-rule')).toHaveLength(1);
     expect(loaded.warnings).toHaveLength(1);
     expect(loaded.warnings[0]).toContain('profile policy resolves to the common root');
@@ -431,7 +433,7 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
     await writeFile(join(box.profilePolicyDir, 'policy.toml'),
       '[[rules.command.bash]]\nid = "profile-own-rule"\nregex = "x"\nreason = "test"\n', 'utf8');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.policy.command.bash.map((r) => r.id)).not.toContain('profile-own-rule');
     expect(loaded.warnings).toHaveLength(1);
     expect(loaded.warnings[0]).toContain('remove the link');
@@ -443,7 +445,7 @@ describe('loadCurrentPolicy(): migration guard — the interim profile→common 
       '[[rules.command.bash]]\nid = "shared-rule"\nregex = "shared-trigger"\nreason = "test"\n');
     await writeProfile(box, 'policy.toml', '[[rules.command.bash]]\nid = "profile-rule"\nregex = "x"\nreason = "test"\n');
 
-    const loaded = await loadCurrentPolicy();
+    const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.policy.command.bash.map((r) => r.id)).toEqual(expect.arrayContaining(['shared-rule', 'profile-rule']));
   });

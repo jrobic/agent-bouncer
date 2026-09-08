@@ -12,8 +12,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run, runSessionStart } from '../src/adapter/run.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import { BOUNCER_COMMAND, CANARY_COMMAND, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+
+const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
@@ -160,13 +163,14 @@ describe('run: SessionStart in shadow mode (ticket 08) — never screams, logs w
 
 describe('runSessionStart: a throwing doctor check is caught, logged, and never crashes the hook', () => {
   const FAKE_LOADED: LoadResult = {
-    policy: {} as LoadResult['policy'],
+    policy: { harness: [] } as unknown as LoadResult['policy'],
     effectiveRules: [],
     warnings: [],
     overlayApplied: false,
     overlayFiles: [],
     activeOverrides: [],
     activeRelaxations: [],
+    overlayHarnessIds: [],
     layers: [], // irrelevant here — this test is about the throwing-check catch path, not layer provenance
   };
 
@@ -178,7 +182,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
     const throwingCheck = async (): Promise<never> => {
       throw new Error('doctor check exploded');
     };
-    const result = await runSessionStart(FAKE_LOADED, false, throwingCheck);
+    const result = await runSessionStart(CLAUDE_CODE_HARNESS, CLAUDE_CODE_HARNESS.protocol!, FAKE_LOADED, false, throwingCheck);
     expect(result.stdout).toBeNull(); // still never crashes the hook
 
     const logContent = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8');

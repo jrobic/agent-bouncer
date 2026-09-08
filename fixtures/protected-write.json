@@ -469,6 +469,20 @@
       ]
     },
     {
+      "id": "native-notebook-edit-protected-path-aws-key-new-source-confirm-only",
+      "toolName": "NotebookEdit",
+      "toolInput": {
+        "notebook_path": "~/.claude/settings.json",
+        "new_source": "const key = \"AKIAABCDEFGHIJKLMNOP\";"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "harness-settings"
+        }
+      ]
+    },
+    {
       "id": "bash-redirect-overwrite-confirm",
       "toolName": "Bash",
       "toolInput": {

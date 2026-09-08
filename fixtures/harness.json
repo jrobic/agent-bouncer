@@ -75,34 +75,34 @@
       "expected": [{ "verdict": "confirm", "ruleId": "bash-opencode-plugins" }]
     },
     {
-      "id": "omp-config-dir-parent",
+      "id": "pi-agent-config-dir-parent",
       "toolName": "Bash",
       "toolInput": { "command": "rm -rf ~/.omp" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config-dir" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-config-dir" }]
     },
     {
-      "id": "omp-config-dir-agent",
+      "id": "pi-agent-config-dir-agent",
       "toolName": "Bash",
       "toolInput": { "command": "rm -rf ~/.pi/agent" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config-dir" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-config-dir" }]
     },
     {
-      "id": "omp-config",
+      "id": "pi-agent-config",
       "toolName": "Bash",
       "toolInput": { "command": "echo x > ~/.omp/agent/config.yml" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-config" }]
     },
     {
-      "id": "omp-models",
+      "id": "pi-agent-models",
       "toolName": "Bash",
       "toolInput": { "command": "echo x > ~/.pi/agent/models.yaml" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-models" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-models" }]
     },
     {
-      "id": "omp-extensions",
+      "id": "pi-agent-extensions",
       "toolName": "Bash",
       "toolInput": { "command": "rm -rf ~/.omp/agent/extensions" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-extensions" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-extensions" }]
     },
     {
       "id": "gemini-cli-config-dir",
@@ -279,10 +279,10 @@
       "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-config" }]
     },
     {
-      "id": "declared-env-omp",
+      "id": "declared-env-pi-agent",
       "toolName": "Bash",
       "toolInput": { "command": "echo x > $PI_CODING_AGENT_DIR/config.yml" },
-      "expected": [{ "verdict": "confirm", "ruleId": "bash-omp-config" }]
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-pi-agent-config" }]
     },
     {
       "id": "brace-expansion",
@@ -311,7 +311,7 @@
       "expected": []
     },
     {
-      "id": "negative-excluded-omp-subtrees",
+      "id": "negative-excluded-pi-agent-subtrees",
       "toolName": "Bash",
       "toolInput": { "command": "rm -rf ~/.omp/cache ~/.omp/logs ~/.pi/node_modules" },
       "expected": []

@@ -11,7 +11,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
+import type { HarnessDeclaration } from '../src/policy/schema.ts';
 import {
   BOUNCER_COMMAND,
   BOUNCER_SHADOW_COMMAND,
@@ -20,6 +22,32 @@ import {
   HEALTHY_HOOKS,
   PING_WORD_COMMAND,
 } from './doctor-fixtures.ts';
+
+const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
+
+// Review round 3 R3-1: a declared harness with no `wiring` codec — the
+// `[warn]` case ("not checkable", never `[pass]`, never `[fail]`, `ok`
+// stays true). `events.session_start` is declared so buildSessionStartContext
+// has a real SessionStart form to check the calm-announce branch against.
+const NO_WIRING_HARNESS: HarnessDeclaration = {
+  id: 'mini',
+  dir: ['(^|/)\\.mini'],
+  env: ['MINI_HOME'],
+  witness: '~/.mini',
+  reason: 'test',
+  persistent: [],
+  protocol: {
+    transport: 'stdin-json',
+    input: { event: 'hook_event_name', tool: 'tool_name', input: 'tool_input', session: 'session_id', cwd: 'cwd' },
+    events: { pre_tool: 'PreToolUse', session_start: 'SessionStart' },
+    tools: { Bash: { role: 'command', command: 'command' } },
+    output: { block: 'deny', confirm: 'deny', observe: 'silent', flag: 'silent', on_malformed: 'allow' },
+    templates: {
+      deny: { stdout: '{"decision":"deny"}' },
+      session_start: { stdout: '{"sessionContext":${context}}' },
+    },
+  },
+};
 
 async function scratchSettingsPath(hooks: unknown): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
@@ -30,7 +58,7 @@ async function scratchSettingsPath(hooks: unknown): Promise<string> {
 
 function cleanLoadResult(overlayApplied = false): LoadResult {
   return {
-    policy: {} as LoadResult['policy'],
+    policy: { harness: [] } as unknown as LoadResult['policy'],
     effectiveRules: [
       { family: 'command.bash', rule: { id: 'mkfs', regex: 'mkfs', reason: 'x' }, provenance: 'baseline' },
     ],
@@ -39,6 +67,7 @@ function cleanLoadResult(overlayApplied = false): LoadResult {
     overlayFiles: overlayApplied ? ['policy.toml'] : [],
     activeOverrides: [],
     activeRelaxations: [],
+    overlayHarnessIds: [],
     // Empty on purpose: these fixtures test runDoctorChecks' OWN checks in
     // isolation from loadPolicyFromLayers, not the layer-count suffix
     // (tests/adapter-policy-layers.test.ts covers that, against the real
@@ -82,7 +111,7 @@ function loadResultWithOverrides(): LoadResult {
 describe('runDoctorChecks: wiring', () => {
   test('a fully wired settings.json passes every wiring check', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring).toHaveLength(4);
     expect(wiring.every((c) => c.ok)).toBe(true);
@@ -91,7 +120,7 @@ describe('runDoctorChecks: wiring', () => {
   test('removing PreToolUse fails only that wiring check, with an explicit message', async () => {
     const { PreToolUse: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(false);
     expect(preToolUse?.message).toContain('PreToolUse');
@@ -103,7 +132,7 @@ describe('runDoctorChecks: wiring', () => {
   test('removing UserPromptSubmit fails only that wiring check', async () => {
     const { UserPromptSubmit: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.ok).toBe(false);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
   });
@@ -111,7 +140,7 @@ describe('runDoctorChecks: wiring', () => {
   test('removing SessionStart fails only that wiring check (the doctor hook itself)', async () => {
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.ok).toBe(false);
   });
 
@@ -120,7 +149,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(false);
   });
@@ -130,7 +159,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: 'some-other-tool run' }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(false);
   });
 
@@ -145,7 +174,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: narrowMatcher, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(false);
   });
 
@@ -154,7 +183,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
   });
 
@@ -163,7 +192,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
   });
 
@@ -172,7 +201,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: '(unclosed', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(false);
     expect(preToolUse?.message.toLowerCase()).toContain('unparseable');
@@ -180,7 +209,7 @@ describe('runDoctorChecks: wiring', () => {
 
   test('a missing settings.json file fails every wiring check without throwing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
-    const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult());
+    const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring.every((c) => !c.ok)).toBe(true);
   });
@@ -196,7 +225,7 @@ describe('runDoctorChecks: wiring', () => {
         },
       ],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:canary')).toMatchObject({ ok: true });
   });
 
@@ -205,7 +234,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const canary = report.checks.find((check) => check.id === 'wiring:canary');
     expect(canary).toMatchObject({ ok: false });
     expect(canary?.message).toContain('missing');
@@ -220,7 +249,7 @@ describe('runDoctorChecks: wiring', () => {
         { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: buildCanaryCommand('/other/bouncer') }] },
       ],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const canary = report.checks.find((check) => check.id === 'wiring:canary');
     expect(canary).toMatchObject({ ok: false });
     expect(canary?.message).toContain('different binary path');
@@ -237,7 +266,7 @@ describe('runDoctorChecks: wiring', () => {
         },
       ],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const canary = report.checks.find((check) => check.id === 'wiring:canary');
     expect(canary).toMatchObject({ ok: false });
     expect(canary?.message).toContain('deny-on-failure');
@@ -251,7 +280,7 @@ describe('runDoctorChecks: wiring', () => {
         { matcher: FULL_MATCHER, hooks: [{ type: 'command', command: PING_WORD_COMMAND }] },
       ],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((check) => check.id === 'wiring:canary')).toMatchObject({
       ok: false,
       message: 'PreToolUse canary is missing for /fake/checkout/dist/bouncer',
@@ -263,7 +292,7 @@ describe('runDoctorChecks: wiring', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: '/bin/sh ping' }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((check) => check.id === 'wiring:PreToolUse')).toMatchObject({ ok: false });
     expect(report.checks.find((check) => check.id === 'wiring:canary')).toMatchObject({ ok: false });
   });
@@ -274,7 +303,7 @@ describe('runDoctorChecks: wiring', () => {
       UserPromptSubmit: HEALTHY_HOOKS.UserPromptSubmit,
       SessionStart: HEALTHY_HOOKS.SessionStart,
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.ok).toBe(false);
     expect(report.checks.find((check) => check.id === 'wiring:PreToolUse')).toMatchObject({ ok: false });
   });
@@ -291,7 +320,7 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
   });
 
@@ -300,7 +329,7 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(true);
     expect(preToolUse?.message.toLowerCase()).toContain('shadow mode');
@@ -308,7 +337,7 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
 
   test('a non-shadow wiring never mentions shadow mode', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.message.toLowerCase()).not.toContain('shadow');
   });
@@ -319,7 +348,7 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
       // UserPromptSubmit and SessionStart stay on the plain (non-shadow) command.
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.message.toLowerCase()).toContain('shadow');
     expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.message.toLowerCase()).not.toContain('shadow');
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.message.toLowerCase()).not.toContain('shadow');
@@ -336,7 +365,7 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
         },
       ],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const canary = report.checks.find((check) => check.id === 'wiring:canary');
     expect(canary).toMatchObject({ ok: true });
     expect(canary?.message).toContain('canary remains enforcing');
@@ -354,7 +383,7 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_TYPO_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(false);
     expect(preToolUse?.message).toContain('--shadwo');
@@ -366,7 +395,7 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_SHADOW_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(true);
   });
 
@@ -375,7 +404,7 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
       ...HEALTHY_HOOKS,
       PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_TYPO_COMMAND }] }],
     });
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(false);
     expect(report.checks.find((c) => c.id === 'wiring:UserPromptSubmit')?.ok).toBe(true);
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.ok).toBe(true);
@@ -385,7 +414,7 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
 describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs. absent)', () => {
   test('a missing settings.json is a healthy "settings" check — normal, unconfigured, not corrupt', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
-    const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult());
+    const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'settings')?.ok).toBe(true);
   });
 
@@ -393,7 +422,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
     const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
     const path = join(dir, 'settings.json');
     await writeFile(path, 'not valid json {{{', 'utf8');
-    const report = await runDoctorChecks(path, cleanLoadResult());
+    const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const settings = report.checks.find((c) => c.id === 'settings');
     expect(settings?.ok).toBe(false);
     expect(settings?.message.toLowerCase()).toContain('malformed');
@@ -403,7 +432,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
     const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
     const path = join(dir, 'settings.json');
     await writeFile(path, 'not valid json {{{', 'utf8');
-    const report = await runDoctorChecks(path, cleanLoadResult());
+    const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring.every((c) => !c.ok)).toBe(true);
     for (const check of wiring) {
@@ -416,7 +445,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
     const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
     const path = join(dir, 'settings.json');
     await writeFile(path, '[1,2,3]', 'utf8');
-    const report = await runDoctorChecks(path, cleanLoadResult());
+    const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'settings')?.ok).toBe(false);
   });
 });
@@ -424,7 +453,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
 describe('runDoctorChecks: policy', () => {
   test('a broken overlay (baseline-active) fails the policy check with the warning', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, brokenOverlayLoadResult());
+    const report = await runDoctorChecks(settingsPath, brokenOverlayLoadResult(), CLAUDE_CODE_HARNESS);
     const policy = report.checks.find((c) => c.id === 'policy');
     expect(policy?.ok).toBe(false);
     expect(policy?.message).toContain('baseline');
@@ -432,13 +461,13 @@ describe('runDoctorChecks: policy', () => {
 
   test('no overlay configured at all is a healthy pass (baseline by design, not by failure)', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult(false));
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(false), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'policy')?.ok).toBe(true);
   });
 
   test('a valid overlay applied is a healthy pass', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult(true));
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(true), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'policy')?.ok).toBe(true);
   });
 });
@@ -450,7 +479,7 @@ describe('runDoctorChecks: log writability', () => {
     const original = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
-      const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+      const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(true);
     } finally {
       if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
@@ -467,7 +496,7 @@ describe('runDoctorChecks: log writability', () => {
     const original = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
-      const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+      const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(false);
     } finally {
       await chmod(join(dir, 'logs'), 0o700);
@@ -489,7 +518,7 @@ describe('runDoctorChecks: log writability', () => {
     const original = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
-      const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+      const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(false);
     } finally {
       await chmod(logFile, 0o600);
@@ -510,7 +539,7 @@ describe('runDoctorChecks: log writability', () => {
     const original = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
-      const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+      const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(true);
       // The check proves writability by opening for append and closing —
       // it must never actually write anything itself.
@@ -527,14 +556,14 @@ describe('runDoctorChecks: log writability', () => {
 describe('runDoctorChecks: overrides/relaxations announcement', () => {
   test('zero active overrides/relaxations: overrideCount is 0', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.overrideCount).toBe(0);
     expect(report.overrideLines).toEqual([]);
   });
 
   test('active overrides and relaxations are both counted and formatted', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides());
+    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides(), CLAUDE_CODE_HARNESS);
     expect(report.overrideCount).toBe(2); // 1 override + 1 relaxation
     expect(report.overrideLines).toContainEqual(expect.stringContaining('curl-file-upload'));
     expect(report.overrideLines).toContainEqual(expect.stringContaining('command.git.safe_subcommands'));
@@ -544,14 +573,14 @@ describe('runDoctorChecks: overrides/relaxations announcement', () => {
 describe('runDoctorChecks: report.ok', () => {
   test('ok is true when every check passes, regardless of active overrides', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides());
+    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides(), CLAUDE_CODE_HARNESS);
     expect(report.ok).toBe(true);
   });
 
   test('ok is false when any check fails', async () => {
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.ok).toBe(false);
   });
 });
@@ -559,7 +588,7 @@ describe('runDoctorChecks: report.ok', () => {
 describe('formatDoctorChecklist: the manual, always-verbose form', () => {
   test('prints pass/fail for every check and the override count, healthy or not', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const healthy = formatDoctorChecklist(await runDoctorChecks(settingsPath, cleanLoadResult()));
+    const healthy = formatDoctorChecklist(await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS));
     expect(healthy).toContain('[pass] wiring:PreToolUse');
     expect(healthy).toContain('[pass] wiring:UserPromptSubmit');
     expect(healthy).toContain('[pass] wiring:SessionStart');
@@ -568,7 +597,7 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
     expect(healthy).toContain('[pass] log');
     expect(healthy.toLowerCase()).toContain('overrides: none active');
 
-    const withOverrides = formatDoctorChecklist(await runDoctorChecks(settingsPath, loadResultWithOverrides()));
+    const withOverrides = formatDoctorChecklist(await runDoctorChecks(settingsPath, loadResultWithOverrides(), CLAUDE_CODE_HARNESS));
     expect(withOverrides).toContain('overrides: 2 active');
     expect(withOverrides).toContain('curl-file-upload');
   });
@@ -576,22 +605,30 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
   test('a failing check shows [fail], not silently omitted', async () => {
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const text = formatDoctorChecklist(await runDoctorChecks(settingsPath, cleanLoadResult()));
+    const text = formatDoctorChecklist(await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS));
     expect(text).toContain('[fail] wiring:SessionStart');
+  });
+
+  test('review round 3 R3-1: a declared harness with no wiring codec shows [warn], not [pass], ok stays true', async () => {
+    const report = await runDoctorChecks(undefined, cleanLoadResult(), NO_WIRING_HARNESS);
+    const text = formatDoctorChecklist(report);
+    expect(text).toContain('[warn] wiring — not checkable (declared harness)');
+    expect(text).not.toContain('[pass] wiring');
+    expect(report.ok).toBe(true);
   });
 });
 
 describe('buildSessionStartContext: silent when healthy, screams on anomaly, announces on override', () => {
   test('healthy setup + zero overrides is fully silent (null)', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(buildSessionStartContext(report)).toBeNull();
   });
 
   test('a wiring anomaly produces non-null context naming the problem', async () => {
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);
-    const report = await runDoctorChecks(settingsPath, cleanLoadResult());
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const context = buildSessionStartContext(report);
     expect(context).not.toBeNull();
     expect(context).toContain('SessionStart');
@@ -599,7 +636,7 @@ describe('buildSessionStartContext: silent when healthy, screams on anomaly, ann
 
   test('a broken overlay produces non-null context naming baseline fallback', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, brokenOverlayLoadResult());
+    const report = await runDoctorChecks(settingsPath, brokenOverlayLoadResult(), CLAUDE_CODE_HARNESS);
     const context = buildSessionStartContext(report);
     expect(context).not.toBeNull();
     expect(context).toContain('baseline');
@@ -607,10 +644,19 @@ describe('buildSessionStartContext: silent when healthy, screams on anomaly, ann
 
   test('healthy wiring/policy but active overrides still produces non-null context (never silent)', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides());
+    const report = await runDoctorChecks(settingsPath, loadResultWithOverrides(), CLAUDE_CODE_HARNESS);
     const context = buildSessionStartContext(report);
     expect(context).not.toBeNull();
     expect(context).toContain('2');
     expect(context).toContain('curl-file-upload');
+  });
+
+  test('review round 3 R3-1: a [warn] check with nothing else broken joins the calm announce, never the scream', async () => {
+    const report = await runDoctorChecks(undefined, cleanLoadResult(), NO_WIRING_HARNESS);
+    const context = buildSessionStartContext(report);
+    expect(context).not.toBeNull();
+    expect(context).not.toContain('WIRING/POLICY PROBLEM DETECTED');
+    expect(context).toContain('unprovable, not broken');
+    expect(context).toContain('wiring: not checkable (declared harness)');
   });
 });

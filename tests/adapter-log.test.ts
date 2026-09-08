@@ -4,13 +4,15 @@
 // itself proceeds silently (nothing on stdout).
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { logVerdict, MAX_LOG_SIZE } from '../src/adapter/log.ts';
 import { run } from '../src/adapter/run.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 import type { Verdict } from '../src/types.ts';
 
+const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
 
@@ -42,7 +44,7 @@ describe('logVerdict: JSONL entry shape', () => {
     const accountDir = await freshAccountDir();
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    await logVerdict('command', { tool_name: 'Bash', session_id: 'sess-1' }, BLOCK);
+    await logVerdict('command', { toolName: 'Bash', sessionId: 'sess-1' }, BLOCK, CLAUDE_CODE_HARNESS);
 
     const content = await readFile(logPathFor(accountDir), 'utf-8');
     const entry = JSON.parse(content.trim());
@@ -51,6 +53,7 @@ describe('logVerdict: JSONL entry shape', () => {
     expect(entry.rule_id).toBe('rm-rf-dangerous');
     expect(entry.session_id).toBe('sess-1');
     expect(entry.tool_name).toBe('Bash');
+    expect(entry.harness).toBe('claude-code');
     expect(typeof entry.timestamp).toBe('string');
   });
 
@@ -58,7 +61,7 @@ describe('logVerdict: JSONL entry shape', () => {
     const accountDir = await freshAccountDir();
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    await logVerdict('command', { tool_name: 'Bash' }, BLOCK);
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
 
     const mode = (await stat(logPathFor(accountDir))).mode & 0o777;
     expect(mode).toBe(0o600);
@@ -70,7 +73,7 @@ describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
     const accountDir = await freshAccountDir();
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    await logVerdict('command', { tool_name: 'Bash' }, BLOCK, undefined, 'shadow');
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS, undefined, 'shadow');
 
     const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
     expect(entry.mode).toBe('shadow');
@@ -80,7 +83,7 @@ describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
     const accountDir = await freshAccountDir();
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
-    await logVerdict('command', { tool_name: 'Bash' }, BLOCK);
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
 
     const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
     expect('mode' in entry).toBe(false);
@@ -93,10 +96,10 @@ describe('logVerdict: per-account routing (two accounts, two logs)', () => {
     const accountB = await freshAccountDir();
 
     process.env.CLAUDE_CONFIG_DIR = accountA;
-    await logVerdict('command', { tool_name: 'Bash' }, BLOCK);
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
 
     process.env.CLAUDE_CONFIG_DIR = accountB;
-    await logVerdict('command', { tool_name: 'Bash' }, { ...BLOCK, ruleId: 'sudo' });
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, { ...BLOCK, ruleId: 'sudo' }, CLAUDE_CODE_HARNESS);
 
     const entryA = JSON.parse((await readFile(logPathFor(accountA), 'utf-8')).trim());
     const entryB = JSON.parse((await readFile(logPathFor(accountB), 'utf-8')).trim());
@@ -112,11 +115,10 @@ describe('logVerdict: rotation', () => {
     const logFile = logPathFor(accountDir);
 
     // Force the file past the rotation threshold, then log once more.
-    await logVerdict('command', { tool_name: 'Bash' }, BLOCK);
-    const { appendFile } = await import('node:fs/promises');
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
     await appendFile(logFile, 'x'.repeat(MAX_LOG_SIZE));
 
-    await logVerdict('command', { tool_name: 'Bash' }, { ...BLOCK, ruleId: 'after-rotation' });
+    await logVerdict('command', { toolName: 'Bash', sessionId: null }, { ...BLOCK, ruleId: 'after-rotation' }, CLAUDE_CODE_HARNESS);
 
     const rotated = await stat(`${logFile}.1`).catch(() => null);
     expect(rotated).not.toBeNull();

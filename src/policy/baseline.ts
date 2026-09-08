@@ -1,23 +1,33 @@
-// The embedded baseline: seven STATIC imports, one per rule family plus the
-// harness declarations (policy/command.toml, secret.toml, protected-write.toml,
-// mcp-write.toml, write-secret.toml, prompt.toml, harness.toml — split from one
-// ~500-line policy/baseline.toml for review/diff visibility, ticket 12), merged at
-// build time into the same shape a single file used to produce. `bun build --compile`
-// inlines all seven parsed TOML files into the compiled binary — there is no on-disk
-// file to find at runtime for any of them. This is deliberately separate
-// from the overlay, which is read from disk at runtime (see load.ts) —
-// the baseline can never be missing or unreadable, which is exactly the
-// property that makes "fall back to baseline" a safe fail-closed default.
+// The embedded baseline: twelve STATIC imports — one per rule family
+// (policy/command.toml, secret.toml, protected-write.toml, mcp-write.toml,
+// write-secret.toml, prompt.toml — split from one ~500-line
+// policy/baseline.toml for review/diff visibility, ticket 12) plus one per
+// baseline harness declaration (policy/harness/<id>.toml, one `[[harness]]`
+// block each — split from the single policy/harness.toml, ticket 15a, so a
+// harness declaration reviews and diffs like any other assistant-specific
+// file) — merged at build time into the same shape a single file used to
+// produce. `bun build --compile` inlines every parsed TOML file into the
+// compiled binary — there is no on-disk file to find at runtime for any of
+// them. This is deliberately separate from the overlay, which is read from
+// disk at runtime (see load.ts) — the baseline can never be missing or
+// unreadable, which is exactly the property that makes "fall back to
+// baseline" a safe fail-closed default.
 //
 // Each family file's TOML header is `[[rules.<family>...]]`, so parsing
 // it alone yields an object shaped `{ rules: { <family>: ... } }` — every
 // family owns a DISTINCT top-level key under `rules` (command / secret /
-// protected_write / mcp_write / write_secret / prompt); harness.toml owns
-// top-level `[[harness]]` declarations. The family keys remain distinct, so
-// merging the six rule families is a shallow spread.
+// protected_write / mcp_write / write_secret / prompt); each
+// policy/harness/<id>.toml owns exactly one top-level `[[harness]]`
+// declaration. The family keys remain distinct, so merging the six rule
+// families is a shallow spread; the six harness declarations concatenate.
 
 import commandData from '../../policy/command.toml';
-import harnessData from '../../policy/harness.toml';
+import claudeCodeHarnessData from '../../policy/harness/claude-code.toml';
+import codexHarnessData from '../../policy/harness/codex.toml';
+import cursorHarnessData from '../../policy/harness/cursor.toml';
+import geminiCliHarnessData from '../../policy/harness/gemini-cli.toml';
+import opencodeHarnessData from '../../policy/harness/opencode.toml';
+import piAgentHarnessData from '../../policy/harness/pi-agent.toml';
 import mcpWriteData from '../../policy/mcp-write.toml';
 import promptData from '../../policy/prompt.toml';
 import protectedWriteData from '../../policy/protected-write.toml';
@@ -79,7 +89,14 @@ export function assertHarnessDeclarations(data: unknown, filename: string): read
   });
 }
 
-const harnesses = assertHarnessDeclarations(harnessData, 'policy/harness.toml');
+const harnesses = [
+  ...assertHarnessDeclarations(claudeCodeHarnessData, 'policy/harness/claude-code.toml'),
+  ...assertHarnessDeclarations(codexHarnessData, 'policy/harness/codex.toml'),
+  ...assertHarnessDeclarations(opencodeHarnessData, 'policy/harness/opencode.toml'),
+  ...assertHarnessDeclarations(piAgentHarnessData, 'policy/harness/pi-agent.toml'),
+  ...assertHarnessDeclarations(geminiCliHarnessData, 'policy/harness/gemini-cli.toml'),
+  ...assertHarnessDeclarations(cursorHarnessData, 'policy/harness/cursor.toml'),
+];
 
 const mergedRules: RulesPolicy = {
   ...assertExactlyOneFamily(commandData, 'command', 'policy/command.toml').rules,

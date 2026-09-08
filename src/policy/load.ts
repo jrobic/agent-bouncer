@@ -38,7 +38,12 @@
 // loadPolicyFromLayers directly).
 
 import { BASELINE } from './baseline.ts';
-import { deriveHarnessRules, isDerivedHarnessRule, parseHarnessOverlay as parseOverlayHarness } from './harness.ts';
+import {
+  deriveHarnessRules,
+  isDerivedHarnessRule,
+  lintHarnessProtocolConfirmRelaxation,
+  parseHarnessOverlay as parseOverlayHarness,
+} from './harness.ts';
 import {
   lintAskFlagsShape,
   lintEffectiveDialect,
@@ -183,6 +188,15 @@ export interface LoadResult {
   readonly overlayFiles: readonly string[];
   readonly activeOverrides: readonly ActiveOverride[];
   readonly activeRelaxations: readonly ActiveRelaxation[];
+  // Review round 1 S-6: every harness id declared or extended by an
+  // overlay (never a pure-baseline harness untouched by any layer),
+  // computed ONCE at merge time from each harness's own configSources —
+  // never re-derived downstream by string-matching a harness id against
+  // a derived protected-write row id (`<id>-config-dir`), which a naming
+  // change in src/policy/harness.ts would silently break. The audit-log
+  // header, `doctor`'s checklist, and `rules list` (ADR-0006 § 5) all
+  // read this same list.
+  readonly overlayHarnessIds: readonly string[];
   // Always defined — every LoadResult comes from loadPolicyFromLayers now
   // (loadPolicyFromOverlayFiles is its one-layer, `name: 'profile'` case).
   readonly layers: readonly LayerInfo[];
@@ -575,6 +589,7 @@ function buildResult(
   overlayFiles: readonly string[],
   activeOverrides: readonly ActiveOverride[],
   activeRelaxations: readonly ActiveRelaxation[],
+  overlayHarnessIds: readonly string[],
   warnings: readonly string[],
 ): Omit<LoadResult, 'layers'> {
   const policy: RulesPolicy = {
@@ -594,7 +609,16 @@ function buildResult(
     write_secret: regexRulesOf(effective, 'write_secret'),
     prompt: regexRulesOf(effective, 'prompt'),
   };
-  return { policy, effectiveRules: effective, overlayApplied, overlayFiles, activeOverrides, activeRelaxations, warnings };
+  return {
+    policy,
+    effectiveRules: effective,
+    overlayApplied,
+    overlayFiles,
+    activeOverrides,
+    activeRelaxations,
+    overlayHarnessIds,
+    warnings,
+  };
 }
 
 function mergedBaselineOnly(): MergedPolicy {
@@ -624,7 +648,7 @@ function mergedBaselineOnly(): MergedPolicy {
 function baselineOnlyResult(warnings: readonly string[] = []): Omit<LoadResult, 'layers'> {
   const merged = mergedBaselineOnly();
   const effective = applyOverrides(allTagged(merged), []);
-  return buildResult(merged, effective, false, [], [], [], warnings);
+  return buildResult(merged, effective, false, [], [], [], [], warnings);
 }
 
 // Every subcommand the baseline already has an opinion on: unconditionally
@@ -727,6 +751,16 @@ interface MergedHarness extends HarnessDeclaration {
   readonly persistentSources: ReadonlyMap<string, readonly HarnessContribution[]>;
 }
 
+// Review round 1 S-6: the LoadResult.overlayHarnessIds source — a
+// harness untouched by any layer has configSources === ['baseline']
+// exactly; anything else (an overlay appended dir/env/persistent
+// entries, or declared the harness itself) makes it overlay-touched.
+function overlayTouchedHarnessIds(harnesses: readonly MergedHarness[]): readonly string[] {
+  return harnesses
+    .filter((h) => !(h.configSources.length === 1 && h.configSources[0] === 'baseline'))
+    .map((h) => h.id);
+}
+
 function overlayContributions(sources: readonly HarnessContribution[]): readonly HarnessOverlayEntry[] {
   return sources.filter((source): source is HarnessOverlayEntry => source !== 'baseline');
 }
@@ -792,8 +826,22 @@ function mergeHarnesses(
       if (overlay.reason !== undefined && overlay.reason !== current.reason) {
         return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} inherits its baseline reason`);
       }
-      if (overlay.dir === undefined && overlay.parents === undefined && overlay.env === undefined) {
-        return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} must append dir, parents, or env`);
+      if (overlay.dir === undefined && overlay.parents === undefined && overlay.env === undefined && overlay.protocol === undefined) {
+        return rejectHarness(entry, `harness ${JSON.stringify(overlay.id)} must append dir, parents, env, or protocol`);
+      }
+      // ADR-0006 § 4 rule 6: an overlay may not relax an EXISTING BASELINE
+      // harness's measured "deny" confirm to "ask" — a baseline-declared
+      // deny is a measured fact (fact 3 for Codex), never a default an
+      // overlay gets to loosen. An overlay-declared harness (not itself
+      // baseline) carries no such fact and may freely replace its own
+      // protocol from a later layer.
+      if (overlay.protocol !== undefined && current.protocol !== undefined && current.configSources.includes('baseline')) {
+        const relaxationIssues = lintHarnessProtocolConfirmRelaxation(
+          current.protocol.output.confirm,
+          overlay.protocol.output.confirm,
+          `harness ${JSON.stringify(overlay.id)}`,
+        );
+        if (relaxationIssues.length > 0) return rejectHarness(entry, relaxationIssues.join('; '));
       }
       const configChanged = overlay.dir !== undefined || overlay.parents !== undefined;
       merged.set(overlay.id, {
@@ -803,6 +851,7 @@ function mergeHarnesses(
           ? {}
           : { parents: appendedAfterBaseline(current.parents ?? [], overlay.parents ?? []) }),
         env: appendedAfterBaseline(current.env, overlay.env ?? []),
+        ...(overlay.protocol === undefined ? {} : { protocol: overlay.protocol }),
         ...(configChanged ? { configSources: [...current.configSources, entry] } : {}),
         ...(overlay.dir === undefined
           ? {}
@@ -835,6 +884,7 @@ function mergeHarnesses(
       witness: overlay.witness,
       reason: overlay.reason,
       persistent: overlay.persistent ?? [],
+      ...(overlay.protocol === undefined ? {} : { protocol: overlay.protocol }),
       configSources: [entry],
       persistentSources: new Map((overlay.persistent ?? []).map((persistent) => [persistent.id, [entry]])),
     });
@@ -1441,6 +1491,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     parsedFiles.map((f) => f.filename),
     activeOverrides,
     activeRelaxations,
+    overlayTouchedHarnessIds(mergedHarnesses),
     [],
   );
 }

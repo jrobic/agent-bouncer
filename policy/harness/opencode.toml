@@ -1,0 +1,27 @@
+# Declarative assistant configuration directory. Protected-write rows are
+# derived by src/policy/schema.ts before the hand-written protected-write
+# policy rows. One file per assistant (ADR-0006 § 2) — this file's `id` is
+# its own filename. See docs/reference/policy.md § harness.
+
+# Source: OpenCode configuration documentation
+[[harness]]
+id = "opencode"
+dir = ["(^|/)\\.config/opencode"]
+witness = "~/.config/opencode"
+env = []
+reason = "OpenCode configuration directory"
+
+[[harness.persistent]]
+id = "opencode-config"
+path = "opencode\\.jsonc?$"
+reason = "OpenCode loads configuration at session start"
+
+[[harness.persistent]]
+id = "opencode-instructions"
+path = "AGENTS\\.md$"
+reason = "OpenCode reads instructions for future sessions"
+
+[[harness.persistent]]
+id = "opencode-plugins"
+path = "plugins?(/|$)"
+reason = "OpenCode loads plugins for future sessions"

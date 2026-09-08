@@ -74,12 +74,12 @@ function sectionOf(report: string, heading: string): string {
 
 describe('parseAuditArgs: --diff / --ts-logs (ticket 08)', () => {
   test('--diff sets the diff flag', () => {
-    expect(parseAuditArgs(['--diff'])).toEqual({ options: { days: 30, suggest: false, diff: true } });
+    expect(parseAuditArgs(['--diff'])).toEqual({ options: { days: 30, suggest: false, diff: true, harness: 'claude-code' } });
   });
 
   test('--diff --ts-logs <dir> carries the override through', () => {
     expect(parseAuditArgs(['--diff', '--ts-logs', '/scratch/other-config'])).toEqual({
-      options: { days: 30, suggest: false, diff: true, tsLogsDir: '/scratch/other-config' },
+      options: { days: 30, suggest: false, diff: true, tsLogsDir: '/scratch/other-config', harness: 'claude-code' },
     });
   });
 

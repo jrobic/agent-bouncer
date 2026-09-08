@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCheck, runPing, runRulesLint, runRulesList } from '../src/cli-commands.ts';
+import type { CommandResult } from '../src/cli-commands.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 const cleanupDirs: string[] = [];
@@ -116,6 +117,106 @@ describe('runCheck: dry-runs a command without a session', () => {
     await expect(runCheck(`echo x > $${env}/config.json`)).resolves.toMatchObject({
       text: expect.stringContaining('confirm [bash-shape-settings]'),
     });
+  });
+
+  // Review round 4 R4-1: `check` built its input bag with the LITERAL
+  // key `command`, ignoring the row's own `command` selector — worked
+  // only by coincidence for a row whose selector happened to be named
+  // `command` (round 3's own test used exactly such a row, so it could
+  // not see this). These three prove the fix places the dry-run string
+  // at the row's OWN selector, whatever shape it is: a plain key
+  // different from `command`, a selector containing a literal dot, and
+  // a `[]` array selector — reproducing the review's own `mini`
+  // scenario (`sh = { role = "command", command = "cmd" }`) plus the
+  // two other selector shapes it asked for. A brand-new harness id must
+  // be declared through the COMMON layer (never the profile alone — its
+  // own profile root can't resolve until its declaration is known), so
+  // each case manages its own throwaway HOME rather than reusing
+  // freshAccountDir()'s CLAUDE_CONFIG_DIR-only setup.
+  async function checkThroughCommandSelector(harnessId: string, toolsLine: string, command: string): Promise<CommandResult> {
+    const ORIGINAL_HOME = process.env.HOME;
+    const home = await mkdtemp(join(tmpdir(), 'bouncer-check-tool-row-'));
+    cleanupDirs.push(home);
+    await mkdir(join(home, '.agents', 'bouncer', 'harness.d'), { recursive: true });
+    await writeFile(
+      join(home, '.agents', 'bouncer', 'harness.d', `${harnessId}.toml`),
+      `
+      [[harness]]
+      id = "${harnessId}"
+      dir = ["(^|/)\\\\.${harnessId}"]
+      witness = "~/.${harnessId}"
+      env = ["${harnessId.toUpperCase()}_HOME"]
+      reason = "test"
+
+      [harness.protocol]
+      transport = "stdin-json"
+
+      [harness.protocol.input]
+      event = "hook_event_name"
+      tool = "tool_name"
+      input = "tool_input"
+      session = "session_id"
+      cwd = "cwd"
+
+      [harness.protocol.events]
+      pre_tool = "PreToolUse"
+
+      [harness.protocol.tools]
+      ${toolsLine}
+
+      [harness.protocol.output]
+      block = "deny"
+      confirm = "deny"
+      observe = "silent"
+      flag = "silent"
+      on_malformed = "allow"
+
+      [harness.protocol.output.deny]
+      stdout = '{"decision":"deny"}'
+      `,
+      'utf8',
+    );
+    process.env.HOME = home;
+    try {
+      return await runCheck(command, harnessId);
+    } finally {
+      process.env.HOME = ORIGINAL_HOME;
+    }
+  }
+
+  test('the review\'s own "mini" scenario: a plain selector different from "command" ("cmd")', async () => {
+    const { text, ok } = await checkThroughCommandSelector('mini', 'sh = { role = "command", command = "cmd" }', 'rm -rf /');
+    expect(ok).toBe(true);
+    expect(text).toContain('block [rm-rf-dangerous]');
+    expect(text).toContain('→ deny (mini)');
+  });
+
+  test('a selector containing a literal dot places the command at that exact flat key', async () => {
+    const { text, ok } = await checkThroughCommandSelector(
+      'dotty',
+      'sh = { role = "command", command = "payload.cmd" }',
+      'rm -rf /',
+    );
+    expect(ok).toBe(true);
+    expect(text).toContain('block [rm-rf-dangerous]');
+    expect(text).toContain('→ deny (dotty)');
+  });
+
+  test('a `[]` array selector wraps the command in a one-element array', async () => {
+    const { text, ok } = await checkThroughCommandSelector(
+      'batchy',
+      'sh = { role = "command", command = "commands[].command" }',
+      'rm -rf /',
+    );
+    expect(ok).toBe(true);
+    expect(text).toContain('block [rm-rf-dangerous]');
+    expect(text).toContain('→ deny (batchy)');
+  });
+
+  test('claude-code output is unchanged by the selector fix', async () => {
+    await freshAccountDir();
+    const { text } = await runCheck('rm -rf /');
+    expect(text).toBe('block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (claude-code)');
   });
 });
 

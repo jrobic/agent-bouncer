@@ -1,15 +1,16 @@
 // Prompt-injection detection. Pure — no Bun/Node APIs, no harness protocol
-// shapes (`buildContextOutput` moved to src/adapter/envelopes.ts in ticket
-// 05). The rule table is policy data (policy/prompt.toml,
-// `[[rules.prompt]]` — the base64-blob signature is now a plain 7th entry
-// in that same table rather than a module constant evaluated apart from
-// it); this module owns only the scanning algorithm.
+// shapes (`buildContextOutput`-equivalent assembly moved to
+// src/adapter/render.ts's assembleFlagContext in ticket 05, then made
+// harness-generic in ticket 15a). The rule table is policy data
+// (policy/prompt.toml, `[[rules.prompt]]` — the base64-blob signature is
+// now a plain 7th entry in that same table rather than a module constant
+// evaluated apart from it); this module owns only the scanning algorithm.
 //
 // ─── Posture (this is a layer, not a wall) ───────────────────────────
 // Prompt injection ultimately exploits the LLM, which remains fallible; no
 // regex catches every phrasing. Callers are expected to WARN (flag) rather
-// than block — the adapter's degradation table maps `flag` to
-// additionalContext, never to a hard stop.
+// than block — a harness's own output table (ADR-0006 § 4) maps `flag` to
+// `context`/`silent`, never to a hard stop.
 
 import { BASELINE } from './policy/baseline.ts';
 import { allMatches, compileRules } from './policy/match.ts';

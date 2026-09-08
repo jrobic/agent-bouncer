@@ -1,0 +1,93 @@
+# Declarative assistant configuration directory. Protected-write rows are
+# derived by src/policy/schema.ts before the hand-written protected-write
+# policy rows. One file per assistant (ADR-0006 § 2) — this file's `id` is
+# its own filename. See docs/reference/policy.md § harness.
+
+# Source: Claude Code settings documentation — configuration directory
+[[harness]]
+id = "claude-code"
+dir = ["(^|/)\\.claude"]
+witness = "~/.claude"
+env = ["CLAUDE_CONFIG_DIR"]
+reason = "Claude Code configuration directory"
+
+[[harness.persistent]]
+id = "harness-settings"
+path = "settings(\\.local)?\\.json$"
+reason = "Claude Code settings persist tool and hook configuration across sessions"
+
+[[harness.persistent]]
+id = "harness-hooks"
+path = "hooks(/|$)"
+reason = "Claude Code hooks can alter future tool-call enforcement"
+
+[[harness.persistent]]
+id = "harness-plugins"
+path = "plugins(/|$)"
+reason = "Claude Code plugins can alter future session behavior"
+
+[[harness.persistent]]
+id = "harness-instructions"
+path = "CLAUDE\\.md$"
+reason = "Claude Code instructions persist across future sessions"
+
+# ADR-0006 § 3: the pipeline transport → input map → tools map → neutral
+# call → engine → output table → template, written so it reproduces the
+# pre-15a hardcoded Claude Code adapter at the byte level (proof:
+# fixtures/protocol/claude-code.json, tests/fixtures-protocol.test.ts).
+[harness.protocol]
+transport = "stdin-json"
+wiring    = "hook-file"
+
+[harness.protocol.input]
+event   = "hook_event_name"
+tool    = "tool_name"
+input   = "tool_input"
+session = "session_id"
+prompt  = "prompt"
+cwd     = "cwd"
+
+[harness.protocol.events]
+pre_tool      = "PreToolUse"
+prompt        = "UserPromptSubmit"
+session_start = "SessionStart"
+
+# name -> role + field selectors. A selector is a dotted path into
+# tool_input; `[]` maps an array (a string element is taken as the value
+# directly, ctx_batch_execute mixes both). Exact names win over the
+# trailing-`*` glob. A name matching no row is not judged.
+[harness.protocol.tools]
+Bash         = { role = "command", command = "command" }
+Read         = { role = "read",    path = "file_path" }
+Grep         = { role = "read",    path = "path" }
+Glob         = { role = "read",    path = "path", pattern = "pattern" }
+Write        = { role = "write",   path = "file_path", text = "content" }
+Edit         = { role = "write",   path = "file_path", text = "new_string" }
+MultiEdit    = { role = "write",   path = "file_path", text = "edits[].new_string" }
+NotebookEdit = { role = "write",   path = "notebook_path" }
+"mcp__plugin_context-mode_context-mode__ctx_execute"         = { role = "command", command = "code" }
+"mcp__plugin_context-mode_context-mode__ctx_execute_file"    = { role = "command", command = "code", path = "path" }
+"mcp__plugin_context-mode_context-mode__ctx_batch_execute"   = { role = "command", command = "commands[].command" }
+"mcp__plugin_context-mode_context-mode__ctx_index"           = { role = "read",    path = "path" }
+"mcp__plugin_context-mode_context-mode__ctx_fetch_and_index" = { role = "fetch",   url = "url", urls = "requests[].url" }
+"mcp__*" = { role = "mcp" }
+
+[harness.protocol.output]
+block = "deny"
+confirm = "ask"
+observe = "silent"
+flag = "context"
+on_malformed = "allow"
+ask_probe = "2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
+
+[harness.protocol.output.deny]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":${reason}}}'
+
+[harness.protocol.output.ask]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":${reason}}}'
+
+[harness.protocol.output.context]
+stdout = '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":${context}}}'
+
+[harness.protocol.output.session_start]
+stdout = '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":${context}}}'

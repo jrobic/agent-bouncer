@@ -1,0 +1,33 @@
+# Declarative assistant configuration directory. Protected-write rows are
+# derived by src/policy/schema.ts before the hand-written protected-write
+# policy rows. One file per assistant (ADR-0006 § 2) — this file's `id` is
+# its own filename. See docs/reference/policy.md § harness.
+#
+# Ticket 15a: renamed from `omp` — pi-agent (oh-my-zsh-to-zsh's "zsh") owns
+# the directory convention; omp (the "oh-my-zsh") is a layer on top that
+# inherits it, so `dir`/`parents`/`witness` still name both `~/.omp` and
+# `~/.pi` and `reason` keeps citing Oh My Pi alongside pi-agent.
+
+# Source: Oh My Pi / pi-agent configuration documentation
+[[harness]]
+id = "pi-agent"
+dir = ["(^|/)\\.omp/agent", "(^|/)\\.pi/agent"]
+witness = "~/.omp/agent"
+parents = ["(^|/)\\.omp", "(^|/)\\.pi"]
+env = ["PI_CODING_AGENT_DIR"]
+reason = "pi-agent configuration directory (Oh My Pi is a layer on pi-agent and inherits this convention)"
+
+[[harness.persistent]]
+id = "pi-agent-config"
+path = "config\\.ya?ml$"
+reason = "pi-agent (and Oh My Pi) loads configuration at agent startup"
+
+[[harness.persistent]]
+id = "pi-agent-models"
+path = "models\\.ya?ml$"
+reason = "pi-agent (and Oh My Pi) loads model configuration at agent startup"
+
+[[harness.persistent]]
+id = "pi-agent-extensions"
+path = "extensions(/|$)"
+reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
