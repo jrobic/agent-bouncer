@@ -113,9 +113,13 @@ export interface HarnessPersistent {
 export type HarnessRole = 'command' | 'read' | 'write' | 'fetch' | 'mcp';
 
 // One `[harness.protocol.tools]` row — an exact tool name, or a trailing-
-// `*` glob (`"mcp__*"`), mapped to a role plus the dotted-path selectors
-// (§ below) that pull its fields out of the envelope's input bag. A
-// selector is unset when the row's role has nothing to say about that
+// `*` glob (`"mcp__*"`), mapped to a role plus EITHER the dotted-path
+// selectors (§ below) that pull its fields out of the envelope's input
+// bag, OR a named `codec` (ADR-0006 § 6) that parses the raw input bag
+// itself when a field map cannot express the shape (Codex's `apply_patch`
+// patch text). The two are mutually exclusive — lint rejects a row
+// carrying both `codec` and any selector key (harness.ts's parseToolRow).
+// A selector is unset when the row's role has nothing to say about that
 // field (e.g. `read`'s `text` is never set) — never an empty string,
 // which would be a selector naming the input's own root.
 export interface HarnessToolRow {
@@ -126,6 +130,7 @@ export interface HarnessToolRow {
   readonly text?: string;
   readonly url?: string;
   readonly urls?: string;
+  readonly codec?: string;
 }
 
 // ADR-0006 § 4: the action a degraded abstract verdict renders as.
@@ -171,6 +176,12 @@ export interface HarnessProtocolInput {
   readonly session: string;
   readonly prompt?: string;
   readonly cwd: string;
+  // Review round 1 P-4: optional — Codex's own envelope carries
+  // `permission_mode`, never read for a decision (the brief's own non-
+  // goal), only LOGGED on every verdict entry for the call (src/adapter/
+  // run.ts/log.ts). Absent on claude-code.toml, which sends no such
+  // field at all.
+  readonly permission?: string;
 }
 
 export interface HarnessProtocolEvents {

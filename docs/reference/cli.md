@@ -180,19 +180,27 @@ $ bouncer check "ls -la"
 allow
 
 $ bouncer check --harness codex "rm -rf /"
-bouncer: harness "codex" has no usable protocol declaration
+block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (codex)
+
+$ bouncer check --harness codex "git push --force origin main"
+confirm [git-protected] git push can rewrite history, mutate a remote, or discard work — confirm before running → deny (codex)
+
+$ bouncer check --harness nope "rm -rf /"
+bouncer: harness "nope" has no usable protocol declaration
 ```
 
 The trailing ` → <action> (<id>)` names the DEGRADED action a `block`/
 `confirm` verdict maps to under the target harness's own output table
 (ADR-0006 § 9) — always present on a `block`/`confirm` line (the action
 vocabulary, `deny`/`ask`, never literally equals the verdict word), never
-on `allow`. A harness with no usable protocol (`--harness <id>` naming
-one that is undeclared, or declared without `[harness.protocol]`) fails
-with an explicit error line instead of a verdict — same for a harness
-whose protocol declares no `role = "command"` tool row at all
-(`bouncer: harness "<id>" declares no "role = \"command\"" tool row to
-check against`, review round 3 R3-2).
+on `allow`. Every `confirm`-class verdict degrades to `deny` under Codex
+(`confirm = "deny"`, ADR-0006 § 4 rule 6, fact 3 for Codex — `ask` is
+fail-open there), unlike claude-code's own `ask`. A harness with no
+usable protocol (`--harness <id>` naming one that is undeclared, or
+declared without `[harness.protocol]`) fails with an explicit error line
+instead of a verdict — same for a harness whose protocol declares no
+`role = "command"` tool row at all (`bouncer: harness "<id>" declares no
+"role = \"command\"" tool row to check against`, review round 3 R3-2).
 
 A rejected overlay prepends `warning: <message>` lines before the
 verdict line.
@@ -386,15 +394,34 @@ healthy or not.
 overrides: none active
 ```
 
+**`codex-hooks` wiring (ticket 15b, ADR-0006 § 6):** `--harness codex`
+reads `$CODEX_HOME/hooks.json` AND `config.toml`'s own `[hooks]` table
+(additive — both loaded), plus one check no other wiring codec has:
+`wiring:trust`, Codex's own hash-trust ledger (`/hooks` in the TUI). An
+untrusted or stale-hash bouncer entry is silently SKIPPED by Codex, so a
+wiring that otherwise looks complete can still leave a session unguarded:
+
+```
+[pass] settings — hooks.json / config.toml [hooks] parsed (/path/to/hooks.json)
+[pass] wiring:PreToolUse — PreToolUse is correctly wired
+[pass] wiring:canary — PreToolUse canary is correctly wired
+[pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
+[pass] wiring:SessionStart — SessionStart is correctly wired
+[fail] wiring:trust — 3 bouncer hook(s) need review in /hooks; they are skipped, this session runs unguarded
+[pass] policy — baseline only (no overlay configured) (99 effective rules)
+[pass] log — writable (/path/to/logs/hooks/bouncer.log)
+overrides: none active
+```
+
 **A harness declared without a `wiring` codec (ADR-0006 § 6):** the four
 `settings`/`wiring:*` checks collapse into ONE, tagged `[warn]` — never
 `[pass]` (that would claim the wiring was actually verified, which it
 wasn't) and never `[fail]` (nothing is broken; `ok` stays true, exit 0)
 — deliberately visible rather than silently green (review round 3
-R3-1). `--harness codex` in this ticket, since `codex.toml` carries no
-`[harness.protocol]` at all (15b's job), fails outright before doctor
-even runs (see `run`'s exit-2 contract above); an overlay-declared
-harness WITH a protocol but no `wiring` reads:
+R3-1). `--harness opencode`/`pi-agent`/`gemini-cli`/`cursor` (no
+`[harness.protocol]` at all yet — 15c/later tickets' job) fail outright
+before doctor even runs (see `run`'s exit-2 contract above); an
+overlay-declared harness WITH a protocol but no `wiring` reads:
 
 ```
 [warn] wiring — not checkable (declared harness)
@@ -579,7 +606,7 @@ bouncer harness list
 
 ```
 harness claude-code baseline transport=stdin-json confirm=ask ask_probe="2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
-harness codex baseline transport=none confirm=none
+harness codex baseline transport=stdin-json confirm=deny
 harness opencode baseline transport=none confirm=none
 harness pi-agent baseline transport=none confirm=none
 harness gemini-cli baseline transport=none confirm=none
@@ -588,9 +615,12 @@ harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=d
 ```
 
 `transport=none`/`confirm=none` names a baseline harness with no
-`[harness.protocol]` yet (every baseline harness but `claude-code` in
-this ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit` fails
-closed for it (see `run`'s exit-2 contract above). Provenance —
+`[harness.protocol]` yet (`opencode`, `pi-agent`, `gemini-cli`, `cursor`
+as of this ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit`
+fails closed for it (see `run`'s exit-2 contract above). `codex`'s own
+`confirm=deny` (never `ask_probe=`, since `ask_probe` is only mandatory
+when `confirm = "ask"`) is a measured, baseline fact (ADR-0006 § 4 rule
+6, ticket 15b) — no overlay may relax it back to `ask`. Provenance —
 `baseline`, `overlay [<layer>:<file>]`, `baseline+overlay [<layer>:<file>]`
 — and the trailing `transport=`/`confirm=`/`ask_probe=` fields are the
 SAME line `rules list` and `doctor` announce an overlay-touched harness
@@ -599,4 +629,4 @@ with (one source, `src/adapter/doctor.ts`'s `harnessAnnouncementLine`).
 **Exit code:** always 0.
 
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/codecs/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts

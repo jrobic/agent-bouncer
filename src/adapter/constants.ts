@@ -9,5 +9,5 @@ export const HOOK_NAME = 'bouncer';
 // drift between src/adapter/run.ts and src/cli-commands.ts (it did,
 // briefly, as two independently-declared local consts of the same
 // value), and so a bare `'claude-code'` literal checking "is this the
-// default harness" (src/adapter/codecs/hook-file.ts) reads the same name.
+// default harness" (src/adapter/codecs/wiring/hook-file.ts) reads the same name.
 export const DEFAULT_HARNESS_ID = 'claude-code';

@@ -51,6 +51,24 @@
       "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-instructions" }]
     },
     {
+      "id": "codex-hooks-rm",
+      "toolName": "Bash",
+      "toolInput": { "command": "rm ~/.codex/hooks.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-hooks" }]
+    },
+    {
+      "id": "codex-hooks-write",
+      "toolName": "Bash",
+      "toolInput": { "command": "echo x > ~/.codex/hooks.json" },
+      "expected": [{ "verdict": "confirm", "ruleId": "bash-codex-hooks" }]
+    },
+    {
+      "id": "codex-hooks-read",
+      "toolName": "Bash",
+      "toolInput": { "command": "cat ~/.codex/hooks.json" },
+      "expected": []
+    },
+    {
       "id": "opencode-config-dir",
       "toolName": "Bash",
       "toolInput": { "command": "rm -rf ~/.config/opencode" },

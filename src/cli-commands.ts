@@ -18,11 +18,11 @@ import {
   renderSuggestions,
   withinWindow,
 } from './adapter/audit.ts';
-import { formatCanonicalCanaryEntry, settingsPathFor } from './adapter/codecs/hook-file.ts';
+import { wiringCodecFor } from './adapter/codecs/wiring/registry.ts';
 import { DEFAULT_HARNESS_ID, HOOK_NAME } from './adapter/constants.ts';
 import { degradePreToolUseVerdict } from './adapter/degrade.ts';
 import { createDispatcher } from './adapter/dispatch.ts';
-import { defaultSettingsPathFor, formatDoctorChecklist, harnessAnnouncementLine, runDoctorChecks } from './adapter/doctor.ts';
+import { formatDoctorChecklist, harnessAnnouncementLine, runDoctorChecks } from './adapter/doctor.ts';
 import { configDirFor, hookLogPathFor } from './adapter/log-path.ts';
 import { buildCommandInputBag, buildNeutralCall } from './adapter/neutral-call.ts';
 import { loadCurrentPolicy } from './adapter/policy.ts';
@@ -335,8 +335,7 @@ export function parseDoctorArgs(rest: readonly string[]): ParsedDoctorArgs {
 export async function runDoctor(settingsPath?: string, harnessId: string = DEFAULT_HARNESS_ID): Promise<CommandResult> {
   const loaded = await loadCurrentPolicy(harnessId);
   if (loaded.harness === undefined) return unknownHarnessResult(harnessId);
-  const resolvedSettingsPath = settingsPath ?? defaultSettingsPathFor(loaded.harness);
-  const report = await runDoctorChecks(resolvedSettingsPath, loaded, loaded.harness);
+  const report = await runDoctorChecks(settingsPath, loaded, loaded.harness);
   return { text: formatDoctorChecklist(report), ok: report.ok };
 }
 
@@ -344,13 +343,20 @@ export type PrintCanaryResult =
   | { readonly text: string; readonly ok: true; readonly error?: undefined; }
   | { readonly text?: undefined; readonly ok: false; readonly error: string; };
 
-/** `bouncer doctor --print-canary [--harness <id>]` — the printable canonical canary entry. */
+/** `bouncer doctor --print-canary [--harness <id>]` — the printable canonical canary entry, via this harness's own wiring codec. */
 export async function runPrintCanary(settingsPath?: string, harnessId: string = DEFAULT_HARNESS_ID): Promise<PrintCanaryResult> {
   const loaded = await loadCurrentPolicy(harnessId);
   if (loaded.harness === undefined) return { error: `harness ${JSON.stringify(harnessId)} is not declared`, ok: false };
   const protocol = loaded.harness.protocol;
   if (protocol === undefined) return { error: `harness ${JSON.stringify(harnessId)} has no usable protocol declaration`, ok: false };
-  const result = await formatCanonicalCanaryEntry(settingsPath ?? settingsPathFor(loaded.harness), protocol);
+  if (protocol.wiring === undefined) {
+    return { error: `harness ${JSON.stringify(harnessId)} declares no wiring codec to print a canary entry for`, ok: false };
+  }
+  const codec = wiringCodecFor(protocol.wiring);
+  if (codec === undefined) {
+    return { error: `wiring codec ${JSON.stringify(protocol.wiring)} has no runtime implementation`, ok: false };
+  }
+  const result = await codec.formatCanonicalCanaryEntry(settingsPath, loaded.harness, protocol);
   return result.error === undefined
     ? { text: result.entry, ok: true }
     : { error: result.error, ok: false };

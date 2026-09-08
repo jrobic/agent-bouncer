@@ -105,6 +105,18 @@ function recordField(envelope: Record<string, unknown>, selector: string): Recor
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+// Review round 1 P-4: `permission` is the one OPTIONAL selector on
+// `[harness.protocol.input]` with no engine-side reader at all — it
+// exists purely so `run.ts` can attach it to every logged verdict entry
+// (log.ts's own VerdictLogContext.permission). `undefined` (the selector
+// itself undeclared, e.g. claude-code.toml) is distinct from `null` (the
+// selector IS declared but this particular envelope sent nothing) —
+// only the latter still logs a `permission` key with a real value.
+function permissionField(envelope: Record<string, unknown>, protocol: HarnessProtocol): string | null | undefined {
+  if (protocol.input.permission === undefined) return undefined;
+  return stringField(envelope, protocol.input.permission) ?? null;
+}
+
 async function runPreToolUse(
   envelope: Record<string, unknown>,
   harness: HarnessDeclaration,
@@ -125,7 +137,12 @@ async function runPreToolUse(
   if (call === null) return SILENT;
 
   const mode = toLogMode(shadow);
-  const context = { toolName, sessionId: stringField(envelope, protocol.input.session) ?? null };
+  const permission = permissionField(envelope, protocol);
+  const context = {
+    toolName,
+    sessionId: stringField(envelope, protocol.input.session) ?? null,
+    ...(permission !== undefined ? { permission } : {}),
+  };
 
   const hit: FamilyVerdict | null = await dispatcher.inspectPreToolUse(call);
   if (hit) {
@@ -164,7 +181,12 @@ async function runUserPromptSubmit(
   const hits = dispatcher.inspectUserPromptSubmit(prompt);
   if (hits.length === 0) return SILENT;
   const mode = toLogMode(shadow);
-  const context = { toolName: null, sessionId: stringField(envelope, protocol.input.session) ?? null };
+  const permission = permissionField(envelope, protocol);
+  const context = {
+    toolName: null,
+    sessionId: stringField(envelope, protocol.input.session) ?? null,
+    ...(permission !== undefined ? { permission } : {}),
+  };
   for (const hit of hits) {
     // oxlint-disable-next-line no-await-in-loop
     await logVerdict('prompt', context, hit, harness, loaded, mode);
@@ -177,7 +199,7 @@ async function runUserPromptSubmit(
 // doctor's own event — deliberately NOT routed through dispatchByEvent
 // below: it never needs a Dispatcher (no tool call to judge, no family to
 // evaluate), only the policy already loaded for this invocation and the
-// hook-file wiring check (src/adapter/codecs/hook-file.ts). `checkFn`
+// hook-file wiring check (src/adapter/codecs/wiring/hook-file.ts). `checkFn`
 // defaults to the real runDoctorChecks and exists only as a test seam
 // (see tests/adapter-run-sessionstart.test.ts's throwing-check case) —
 // run() itself always calls this with the default. Wrapped in its own

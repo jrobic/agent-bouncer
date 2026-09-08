@@ -105,12 +105,15 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
 
   // Every surface the secret family covers (ADR-0006 § 3): commands
   // (Bash-shaped strings), `pattern` matched literally (Glob only, checked
-  // before `path` so a malicious pattern can't hide behind an innocuous
-  // path), `path` after canonicalisation, and urls. A row rarely
-  // populates more than one of these — `ctx_execute_file` (commands +
-  // path) is the one exception, and command order matches the pre-15a
-  // extractTargets/inspectSecretFamily order exactly (commands, then
-  // paths, then urls).
+  // before `paths` so a malicious pattern can't hide behind an innocuous
+  // path), every `paths` entry after canonicalisation, and urls. A row
+  // rarely populates more than one of these — `ctx_execute_file`
+  // (commands + path) is the one exception, and command order matches
+  // the pre-15a extractTargets/inspectSecretFamily order exactly
+  // (commands, then paths, then urls). `paths` loops exactly like
+  // `commands`/`urls` below it — ADR-0006 § 6: a `codec` row (Codex's
+  // `apply_patch` move) can populate more than one entry in one call, and
+  // every one of them is judged, not just the first.
   async function inspectSecretFamily(call: NeutralCall): Promise<FamilyVerdict | null> {
     for (const cmd of call.commands) {
       const verdict = secret.checkSecretBash(cmd);
@@ -120,8 +123,11 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
       const verdict = secret.checkPath(call.pattern);
       if (verdict) return { family: 'secret', verdict };
     }
-    if (call.path !== null) {
-      const hit = await secretPathHit(call.path);
+    for (const path of call.paths) {
+      // Sequential on purpose: preserves source order, avoids
+      // canonicalizing later candidates once an earlier one already hit.
+      // oxlint-disable-next-line no-await-in-loop
+      const hit = await secretPathHit(path);
       if (hit) return hit;
     }
     for (const url of call.urls) {
@@ -131,17 +137,21 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
     return null;
   }
 
-  // Protected-write reaches `path` only for a `write` role row (mirrors
+  // Protected-write reaches `paths` only for a `write` role row (mirrors
   // the pre-15a PROTECTED_WRITE_FILE_PATH_FIELD map, which deliberately
   // excluded Read) and `commands` for any row that populated them
   // (Bash-shaped writes, `checkBashWrites` parses shell syntax a
-  // structured `path` never needs) — a row supplies at most one of the
-  // two in practice, so checking both unconditionally reproduces the
-  // pre-15a either/or branching without a role check on the command loop.
+  // structured path never needs) — a selector-derived row supplies at
+  // most one path in practice, but a `codec` row (ADR-0006 § 6) can name
+  // several (a move writes both its source and destination), so `paths`
+  // loops exactly like the `commands` loop beside it.
   async function inspectProtectedWriteFamily(call: NeutralCall): Promise<FamilyVerdict | null> {
-    if (call.role === 'write' && call.path !== null) {
-      const verdict = await protectedWrite.checkPath(call.path);
-      if (verdict) return { family: 'protected-write', verdict };
+    if (call.role === 'write') {
+      for (const path of call.paths) {
+        // oxlint-disable-next-line no-await-in-loop
+        const verdict = await protectedWrite.checkPath(path);
+        if (verdict) return { family: 'protected-write', verdict };
+      }
     }
     for (const cmd of call.commands) {
       // Sequential on purpose: the first protected target preserves the
@@ -155,7 +165,7 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
 
   function inspectWriteSecretFamily(call: NeutralCall): FamilyVerdict | null {
     if (call.text === null) return null;
-    const target = call.path ?? `(${call.toolName})`;
+    const target = call.paths[0] ?? `(${call.toolName})`;
     const verdict = scanSecretsBound(call.text, target);
     return verdict ? { family: 'write-secret', verdict } : null;
   }

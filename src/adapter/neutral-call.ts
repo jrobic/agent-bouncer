@@ -12,6 +12,7 @@
 
 import { isAbsolute, resolve } from 'node:path';
 import type { HarnessProtocol, HarnessRole, HarnessToolRow } from '../policy/schema.ts';
+import { inputCodecFor } from './codecs/input/registry.ts';
 
 // ADR-0006 § 3: "a relative path is resolved against the envelope's cwd
 // before canonicalisation" — a no-op whenever `cwd` is unset (no `cwd`
@@ -23,14 +24,19 @@ function joinCwd(path: string, cwd: string | null): string {
 
 // What every family checker in dispatch.ts actually inspects, independent
 // of which harness or tool produced it. `role` decides which extra
-// families a `path`/`commands` hit reaches (see dispatch.ts): `write`
-// additionally reaches protected-write on `path`; every role reaches
-// secret on whichever of `commands`/`pattern`/`path`/`urls` it populated.
+// families a `paths`/`commands` hit reaches (see dispatch.ts): `write`
+// additionally reaches protected-write on `paths`; every role reaches
+// secret on whichever of `commands`/`pattern`/`paths`/`urls` it
+// populated. `paths` is plural (ADR-0006 § 6): a selector-derived row
+// ever populates at most one entry, but a `codec` row can name several in
+// one call (Codex's `apply_patch` move writes both its source and
+// destination) — every family that reaches `paths` loops it exactly as
+// it already loops `commands`/`urls`.
 export interface NeutralCall {
   readonly toolName: string;
   readonly role: HarnessRole;
   readonly commands: readonly string[];
-  readonly path: string | null;
+  readonly paths: readonly string[];
   readonly pattern: string | null;
   readonly text: string | null;
   readonly urls: readonly string[];
@@ -169,6 +175,12 @@ function readTextSelector(ti: Record<string, unknown>, selector: string, hookNam
     .join('\n');
 }
 
+// ADR-0006 § 6: a tool row's `codec` field names a runtime codec through
+// src/adapter/codecs/input/registry.ts — the runtime counterpart of
+// src/policy/harness.ts's KNOWN_INPUT_CODECS lint-time registry (the two
+// MUST name the same set, or a declaration that lints clean could still
+// find nothing to dispatch to here; both are reviewed together).
+
 /**
  * Builds the neutral call a tool name's row describes, or `null` when no
  * row (exact or glob) matches — "not judged", exactly as before ticket
@@ -176,11 +188,16 @@ function readTextSelector(ti: Record<string, unknown>, selector: string, hookNam
  * Code); `cwd` is the envelope's own working directory (`null` when the
  * harness's input map has no `cwd` selector or the envelope didn't send
  * one — Claude Code sends absolute paths and never sends `cwd`, so this
- * is a no-op for it): ADR-0006 § 3, a RELATIVE `path` is resolved against
+ * is a no-op for it): ADR-0006 § 3, a RELATIVE path is resolved against
  * it before the caller's own canonicalisation, so a harness whose patches
- * are relative to the session directory (a future Codex declaration)
- * still names a real file. `hookName` only feeds the stderr diagnostics
- * above.
+ * are relative to the session directory (Codex) still names a real file
+ * — for BOTH a selector-derived `path` and every path a `codec` row
+ * returns. `hookName` only feeds the stderr diagnostics above.
+ *
+ * A `codec` row (ADR-0006 § 6) short-circuits every selector: the named
+ * codec reads `ti` itself and returns `{paths, text}` in the same shape
+ * selectors would have produced, cwd-joined here exactly like a plain
+ * `path` selector.
  */
 export function buildNeutralCall(
   protocol: HarnessProtocol,
@@ -192,9 +209,38 @@ export function buildNeutralCall(
   const row = findToolRow(protocol.tools, toolName);
   if (row === null) return null;
 
+  if (row.codec !== undefined) {
+    const codec = inputCodecFor(row.codec);
+    // Review round 1 S-3: `rules lint` already proved row.codec is a
+    // member of src/policy/harness.ts's KNOWN_INPUT_CODECS before this
+    // declaration ever reached run() — an unresolvable name here means
+    // the lint-time and runtime registries drifted, not a real envelope
+    // problem. Fails closed to "not judged" (never throws, never crashes
+    // the hook into reading as unguarded) but, same as doctor.ts's own
+    // wiring-drift branch, never SILENTLY — one stderr line names the
+    // drifted codec, matching this codec kind's own header contract.
+    let result: { readonly paths: readonly string[]; readonly text: string | null; };
+    if (codec === undefined) {
+      warn(hookName, `input codec ${JSON.stringify(row.codec)} has no runtime implementation`);
+      result = { paths: [], text: null };
+    } else {
+      result = codec(ti, hookName);
+    }
+    return {
+      toolName,
+      role: row.role,
+      commands: [],
+      paths: result.paths.map((p) => joinCwd(p, cwd)),
+      pattern: null,
+      text: result.text,
+      urls: [],
+      mcpName: row.role === 'mcp' ? toolName : null,
+    };
+  }
+
   const commands = row.command === undefined ? [] : readCommandsSelector(ti, row.command, hookName);
   const rawPath = row.path === undefined ? null : readPlainSelector(ti, row.path, hookName);
-  const path = rawPath === null ? null : joinCwd(rawPath, cwd);
+  const paths = rawPath === null ? [] : [joinCwd(rawPath, cwd)];
   const pattern = row.pattern === undefined ? null : readPlainSelector(ti, row.pattern, hookName);
   const text = row.text === undefined ? null : readTextSelector(ti, row.text, hookName);
   const singleUrl = row.url === undefined ? null : readPlainSelector(ti, row.url, hookName);
@@ -205,7 +251,7 @@ export function buildNeutralCall(
     toolName,
     role: row.role,
     commands,
-    path,
+    paths,
     pattern,
     text,
     urls,

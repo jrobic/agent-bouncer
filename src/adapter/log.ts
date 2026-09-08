@@ -108,14 +108,21 @@ export function toLogMode(shadow: boolean): LogMode | undefined {
 export interface VerdictLogContext {
   readonly sessionId: string | null;
   readonly toolName: string | null;
+  // Review round 1 P-4: Codex's own `permission_mode` (or any future
+  // harness's equivalent field, via `[harness.protocol.input].permission`)
+  // — logged verbatim when the envelope carried one, absent from the
+  // entry entirely otherwise (claude-code's envelope carries none).
+  // Never read for a decision anywhere in this codebase — see the 15b
+  // report's grep proof.
+  readonly permission?: string | null;
 }
 
 // Every verdict this adapter reaches gets logged — block/confirm/observe
 // from PreToolUse, flag from UserPromptSubmit — including `observe` entries
 // produced only for audit (never surfaced to the model). `context` carries
-// the session_id/tool_name the raw envelope's input map named, kept for
-// context in the log line. `harness` is the TARGET harness this verdict
-// was judged under — resolves the log path and stamps every entry.
+// the session_id/tool_name/permission the raw envelope's input map named,
+// kept for context in the log line. `harness` is the TARGET harness this
+// verdict was judged under — resolves the log path and stamps every entry.
 // `loaded`, when given, is the policy load this verdict came from — passed
 // through so a fresh/rotated file gets its Story 19 audit header. `mode`,
 // when given, is ticket 08's shadow tag — `run()` passes it on EVERY log
@@ -131,6 +138,7 @@ export async function logVerdict(
   await appendLogEntry({
     session_id: context.sessionId,
     tool_name: context.toolName,
+    ...(context.permission !== undefined && context.permission !== null ? { permission: context.permission } : {}),
     family,
     verdict: verdict.verdict,
     rule_id: verdict.ruleId,

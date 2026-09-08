@@ -35,6 +35,10 @@ describe('protected-write rules: harness declarations', () => {
     await expect(checker.checkPath('~/.codex/AGENTS.md')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'codex-instructions' });
   });
 
+  test('ruleId codex-hooks: Codex hooks.json confirms on write', async () => {
+    await expect(checker.checkPath('~/.codex/hooks.json')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'codex-hooks' });
+  });
+
   test('ruleId opencode-config-dir: the OpenCode directory itself confirms on write', async () => {
     await expect(checker.checkPath('~/.config/opencode')).resolves.toMatchObject({ verdict: 'confirm', ruleId: 'opencode-config-dir' });
   });

@@ -281,7 +281,7 @@ describe('runRulesList', () => {
     expect(text).toContain('rule command.bash mkfs baseline');
     expect(text).toContain('rule secret.path dotenv baseline');
     expect(text).toContain('rule protected_write claude-code-config-dir baseline [harness:claude-code]');
-    expect(text).toMatch(/^summary: 99 rules, 0 overrides active/m);
+    expect(text).toMatch(/^summary: 100 rules, 0 overrides active/m);
   });
 
   test('lists a new overlay harness and its companion normal rule as overlay', async () => {

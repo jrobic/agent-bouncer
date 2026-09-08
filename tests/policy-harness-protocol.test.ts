@@ -9,18 +9,20 @@
 // deliberately broken `[harness.protocol]` field.
 //
 // Rule 6 ("an overlay may not relax an EXISTING BASELINE harness's
-// 'deny' confirm to 'ask'") is the one exception: no baseline harness in
-// ticket 15a's scope carries a `deny` confirm (only claude-code has a
-// protocol at all, and its own confirm is `ask` — 15b's codex.toml is the
-// first baseline `deny`), so there is no real baseline fixture to drive
-// this rule through the pipeline yet. It is proved directly against
-// src/policy/harness.ts's pure lintHarnessProtocolConfirmRelaxation
-// (the same function src/policy/load.ts's mergeHarnesses wires into the
-// real merge — see that module for the call site) and, separately,
-// proved WIRED (not dead code) by confirming a same-shaped RELAXATION on
-// an OVERLAY-declared harness (never a "baseline measured fact") is
-// allowed — the negative space that would catch an accidentally too-broad
-// check.
+// 'deny' confirm to 'ask'") needs a real baseline harness with a `deny`
+// confirm to drive it through the pipeline — ticket 15b's `codex.toml`
+// is the first one (claude-code's own confirm is `ask`). It is proved
+// three ways: directly against src/policy/harness.ts's pure
+// lintHarnessProtocolConfirmRelaxation (the same function src/policy/
+// load.ts's mergeHarnesses wires into the real merge — see that module
+// for the call site); end to end against the REAL embedded codex
+// baseline (P-1: `harness.d/codex.toml` relaxing confirm to `ask` is
+// rejected as a unit, the file+rule named in the warning, codex surviving
+// with its baseline `deny` untouched); and, separately, proved WIRED
+// the OTHER direction too — confirming a same-shaped RELAXATION on an
+// OVERLAY-declared harness (never a "baseline measured fact") is
+// allowed — the negative space that would catch an accidentally
+// too-broad check.
 
 import { describe, expect, test } from 'bun:test';
 import { lintHarnessProtocolConfirmRelaxation } from '../src/policy/harness.ts';
@@ -149,19 +151,44 @@ describe('[harness.protocol.output] lint: one rejection rule at a time', () => {
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
 
-  // `codec` has no dedicated validation branch at all in 15a (no tool row
-  // may declare one yet — `apply-patch` etc. are 15b/15c) — it is caught by
-  // parseToolRow's unrecognized-field check, the same one that would catch
-  // any other typo'd key on a tool row.
-  test('a tool row codec field rejects the block as a unit (unrecognized field, not a dedicated branch)', () => {
+  // Ticket 15b (ADR-0006 § 6): `codec` is now a recognized tool-row field
+  // with its own two-sided validation — an unknown name, and a codec
+  // combined with a selector — each a named rejection, never the generic
+  // "not a recognized field" 15a fell back on before any codec existed.
+  test('an unknown codec rejects the block as a unit', () => {
+    const protocol = replaceOne(
+      validProtocol(),
+      'Bash = { role = "command", command = "command" }',
+      'Bash = { role = "command", codec = "carrier-pigeon" }',
+    );
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
+    expect(result.warnings.some((w) => w.includes('.tools["Bash"].codec must be one of: apply-patch'))).toBe(true);
+    expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
+  });
+
+  test('a codec combined with a selector rejects the block as a unit, naming the colliding selector', () => {
     const protocol = replaceOne(
       validProtocol(),
       'Bash = { role = "command", command = "command" }',
       'Bash = { role = "command", command = "command", codec = "apply-patch" }',
     );
     const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
-    expect(result.warnings.some((w) => w.includes('.tools["Bash"].codec is not a recognized field'))).toBe(true);
+    expect(
+      result.warnings.some((w) => w.includes('.tools["Bash"].codec cannot be combined with selector field(s): command')),
+    ).toBe(true);
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
+  });
+
+  test('a codec row with no selectors lints OK — the codec owns every field itself', () => {
+    const protocol = replaceOne(
+      validProtocol(),
+      'Bash = { role = "command", command = "command" }',
+      'apply_patch = { role = "write", codec = "apply-patch" }',
+    );
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
+    expect(result.warnings).toEqual([]);
+    const acme = result.policy.harness.find((h) => h.id === 'acme');
+    expect(acme?.protocol?.tools['apply_patch']).toEqual({ role: 'write', codec: 'apply-patch' });
   });
 });
 
@@ -276,6 +303,28 @@ describe('rule 6: an overlay cannot relax a BASELINE "deny" confirm to "ask"', (
     expect(result.warnings).toEqual([]);
     const acme = result.policy.harness.find((h) => h.id === 'acme');
     expect(acme?.protocol?.output.confirm).toBe('ask');
+  });
+
+  test('P-1: wired into the real merge against the REAL embedded codex baseline — relaxing deny to ask is rejected as a unit, codex survives at deny', () => {
+    // codex.toml (ticket 15b) is the first BASELINE harness with a
+    // "deny" confirm — this is rule 6 driven through the pipeline
+    // against the real, shipped baseline, not a hand-built substitute.
+    // validProtocol()'s own confirm is already "ask" with a non-empty
+    // ask_probe, so no substitution is needed to trigger the relaxation.
+    const overlay = file(
+      'harness.d/codex.toml',
+      `
+[[harness]]
+id = "codex"
+${validProtocol()}
+`,
+    );
+    const result = loadPolicyFromOverlayFiles([overlay]);
+    expect(
+      result.warnings.some((w) => w.includes('harness.d/codex.toml') && w.includes('harness "codex"') && w.includes('cannot relax')),
+    ).toBe(true);
+    const codex = result.policy.harness.find((h) => h.id === 'codex');
+    expect(codex?.protocol?.output.confirm).toBe('deny');
   });
 });
 

@@ -56,13 +56,13 @@ describe('buildNeutralCall: plain selectors', () => {
 
   test('read role: pattern and path both populate, independently', () => {
     const call = buildNeutralCall(PROTOCOL, 'Glob', { path: '~/.ssh', pattern: '*.pem' }, null, 'test');
-    expect(call?.path).toBe('~/.ssh');
+    expect(call?.paths).toEqual(['~/.ssh']);
     expect(call?.pattern).toBe('*.pem');
   });
 
   test('a missing field is silently absent — no value, no warning', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', {}, null, 'test');
-    expect(call?.path).toBeNull();
+    expect(call?.paths).toEqual([]);
   });
 
   test('a wrong-typed field logs a diagnostic and resolves to no value', () => {
@@ -71,7 +71,7 @@ describe('buildNeutralCall: plain selectors', () => {
     console.error = (msg: string) => logs.push(msg);
     try {
       const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: 42 }, null, 'test');
-      expect(call?.path).toBeNull();
+      expect(call?.paths).toEqual([]);
     } finally {
       console.error = original;
     }
@@ -132,17 +132,17 @@ describe('buildNeutralCall: array selectors', () => {
 describe('buildNeutralCall: cwd-relative path resolution', () => {
   test('a relative path is joined against cwd before being returned', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: 'sub/file.txt' }, '/session/dir', 'test');
-    expect(call?.path).toBe('/session/dir/sub/file.txt');
+    expect(call?.paths).toEqual(['/session/dir/sub/file.txt']);
   });
 
   test('an absolute path is left untouched even when cwd is set', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: '/etc/passwd' }, '/session/dir', 'test');
-    expect(call?.path).toBe('/etc/passwd');
+    expect(call?.paths).toEqual(['/etc/passwd']);
   });
 
   test('no cwd (harness never sends one) leaves a relative path exactly as given', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: 'relative.txt' }, null, 'test');
-    expect(call?.path).toBe('relative.txt');
+    expect(call?.paths).toEqual(['relative.txt']);
   });
 });
 
@@ -193,5 +193,42 @@ describe('buildCommandInputBag: the inverse of a command selector', () => {
       'test',
     );
     expect(call?.commands).toEqual(['rm -rf /']);
+  });
+});
+
+describe('buildNeutralCall: codec drift (S-3)', () => {
+  // A name `rules lint` accepted (a member of KNOWN_INPUT_CODECS) but the
+  // runtime registry (src/adapter/codecs/input/registry.ts) does not
+  // implement — the lint-time/runtime pair drifting apart, reachable in
+  // practice only as a bug in this repo, never from a real declaration.
+  // Before the S-3 fix this failed CLOSED ("not judged") but SILENTLY;
+  // it must now also warn, matching doctor.ts's own wiring-drift branch.
+  const DRIFTED_PROTOCOL: HarnessProtocol = {
+    ...PROTOCOL,
+    tools: { ...PROTOCOL.tools, DriftedTool: { role: 'write', codec: 'nonexistent-codec' } },
+  };
+
+  test('an unresolvable codec name fails closed to not-judged AND warns on stderr', () => {
+    const logs: string[] = [];
+    const original = console.error;
+    console.error = (msg: string) => logs.push(msg);
+    try {
+      const call = buildNeutralCall(DRIFTED_PROTOCOL, 'DriftedTool', {}, null, 'test');
+      expect(call).toEqual({
+        toolName: 'DriftedTool',
+        role: 'write',
+        commands: [],
+        paths: [],
+        pattern: null,
+        text: null,
+        urls: [],
+        mcpName: null,
+      });
+    } finally {
+      console.error = original;
+    }
+    expect(logs.some((l) => l.includes('input codec') && l.includes('nonexistent-codec') && l.includes('no runtime implementation'))).toBe(
+      true,
+    );
   });
 });

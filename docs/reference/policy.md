@@ -500,7 +500,12 @@ field naming which hook event this is), `tool` (the tool name), `input`
 directory — used to resolve a RELATIVE `path` selector below; Claude
 Code sends absolute paths and no `cwd`, so this is a no-op for it —
 ALWAYS required, relative-path resolution needs it regardless of which
-events a harness declares).
+events a harness declares), `permission` (review round 1 P-4 — OPTIONAL,
+no coherence rule gates it: when declared, its value is attached to
+every logged verdict entry for that call, `docs/reference/audit-log.md`'s
+own `permission` field; logging only, never read for a decision anywhere
+in this codebase — codex.toml declares `permission = "permission_mode"`,
+claude-code.toml declares none).
 
 **`[harness.protocol.events]`** — the literal event-name strings `event`
 takes for each event this pipeline understands. `pre_tool` is always
@@ -534,8 +539,30 @@ for tool_input.<selector>, got <type> — allowing` on stderr and yields no
 value for that call — the exact diagnostic the pre-15a hardcoded readers
 used, now general to any selector string. `path` is resolved against
 `cwd` (when the harness's envelope sends one) BEFORE canonicalisation, so
-a relative reference (a future Codex declaration's `apply_patch` paths,
-relative to the session directory) still names a real file.
+a relative reference (Codex's own `apply_patch` paths, relative to the
+session directory) still names a real file.
+
+**`codec` (ADR-0006 § 6, ticket 15b)** — a tool row may name a `codec`
+INSTEAD of selectors: the row's role still applies, but the named codec
+parses the raw input bag itself and returns the same `{paths, text}`
+(role `write`) shape selectors would have produced, cwd-joined
+identically. `rules lint` rejects a row combining `codec` with any
+selector key (naming the collision) and an unknown `codec` name. Today's
+one codec, `apply-patch` (`src/adapter/codecs/input/apply-patch.ts`):
+parses Codex's `*** Begin Patch` … `*** End Patch` grammar (`*** Add
+File:`, `*** Update File:` with an optional `*** Move to:`, `*** Delete
+File:`) into every path it writes (a move writes BOTH ends — the row's
+`paths` is genuinely plural for exactly this reason, unlike a
+selector-derived row's single entry) and `text` = every `+` hunk line of
+an Add/Update section, joined by `\n`. A patch missing its FRAME (`***
+Begin Patch`/`*** End Patch`) yields no paths and no text (not judged at
+all — nothing to partially trust when the grammar's own envelope was
+never established); a patch WITH a valid frame whose BODY hits a line
+matching no recognized directive/hunk shape (review round 1 S-9) keeps
+every path and `+` text line already parsed before that line — judged on
+what was seen, not discarded over one bad trailing line. Either shape
+logs one stderr line naming the failure, the same "no value" contract a
+non-string selector field already has.
 
 **`[harness.protocol.output]`** — the abstract verdict → action table.
 Every action is one of `deny`, `ask`, `context`, `silent`. `rules lint`
@@ -551,14 +578,15 @@ rejects the containing block AS A UNIT on any of:
    evidence they believe it does.
 6. An overlay relaxing an EXISTING BASELINE harness's `confirm` from
    `"deny"` to `"ask"` — a baseline `"deny"` is a measured fact (Codex's
-   own, once 15b lands it), never a default an overlay gets to loosen.
+   own, ADR-0006 § 4 rule 6, fact 3 — `permissionDecision: "ask"` is
+   fail-open there, so relaxing back to `ask` would let every `confirm`
+   verdict through unjudged), never a default an overlay gets to loosen.
    An overlay-declared harness (not itself baseline) carries no such
    fact and may freely replace its own protocol.
 7. An unknown `transport` or `wiring`, or a tool row's `role` — plus, for
-   a tool row, any field lint does not recognize at all (a `codec` field
-   included: no tool row may declare one in this ticket, so it is caught
-   as an unrecognized field, the same as any other typo, not a dedicated
-   `codec`-shaped check).
+   a tool row, any field lint does not recognize at all, an unknown
+   `codec` name, or a `codec` combined with any selector key (named:
+   which selector collided).
 
 `on_malformed` (`"allow"` or `"deny"`) governs exactly one case: stdin
 `run()` could not read or parse at all — empty, or not valid JSON.
@@ -638,13 +666,20 @@ forever, silently invalid JSON:
 
 ### Codecs: the code a declaration names by string
 
-A declaration's `transport`/`wiring` strings, and a future tool row's
-`codec` (not used by any baseline harness in this ticket), name modules
-in `src/adapter/codecs/` — the ONLY code that knows a harness by name.
-Today: `stdin-json` (transport) and `hook-file` (wiring, ADR-0006 § 6). A
-new parser (Codex's `apply_patch` text) or a new wiring check (Codex's
-hook-trust table in `config.toml`) is a codec pull request; a new
-assistant that fits the existing codecs is a file.
+A declaration's `transport`/`wiring` strings, and a tool row's `codec`,
+name modules in `src/adapter/codecs/` — the ONLY code that knows a
+harness by name. Today: `stdin-json` (transport, `src/adapter/codecs/
+stdin-json.ts`); `hook-file` (wiring, `src/adapter/codecs/wiring/hook-file.ts`,
+ADR-0006 § 6, a JSON hook file whose events name a command containing
+`bouncer run --harness <id>`) and `codex-hooks` (wiring, `src/adapter/
+codecs/wiring/codex-hooks.ts`, ticket 15b — the same generic checks,
+applied to Codex's OWN two additive sources, `hooks.json` and
+`config.toml`'s `[hooks]` table, plus its hash-trust ledger,
+`config.toml`'s `[hooks.state]`); `apply-patch` (input codec on a tool
+row, `src/adapter/codecs/input/apply-patch.ts`, ticket 15b — Codex's
+`apply_patch` patch grammar). A new parser or a new wiring check is a
+codec pull request; a new assistant that fits the existing codecs is a
+file.
 
 ### Known limits (ADR-0006 § Consequences)
 
@@ -659,6 +694,12 @@ assistant that fits the existing codecs is a file.
   not built in this ticket) is a file the user maintains
   themselves; `doctor` for one can only report what the shim itself
   relays back.
+- The `codex-hooks` trust check (ticket 15b) proves PRESENCE of a
+  `[hooks.state]` record for every bouncer-pointing handler, never that
+  its `trusted_hash` is CURRENT — the exact hashing rule Codex uses is
+  undocumented and, as of this ticket, unconfirmed (see the 15b report);
+  a stale hash that still happens to have SOME record reads as trusted
+  here even though Codex itself would treat it as modified and skip it.
 
 ## `mcp_write.allowed_tools`
 
@@ -985,4 +1026,4 @@ Other `baseline`-provenance lines have no suffix because the embedded
 baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/hook-file.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/harness.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts

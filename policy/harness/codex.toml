@@ -20,3 +20,101 @@ reason = "Codex loads configuration at session start"
 id = "codex-instructions"
 path = "AGENTS\\.md$"
 reason = "Codex reads instructions for future sessions"
+
+# Review round 1 L-1: bouncer's own wiring for Codex lives here — the
+# exact role `hooks/` plays for Claude Code (harness-hooks, above) and
+# `hooks.json` plays for Cursor (cursor-hooks, policy/harness/cursor.toml).
+# `id = "codex-hooks"` is a row-id namespace only, distinct from the
+# `codex-hooks` WIRING CODEC name (src/adapter/codecs/wiring/codex-hooks.ts,
+# ADR-0006 § 6) — the two happen to share a name, never the same thing.
+[[harness.persistent]]
+id = "codex-hooks"
+path = "hooks\\.json$"
+reason = "Codex hooks.json can alter future tool-call enforcement"
+
+# ADR-0006 § 3/10 (ticket 15b): reproduces claude-code.toml's pipeline
+# almost verbatim — Codex hooks read the SAME stdin-json envelope shape
+# and answer with the SAME `hookSpecificOutput` JSON (measured 2026-09-07,
+# Codex CLI 0.153.2, `codex features list`: `hooks stable true`; hooks
+# reference at developers.openai.com/codex/hooks) — with three measured
+# differences: `cwd` in the input map (Codex's `apply_patch` paths are
+# relative to the session directory, unlike Claude Code's absolute native
+# paths), edits arriving as `apply_patch` patch text (the `apply-patch`
+# codec, not a field selector) instead of Read/Edit/Write/MultiEdit/
+# NotebookEdit rows, and `wiring = "codex-hooks"` (hooks.json plus
+# config.toml's own `[hooks]` table, additive, with a hash-trust ledger
+# hook-file's settings.json has no equivalent of).
+[harness.protocol]
+transport = "stdin-json"
+wiring    = "codex-hooks"
+
+[harness.protocol.input]
+event      = "hook_event_name"
+tool       = "tool_name"
+input      = "tool_input"
+session    = "session_id"
+prompt     = "prompt"
+cwd        = "cwd"
+# Review round 1 P-4: logged on every verdict entry for the call
+# (src/adapter/run.ts/log.ts), never read for a decision — the ticket's
+# own non-goal. claude-code.toml declares no such field; its envelope
+# carries none.
+permission = "permission_mode"
+
+[harness.protocol.events]
+pre_tool      = "PreToolUse"
+prompt        = "UserPromptSubmit"
+session_start = "SessionStart"
+
+# name -> role + field selectors, OR role + codec (ADR-0006 § 6). Codex
+# has no Read/Edit/Write/Grep/Glob/NotebookEdit tools (fact 4): reads go
+# through Bash, edits arrive as `apply_patch` patch text the codec parses
+# into write paths + added-line text. A name matching no row is not
+# judged, as claude-code.toml.
+[harness.protocol.tools]
+Bash        = { role = "command", command = "command" }
+apply_patch = { role = "write",   codec = "apply-patch" }
+"mcp__*"    = { role = "mcp" }
+
+[harness.protocol.output]
+block = "deny"
+# `ask` probe (measured live 2026-09-08, Codex CLI 0.153.2, real
+# authenticated `codex exec` session, ticket 15b probe 3 — see
+# .scratch/bouncer/reports/15b-report.md's probe table): a throwaway
+# hook (not bouncer) answered `permissionDecision: "ask"` on a plain
+# `echo`; the session transcript showed `hook: PreToolUse Failed`
+# (never `Blocked`) and the command RAN — confirms ADR-0006 fact 3
+# (hooks reference: "parsed but not supported yet — Codex marks the
+# hook run as failed, reports the error, and continues the tool
+# call") end to end, not just from the reference doc. A `confirm =
+# "ask"` table here would let every confirm-class verdict through
+# unjudged, so this baseline degrades straight to "deny" instead —
+# no `[harness.protocol.output.ask]` template exists below (one
+# would be a dead template while confirm != "ask", rejected by
+# lint). ADR-0006 § 4 rule 6 protects this: an overlay may not relax
+# it back to "ask".
+confirm = "deny"
+observe = "silent"
+flag = "context"
+# on_malformed = "deny" (measured 2026-09-08, ticket 15b probe 5):
+# Codex itself never sends a malformed envelope (its own hook stdin,
+# logged live via a throwaway hook, is always well-formed JSON) — so
+# this is a considered decision, not a live-Codex-observed fact.
+# Verified by hand-breaking an envelope through the SOURCE binary's
+# own `run --harness codex` directly: renders this harness's own
+# deny template with `envelope-malformed: unreadable or malformed
+# hook envelope — failing closed`. Chosen fail-closed (unlike Claude
+# Code's "allow") to match Codex's own stricter `confirm = "deny"`
+# posture — a harness whose every confirm-class verdict already
+# fails closed gains nothing from silently allowing a broken
+# envelope through.
+on_malformed = "deny"
+
+[harness.protocol.output.deny]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":${reason}}}'
+
+[harness.protocol.output.context]
+stdout = '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":${context}}}'
+
+[harness.protocol.output.session_start]
+stdout = '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":${context}}}'

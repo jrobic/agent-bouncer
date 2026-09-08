@@ -28,12 +28,22 @@ produces no line at all.
 {"timestamp":"2026-08-17T08:56:56.332Z","harness":"claude-code","session_id":null,"tool_name":"Bash","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /"}
 ```
 
+A harness whose `[harness.protocol.input]` declares an optional
+`permission` selector (review round 1 P-4 — Codex's own `permission_mode`
+is the only one today) adds a `permission` field carrying that value
+verbatim, whenever the envelope actually sent one:
+
+```json
+{"timestamp":"2026-09-08T20:00:00.000Z","harness":"codex","session_id":"01a...","tool_name":"Bash","permission":"bypassPermissions","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /"}
+```
+
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | string | ISO 8601, set when the line is written. |
 | `harness` | string | The target harness's own declaration id (e.g. `"claude-code"`). |
 | `session_id` | string \| null | From the hook envelope; `null` when absent. |
 | `tool_name` | string \| null | From the hook envelope; `null` when absent. |
+| `permission` | string | OPTIONAL — only present when the harness declares `input.permission` AND the envelope sent a value for it. Logged verbatim, never read for a decision anywhere in this codebase. |
 | `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"protected-write"` \| `"prompt"`. |
 | `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"`. |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |

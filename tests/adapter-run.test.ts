@@ -499,3 +499,82 @@ describe('run: ${rule}/${verdict} actually supplied for a real verdict (review r
     });
   });
 });
+
+// Review round 1 P-4: `permission` is the one OPTIONAL `[harness.protocol.
+// input]` selector with no engine-side reader at all — codex.toml
+// declares `permission = "permission_mode"`, logged verbatim on every
+// verdict entry for that call, never read for a decision (grep proves it
+// in the 15b report). claude-code.toml declares no such field, so its own
+// entries never carry the key at all — not even `null`.
+describe('run: permission logged verbatim when a harness declares input.permission (review round 1 P-4)', () => {
+  const ORIGINAL_HOME = process.env.HOME;
+  const ORIGINAL_CODEX_HOME = process.env.CODEX_HOME;
+  const cleanupDirs: string[] = [];
+
+  afterEach(async () => {
+    if (ORIGINAL_HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = ORIGINAL_HOME;
+    if (ORIGINAL_CODEX_HOME === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = ORIGINAL_CODEX_HOME;
+    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  test('a codex PreToolUse envelope carrying permission_mode logs it on the verdict entry', async () => {
+    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-permission-'));
+    cleanupDirs.push(accountDir);
+    const codexHome = join(accountDir, '.codex');
+    await mkdir(codexHome, { recursive: true });
+    process.env.HOME = accountDir;
+    process.env.CODEX_HOME = codexHome;
+
+    const envelope = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'rm -rf /' },
+      permission_mode: 'bypassPermissions',
+    });
+    const { stdout } = await run(envelope, { harness: 'codex' });
+    expect(stdout).not.toBeNull();
+
+    const content = await readFile(join(codexHome, 'logs', 'hooks', 'bouncer.log'), 'utf-8');
+    const lines = content.trim().split('\n').map((l) => JSON.parse(l));
+    const entry = lines.find((l) => l.rule_id === 'rm-rf-dangerous');
+    expect(entry).toBeDefined();
+    expect(entry.permission).toBe('bypassPermissions');
+  });
+
+  test('a codex envelope with no permission_mode field logs no permission key at all', async () => {
+    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-permission-'));
+    cleanupDirs.push(accountDir);
+    const codexHome = join(accountDir, '.codex');
+    await mkdir(codexHome, { recursive: true });
+    process.env.HOME = accountDir;
+    process.env.CODEX_HOME = codexHome;
+
+    const envelope = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'rm -rf /' },
+    });
+    await run(envelope, { harness: 'codex' });
+
+    const content = await readFile(join(codexHome, 'logs', 'hooks', 'bouncer.log'), 'utf-8');
+    const lines = content.trim().split('\n').map((l) => JSON.parse(l));
+    const entry = lines.find((l) => l.rule_id === 'rm-rf-dangerous');
+    expect(entry).toBeDefined();
+    expect(Object.hasOwn(entry, 'permission')).toBe(false);
+  });
+
+  test('the SAME command under claude-code never carries a permission key — it declares no such selector', async () => {
+    const envelope = JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'rm -rf /' },
+      permission_mode: 'bypassPermissions',
+    });
+    await run(envelope);
+    const entry = await lastLogEntry();
+    expect(entry.rule_id).toBe('rm-rf-dangerous');
+    expect(Object.hasOwn(entry, 'permission')).toBe(false);
+  });
+});

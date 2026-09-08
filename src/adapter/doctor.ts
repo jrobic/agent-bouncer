@@ -1,6 +1,6 @@
 // The "the hook was cut by accident" detection layer. Declaration-driven
 // (ADR-0006 § 6): the wiring/canary/settings checks themselves are the
-// `hook-file` codec (src/adapter/codecs/hook-file.ts); this module owns
+// `hook-file` codec (src/adapter/codecs/wiring/hook-file.ts); this module owns
 // only what every harness shares regardless of its wiring codec — the
 // policy/log checks, the report assembly, and the two output forms.
 //
@@ -21,7 +21,8 @@ import { access, constants as fsConstants, mkdir, open, stat } from 'node:fs/pro
 import { dirname } from 'node:path';
 import type { EffectiveRule, LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration } from '../policy/schema.ts';
-import { checkCanary, checkSettings, checkWiring, readSettingsFile, settingsPathFor } from './codecs/hook-file.ts';
+import { checkCanary, checkSettings, checkWiring } from './codecs/wiring/hook-file.ts';
+import { wiringCodecFor } from './codecs/wiring/registry.ts';
 import { HOOK_NAME } from './constants.ts';
 import { hookLogPathFor } from './log-path.ts';
 
@@ -81,11 +82,6 @@ function overlayHarnessLinesOf(loaded: LoadResult): string[] {
   return loaded.policy.harness
     .filter((h) => loaded.overlayHarnessIds.includes(h.id))
     .map((h) => harnessAnnouncementLine(h, loaded.effectiveRules));
-}
-
-/** `<configDir>/settings.json` for the given harness — same root as its policy overlay and audit log. */
-export function defaultSettingsPathFor(harness: HarnessDeclaration): string {
-  return settingsPathFor(harness);
 }
 
 // ADR-0001 § Provenance: "; common: 4 files, profile: 0 files". `absent`
@@ -220,13 +216,28 @@ export async function runDoctorChecks(
   if (protocol === undefined || protocol.wiring === undefined) {
     wiringChecks.push({ id: 'wiring', ok: true, warn: true, message: 'not checkable (declared harness)' });
   } else {
-    const settingsPath = settingsPathOverride ?? settingsPathFor(harness);
-    const settingsResult = await readSettingsFile(settingsPath);
-    settingsCheck = checkSettings(settingsResult, settingsPath);
-    for (const eventKind of ['pre_tool', 'prompt', 'session_start'] as const) {
-      if (protocol.events[eventKind] === undefined) continue;
-      wiringChecks.push(checkWiring(settingsResult, protocol, harness.id, eventKind));
-      if (eventKind === 'pre_tool') wiringChecks.push(checkCanary(settingsResult, protocol));
+    const codec = wiringCodecFor(protocol.wiring);
+    if (codec === undefined) {
+      // `rules lint` already proved protocol.wiring is a member of
+      // src/policy/harness.ts's KNOWN_WIRINGS before this declaration
+      // ever reached run() — an unresolvable name here means the
+      // lint-time and runtime registries drifted, not a real wiring
+      // problem; fail loud rather than crash the hook.
+      wiringChecks.push({
+        id: 'wiring',
+        ok: false,
+        message: `wiring codec ${JSON.stringify(protocol.wiring)} has no runtime implementation`,
+      });
+    } else {
+      const readResult = await codec.read(settingsPathOverride, harness, protocol);
+      const { settings: settingsResult, label, path: settingsPath } = readResult;
+      settingsCheck = checkSettings(settingsResult, settingsPath, label);
+      for (const eventKind of ['pre_tool', 'prompt', 'session_start'] as const) {
+        if (protocol.events[eventKind] === undefined) continue;
+        wiringChecks.push(checkWiring(settingsResult, protocol, harness.id, eventKind, label));
+        if (eventKind === 'pre_tool') wiringChecks.push(checkCanary(settingsResult, protocol, label));
+      }
+      wiringChecks.push(...await codec.extraChecks(readResult, protocol));
     }
   }
 

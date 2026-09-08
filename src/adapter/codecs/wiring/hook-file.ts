@@ -13,25 +13,55 @@
 
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import type { HarnessDeclaration, HarnessProtocol, HarnessToolRow } from '../../policy/schema.ts';
-import { buildCanaryCommand, inspectCanaryCommand } from '../canary.ts';
-import { DEFAULT_HARNESS_ID, HOOK_NAME } from '../constants.ts';
-import type { DoctorCheck } from '../doctor.ts';
-import { configDirFor } from '../log-path.ts';
+import type { HarnessDeclaration, HarnessProtocol, HarnessToolRow } from '../../../policy/schema.ts';
+import { buildCanaryCommand, inspectCanaryCommand } from '../../canary.ts';
+import { DEFAULT_HARNESS_ID, HOOK_NAME } from '../../constants.ts';
+import type { DoctorCheck } from '../../doctor.ts';
+import { configDirFor } from '../../log-path.ts';
 
 export type SettingsReadResult =
   | { readonly kind: 'absent'; }
   | { readonly kind: 'ok'; readonly settings: RawHookEntry; }
   | { readonly kind: 'corrupt'; readonly detail: string; };
 
-type RawHookEntry = Readonly<Record<string, unknown>>;
+// Review round 1 S-1/S-2/P-5: `doctor --harness codex` used to blame
+// `settings.json` and a hardcoded default path even when a DIFFERENT
+// file — a different codec's own label, or the ONE source that actually
+// broke in a multi-source codec — was what was really read. Every
+// WiringCodec.read (src/adapter/codecs/wiring/registry.ts) now returns
+// its own label and effective path alongside the result: `corrupt`
+// names the file that broke, `absent` names every candidate path,
+// `ok` names exactly what was parsed.
+export interface WiringReadResult {
+  readonly settings: SettingsReadResult;
+  readonly label: string;
+  readonly path: string;
+  // Review round 2 C-2: opaque per-codec raw source data, carried so
+  // `WiringCodec.extraChecks` can reuse the SAME on-disk read `read()`
+  // already did instead of re-fetching — one filesystem read per
+  // source per doctor run, not two. hook-file's own read has nothing
+  // extra to carry (one source, already fully captured in `settings`);
+  // codex-hooks (its only other implementor) carries its two raw reads.
+  readonly raw?: unknown;
+}
+
+// Exported for codex-hooks.ts (ADR-0006 § 6): its own merged, additive
+// read (hooks.json + config.toml's `[hooks]` table) produces a value of
+// exactly this shape, so it can return a real `SettingsReadResult` and
+// hand it to this file's checkSettings/checkWiring/checkCanary unchanged
+// — never a second, parallel set of functions for the same JSON shape.
+export type RawHookEntry = Readonly<Record<string, unknown>>;
 
 /** `<configDir>/settings.json` — this codec's own file, under the target harness's account directory. */
 export function settingsPathFor(harness: HarnessDeclaration): string {
   return join(configDirFor(harness), 'settings.json');
 }
 
-function recordFrom(value: unknown): RawHookEntry | null {
+// Exported for codex-hooks.ts (ADR-0006 § 6, S-5): both codecs parse the
+// same "JSON object or reject" shape (hooks.json, and config.toml's own
+// `[hooks]`/`[hooks.state]` tables after TOML parsing) — one function,
+// not two copies drifting apart.
+export function recordFrom(value: unknown): RawHookEntry | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as RawHookEntry;
 }
@@ -66,22 +96,30 @@ export async function readSettingsFile(settingsPath: string): Promise<SettingsRe
   }
   const settings = recordFrom(parsed);
   if (settings === null) {
-    return { kind: 'corrupt', detail: 'settings.json does not contain a JSON object' };
+    return { kind: 'corrupt', detail: 'does not contain a JSON object' };
   }
   return { kind: 'ok', settings };
 }
 
-export function checkSettings(result: SettingsReadResult, settingsPath: string): DoctorCheck {
+// `label` names the file kind in the message — defaults to this codec's
+// own "settings.json" so every existing hook-file caller is byte-for-byte
+// unchanged; codex-hooks.ts (ADR-0006 § 6, two additive sources) passes
+// its own label rather than lying about which file it read.
+export function checkSettings(result: SettingsReadResult, settingsPath: string, label = 'settings.json'): DoctorCheck {
   if (result.kind === 'corrupt') {
-    return { id: 'settings', ok: false, message: `settings.json ${result.detail} (${settingsPath})` };
+    return { id: 'settings', ok: false, message: `${label} ${result.detail} (${settingsPath})` };
   }
   if (result.kind === 'absent') {
-    return { id: 'settings', ok: true, message: `settings.json not found at ${settingsPath} (no hooks configured yet)` };
+    return { id: 'settings', ok: true, message: `${label} not found at ${settingsPath} (no hooks configured yet)` };
   }
-  return { id: 'settings', ok: true, message: `settings.json parsed (${settingsPath})` };
+  return { id: 'settings', ok: true, message: `${label} parsed (${settingsPath})` };
 }
 
-function entriesFor(settings: RawHookEntry, event: string): readonly RawHookEntry[] {
+// Exported for codex-hooks.ts's own per-source trust indexing (ADR-0006
+// § 6): reading a source's own `{hooks: {...}}` table one event at a
+// time is exactly what this file's own checkWiring/checkCanary already
+// do — never a second reader for the same JSON shape.
+export function entriesFor(settings: RawHookEntry, event: string): readonly RawHookEntry[] {
   const hooks = recordFrom(ownValue(settings, 'hooks'));
   if (hooks === null) return [];
   const forEvent = ownValue(hooks, event);
@@ -110,7 +148,10 @@ function commandsOf(entries: readonly RawHookEntry[]): string[] {
 // this binary's own name and `run` is among its arguments — robust to
 // wherever the binary is actually installed (absolute path in the demo,
 // a PATH-resolved name in a real install), unlike a literal string match.
-function bouncerExecutable(command: unknown): string | undefined {
+// Exported for codex-hooks.ts's own trust-entry detection (ADR-0006 § 6):
+// which handlers in a matcher group actually point at bouncer, the same
+// question this file already asks for wiring/canary diagnosis.
+export function bouncerExecutable(command: unknown): string | undefined {
   if (typeof command !== 'string') return undefined;
   const [executable, ...args] = command.trim().split(/\s+/);
   if (executable === undefined || basename(executable) !== HOOK_NAME || !args.includes('run')) return undefined;
@@ -203,11 +244,20 @@ function evaluateMatcherCoverage(entries: readonly RawHookEntry[], expectedTools
 
 export type WiringEventKind = 'pre_tool' | 'prompt' | 'session_start';
 
+// `label` names the file kind in the "cannot verify" corrupt message —
+// defaults to this codec's own "settings.json" (review round 1 S-1/S-2/
+// P-5: this used to hardcode "settings.json" even when a DIFFERENT
+// codec's own label — codex-hooks' "hooks.json" or "config.toml [hooks]"
+// — was the one actually being checked, so a corrupt config.toml under
+// Codex named the wrong file). Every existing hook-file caller stays
+// byte-for-byte unchanged; doctor.ts now threads the wiring codec's own
+// dynamic label through instead of relying on this default.
 export function checkWiring(
   settingsResult: SettingsReadResult,
   protocol: HarnessProtocol,
   harnessId: string,
   eventKind: WiringEventKind,
+  label = 'settings.json',
 ): DoctorCheck {
   const eventName = protocol.events[eventKind];
   // Review round 2 R2-1: `prompt`/`session_start` are optional on a
@@ -222,7 +272,7 @@ export function checkWiring(
   const id = `wiring:${eventName}`;
 
   if (settingsResult.kind === 'corrupt') {
-    return { id, ok: false, message: `cannot verify — settings.json is unreadable/malformed (see the settings check)` };
+    return { id, ok: false, message: `cannot verify — ${label} is unreadable/malformed (see the settings check)` };
   }
 
   const settings = settingsResult.kind === 'ok' ? settingsResult.settings : {};
@@ -280,10 +330,10 @@ export function checkWiring(
   return { id, ok: true, message: `${eventName} is correctly wired${shadowSuffix}` };
 }
 
-export function checkCanary(settingsResult: SettingsReadResult, protocol: HarnessProtocol): DoctorCheck {
+export function checkCanary(settingsResult: SettingsReadResult, protocol: HarnessProtocol, label = 'settings.json'): DoctorCheck {
   const id = 'wiring:canary';
   if (settingsResult.kind === 'corrupt') {
-    return { id, ok: false, message: 'cannot verify — settings.json is unreadable/malformed (see the settings check)' };
+    return { id, ok: false, message: `cannot verify — ${label} is unreadable/malformed (see the settings check)` };
   }
 
   const preToolUseEventName = protocol.events.pre_tool;
@@ -327,20 +377,23 @@ export type CanonicalCanaryEntry =
   | { readonly entry: string; readonly error?: undefined; }
   | { readonly entry?: undefined; readonly error: string; };
 
-export async function formatCanonicalCanaryEntry(settingsPath: string, protocol: HarnessProtocol): Promise<CanonicalCanaryEntry> {
-  const settingsResult = await readSettingsFile(settingsPath);
-  if (settingsResult.kind !== 'ok') {
-    return { error: `cannot read a settings object from ${settingsPath}` };
-  }
-  const primaryEntry = entriesPointingAtBouncer(entriesFor(settingsResult.settings, protocol.events.pre_tool))[0];
+// The pure part of building the canonical canary entry — everything
+// AFTER a settings object is already in hand. `sourceLabel` names the
+// file in the two error messages only (codex-hooks.ts's own caller below
+// passes its hooks.json path, same as this file's own I/O wrapper passes
+// `settingsPath`). Exported so codex-hooks.ts's merged, additive read
+// (hooks.json + config.toml's `[hooks]` table) can render a canary entry
+// too, without a second copy of this entry-building logic.
+export function buildCanonicalCanaryEntry(settings: RawHookEntry, protocol: HarnessProtocol, sourceLabel: string): CanonicalCanaryEntry {
+  const primaryEntry = entriesPointingAtBouncer(entriesFor(settings, protocol.events.pre_tool))[0];
   if (primaryEntry === undefined) {
-    return { error: `no ${protocol.events.pre_tool} entry points at a bouncer binary in ${settingsPath}` };
+    return { error: `no ${protocol.events.pre_tool} entry points at a bouncer binary in ${sourceLabel}` };
   }
   const binaryPath = bouncerCommandsOf([primaryEntry])
     .map((command) => bouncerExecutable(command))
     .find((path): path is string => path !== undefined);
   if (binaryPath === undefined) {
-    return { error: `no ${protocol.events.pre_tool} entry points at a bouncer binary in ${settingsPath}` };
+    return { error: `no ${protocol.events.pre_tool} entry points at a bouncer binary in ${sourceLabel}` };
   }
 
   const entry = {
@@ -348,4 +401,12 @@ export async function formatCanonicalCanaryEntry(settingsPath: string, protocol:
     hooks: [{ type: 'command', command: buildCanaryCommand(binaryPath) }],
   };
   return { entry: JSON.stringify(entry, null, 2) };
+}
+
+export async function formatCanonicalCanaryEntry(settingsPath: string, protocol: HarnessProtocol): Promise<CanonicalCanaryEntry> {
+  const settingsResult = await readSettingsFile(settingsPath);
+  if (settingsResult.kind !== 'ok') {
+    return { error: `cannot read a settings object from ${settingsPath}` };
+  }
+  return buildCanonicalCanaryEntry(settingsResult.settings, protocol, settingsPath);
 }

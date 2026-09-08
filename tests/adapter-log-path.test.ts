@@ -103,11 +103,19 @@ describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overla
     const codexHome = mkdtempSync(join(tmpdir(), 'bouncer-codex-routing-codexhome-'));
     const commonHarnessDir = join(home, '.agents', 'bouncer', 'harness.d');
     mkdirSync(commonHarnessDir, { recursive: true });
-    // Extends the BASELINE codex declaration (dir/env/witness already
-    // declared) with a protocol-only addition — a minimal stdin-json
-    // table reusing claude-code's own shape, proving nothing about
-    // codex's REAL wiring (15b's job), only that routing follows the
-    // declaration once one exists.
+    // Extends the BASELINE codex declaration (dir/env/witness/protocol
+    // already declared as of 15b) with a protocol-only addition — a
+    // minimal stdin-json table reusing claude-code's own envelope shape,
+    // proving nothing about codex's REAL wiring (codex-hooks, 15b's own
+    // codex.toml), only that routing follows the declaration once one
+    // exists. `confirm = "deny"` (not "ask"): the real baseline codex
+    // protocol is `confirm = "deny"` (ADR-0006 § 4 rule 6, fact 3 for
+    // Codex — a baseline "deny" is a measured fact an overlay may not
+    // relax to "ask"), so this test overlay must agree or its own
+    // `[[harness]]` block gets rejected as a unit by that rule, exactly
+    // as any other confirm=ask overlay on codex now would; no
+    // `[harness.protocol.output.ask]` table either, which would be a
+    // dead template once nothing maps to "ask".
     writeFileSync(
       join(commonHarnessDir, 'codex.toml'),
       [
@@ -136,16 +144,13 @@ describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overla
         '',
         '[harness.protocol.output]',
         'block = "deny"',
-        'confirm = "ask"',
+        'confirm = "deny"',
         'observe = "silent"',
         'flag = "context"',
         'on_malformed = "allow"',
-        'ask_probe = "test probe"',
         '',
         '[harness.protocol.output.deny]',
         'stdout = \'{"decision":"deny","reason":${reason}}\'',
-        '[harness.protocol.output.ask]',
-        'stdout = \'{"decision":"ask","reason":${reason}}\'',
         '[harness.protocol.output.context]',
         'stdout = \'{"context":${context}}\'',
         '[harness.protocol.output.session_start]',

@@ -282,26 +282,27 @@ const EXPECTED_PROTECTED_WRITE_DIGEST: readonly string[] = [
   '5 codex-config-dir (?:(?:(^|/)\\.codex)/?$) flags= except= verdict=',
   '6 codex-config (?:(?:(^|/)\\.codex)/config\\.toml$) flags= except= verdict=',
   '7 codex-instructions (?:(?:(^|/)\\.codex)/AGENTS\\.md$) flags= except= verdict=',
-  '8 opencode-config-dir (?:(?:(^|/)\\.config/opencode)/?$) flags= except= verdict=',
-  '9 opencode-config (?:(?:(^|/)\\.config/opencode)/opencode\\.jsonc?$) flags= except= verdict=',
-  '10 opencode-instructions (?:(?:(^|/)\\.config/opencode)/AGENTS\\.md$) flags= except= verdict=',
-  '11 opencode-plugins (?:(?:(^|/)\\.config/opencode)/plugins?(/|$)) flags= except= verdict=',
-  '12 pi-agent-config-dir (?:(?:(^|/)\\.omp/agent)/?$|(?:(^|/)\\.pi/agent)/?$|(?:(^|/)\\.omp)/?$|(?:(^|/)\\.pi)/?$) flags= except= verdict=',
-  '13 pi-agent-config (?:(?:(^|/)\\.omp/agent)/config\\.ya?ml$|(?:(^|/)\\.pi/agent)/config\\.ya?ml$) flags= except= verdict=',
-  '14 pi-agent-models (?:(?:(^|/)\\.omp/agent)/models\\.ya?ml$|(?:(^|/)\\.pi/agent)/models\\.ya?ml$) flags= except= verdict=',
-  '15 pi-agent-extensions (?:(?:(^|/)\\.omp/agent)/extensions(/|$)|(?:(^|/)\\.pi/agent)/extensions(/|$)) flags= except= verdict=',
-  '16 gemini-cli-config-dir (?:(?:(^|/)\\.gemini)/?$) flags= except= verdict=',
-  '17 gemini-cli-settings (?:(?:(^|/)\\.gemini)/settings\\.json$) flags= except= verdict=',
-  '18 gemini-cli-instructions (?:(?:(^|/)\\.gemini)/GEMINI\\.md$) flags= except= verdict=',
-  '19 cursor-config-dir (?:(?:(^|/)\\.cursor)/?$) flags= except= verdict=',
-  '20 cursor-hooks (?:(?:(^|/)\\.cursor)/hooks\\.json$) flags= except= verdict=',
-  '21 cursor-mcp (?:(?:(^|/)\\.cursor)/mcp\\.json$) flags= except= verdict=',
-  '22 harness-global-config (^|/)\\.claude\\.json$ flags= except= verdict=',
-  '23 project-mcp-config (^|/)\\.mcp\\.json$ flags= except= verdict=',
-  '24 launch-agents (^|/)Library/Launch(Agents|Daemons)/[^/]+\\.plist$ flags= except= verdict=',
-  '25 user-systemd-units (^|/)\\.config/systemd/user(/|$) flags= except= verdict=',
-  '26 shell-rc (^|/)\\.(zshrc|zprofile|zshenv|zlogin|bashrc|bash_profile|bash_login|profile)$|(^|/)\\.config/fish/config\\.fish$ flags= except= verdict=',
-  '27 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=',
+  '8 codex-hooks (?:(?:(^|/)\\.codex)/hooks\\.json$) flags= except= verdict=',
+  '9 opencode-config-dir (?:(?:(^|/)\\.config/opencode)/?$) flags= except= verdict=',
+  '10 opencode-config (?:(?:(^|/)\\.config/opencode)/opencode\\.jsonc?$) flags= except= verdict=',
+  '11 opencode-instructions (?:(?:(^|/)\\.config/opencode)/AGENTS\\.md$) flags= except= verdict=',
+  '12 opencode-plugins (?:(?:(^|/)\\.config/opencode)/plugins?(/|$)) flags= except= verdict=',
+  '13 pi-agent-config-dir (?:(?:(^|/)\\.omp/agent)/?$|(?:(^|/)\\.pi/agent)/?$|(?:(^|/)\\.omp)/?$|(?:(^|/)\\.pi)/?$) flags= except= verdict=',
+  '14 pi-agent-config (?:(?:(^|/)\\.omp/agent)/config\\.ya?ml$|(?:(^|/)\\.pi/agent)/config\\.ya?ml$) flags= except= verdict=',
+  '15 pi-agent-models (?:(?:(^|/)\\.omp/agent)/models\\.ya?ml$|(?:(^|/)\\.pi/agent)/models\\.ya?ml$) flags= except= verdict=',
+  '16 pi-agent-extensions (?:(?:(^|/)\\.omp/agent)/extensions(/|$)|(?:(^|/)\\.pi/agent)/extensions(/|$)) flags= except= verdict=',
+  '17 gemini-cli-config-dir (?:(?:(^|/)\\.gemini)/?$) flags= except= verdict=',
+  '18 gemini-cli-settings (?:(?:(^|/)\\.gemini)/settings\\.json$) flags= except= verdict=',
+  '19 gemini-cli-instructions (?:(?:(^|/)\\.gemini)/GEMINI\\.md$) flags= except= verdict=',
+  '20 cursor-config-dir (?:(?:(^|/)\\.cursor)/?$) flags= except= verdict=',
+  '21 cursor-hooks (?:(?:(^|/)\\.cursor)/hooks\\.json$) flags= except= verdict=',
+  '22 cursor-mcp (?:(?:(^|/)\\.cursor)/mcp\\.json$) flags= except= verdict=',
+  '23 harness-global-config (^|/)\\.claude\\.json$ flags= except= verdict=',
+  '24 project-mcp-config (^|/)\\.mcp\\.json$ flags= except= verdict=',
+  '25 launch-agents (^|/)Library/Launch(Agents|Daemons)/[^/]+\\.plist$ flags= except= verdict=',
+  '26 user-systemd-units (^|/)\\.config/systemd/user(/|$) flags= except= verdict=',
+  '27 shell-rc (^|/)\\.(zshrc|zprofile|zshenv|zlogin|bashrc|bash_profile|bash_login|profile)$|(^|/)\\.config/fish/config\\.fish$ flags= except= verdict=',
+  '28 bouncer-policy (^|/)bouncer/(policy\\.toml|policy\\.d)(/|$) flags= except= verdict=',
 ];
 
 // DERIVED by running the projection above against policy/secret.toml and
@@ -333,7 +334,7 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
 ];
 
 describe('guards-digest: tamper lock — protected_write and secret.path path guards', () => {
-  test('protected_write matches the frozen ordered digest (28 entries)', () => {
+  test('protected_write matches the frozen ordered digest (29 entries)', () => {
     expect(pathRuleDigest(BASELINE.rules.protected_write)).toEqual([...EXPECTED_PROTECTED_WRITE_DIGEST]);
   });
 

@@ -6,7 +6,7 @@
 // itself checks against). FULL_MATCHER is now built FROM the embedded
 // claude-code baseline declaration's own `protocol.tools` map (ADR-0006
 // § 3), through the SAME representativeToolNames the hook-file codec's
-// own coverage check uses (src/adapter/codecs/hook-file.ts) — one source,
+// own coverage check uses (src/adapter/codecs/wiring/hook-file.ts) — one source,
 // not a dual that can silently fall out of step with the real check.
 //
 // This file also doubles as the tracked example doctor.ts's own comment
@@ -14,7 +14,7 @@
 // clone has no copy of it), while this fixture ships with the repo.
 
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
-import { representativeToolNames } from '../src/adapter/codecs/hook-file.ts';
+import { representativeToolNames } from '../src/adapter/codecs/wiring/hook-file.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 
 const CLAUDE_CODE_PROTOCOL = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!.protocol!;
@@ -53,3 +53,39 @@ export const HEALTHY_HOOKS = {
   UserPromptSubmit: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
   SessionStart: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
 };
+
+// Ticket 15b: the same shared-fixture discipline, for codex-hooks
+// (ADR-0006 § 6) — tests/fixtures-protocol.test.ts's codex.json replay
+// reuses these rather than a second hand-typed copy.
+const CODEX_PROTOCOL = BASELINE.rules.harness.find((h) => h.id === 'codex')!.protocol!;
+
+export const CODEX_BOUNCER_COMMAND = '/fake/checkout/dist/bouncer run --harness codex';
+export const CODEX_CANARY_COMMAND = buildCanaryCommand('/fake/checkout/dist/bouncer');
+export const CODEX_FULL_MATCHER = representativeToolNames(CODEX_PROTOCOL.tools).map(escapeRegExp).join('|');
+
+export const CODEX_HEALTHY_HOOKS = {
+  PreToolUse: [
+    { matcher: CODEX_FULL_MATCHER, hooks: [{ type: 'command', command: CODEX_BOUNCER_COMMAND }] },
+    { matcher: CODEX_FULL_MATCHER, hooks: [{ type: 'command', command: CODEX_CANARY_COMMAND }] },
+  ],
+  UserPromptSubmit: [{ hooks: [{ type: 'command', command: CODEX_BOUNCER_COMMAND }] }],
+  SessionStart: [{ hooks: [{ type: 'command', command: CODEX_BOUNCER_COMMAND }] }],
+};
+
+// codex-hooks' own trust ledger (ADR-0006 § 6): every bouncer-pointing
+// handler above (never the canary — `sh -c ...`, not a `bouncer run`
+// command) needs a `[hooks.state."<hooksJsonPath>:<event_snake>:<i>:<j>"]`
+// record before doctor considers it guarded — this builds that table for
+// a given hooks.json path, so a caller only ever states WHERE the file
+// will live, never re-derives the key format by hand.
+export function codexTrustToml(hooksJsonPath: string): string {
+  const entries: readonly [event: string, index: number][] = [
+    ['pre_tool_use', 0],
+    ['user_prompt_submit', 0],
+    ['session_start', 0],
+  ];
+  return entries.map(([event, index]) =>
+    `[hooks.state."${hooksJsonPath}:${event}:${index}:0"]\ntrusted_hash = "sha256:${'a'.repeat(64)}"\n`
+  )
+    .join('\n');
+}

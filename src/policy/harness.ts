@@ -119,7 +119,22 @@ function parsePersistent(value: unknown, label: string): HarnessParseResult<read
 // ─── `[harness.protocol]` (ADR-0006 § 3/4) ────────────────────────────────
 
 const KNOWN_TRANSPORTS: Readonly<Record<string, true>> = { 'stdin-json': true };
-const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true };
+// Exported for the S-3 parity test (tests/adapter-codec-registries.test.ts):
+// this lint-time registry and the runtime one src/adapter/codecs/wiring/
+// registry.ts's WIRING_CODECS builds must name the same key set, or a
+// declaration that lints clean could still find nothing to dispatch to
+// at doctor/run time — checked by a real test, not just this comment.
+export const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true, 'codex-hooks': true };
+// ADR-0006 § 6: an input codec on a tool row — named code that parses the
+// raw input bag itself instead of a field-map selector, for a shape a
+// selector cannot express (Codex's `apply_patch` patch text). Mirrors
+// KNOWN_WIRINGS/KNOWN_TRANSPORTS exactly: the string a declaration writes
+// must resolve to a real module (src/adapter/codecs/input/), and the two
+// registries — this lint-time one and the runtime one buildNeutralCall
+// reads (src/adapter/neutral-call.ts) — must name the same set or a
+// declaration that lints clean could still fail to dispatch at runtime.
+// Exported for the S-3 parity test, same reason as KNOWN_WIRINGS above.
+export const KNOWN_INPUT_CODECS: Readonly<Record<string, true>> = { 'apply-patch': true };
 const KNOWN_ROLES: Readonly<Record<HarnessRole, true>> = { command: true, read: true, write: true, fetch: true, mcp: true };
 const TOOL_ROW_SELECTOR_KEYS = ['command', 'path', 'pattern', 'text', 'url', 'urls'] as const;
 const TOOL_ROW_KNOWN_KEYS: Readonly<Record<string, true>> = {
@@ -130,6 +145,7 @@ const TOOL_ROW_KNOWN_KEYS: Readonly<Record<string, true>> = {
   text: true,
   url: true,
   urls: true,
+  codec: true,
 };
 
 function requireNonEmptyString(raw: object, key: string, label: string, issues: string[]): string | undefined {
@@ -167,6 +183,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
   const session = requireNonEmptyString(raw, 'session', `${label}.input`, issues);
   const prompt = optionalNonEmptyString(raw, 'prompt', `${label}.input`, issues);
   const cwd = requireNonEmptyString(raw, 'cwd', `${label}.input`, issues);
+  const permission = optionalNonEmptyString(raw, 'permission', `${label}.input`, issues);
   if (issues.length > 0) return { issues };
   return {
     value: {
@@ -176,6 +193,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
       session: session!,
       ...(prompt !== undefined ? { prompt } : {}),
       cwd: cwd!,
+      ...(permission !== undefined ? { permission } : {}),
     },
     issues,
   };
@@ -223,8 +241,28 @@ function parseToolRow(raw: unknown, toolName: string, label: string): HarnessPar
     selectors[key] = value;
   }
 
+  // ADR-0006 § 6 / ticket 15b: a `codec` row parses the raw input bag
+  // itself (Codex's `apply_patch` patch text, unreachable through a
+  // field-map selector) — mutually exclusive with every selector key: a
+  // row naming both would leave it ambiguous whether the codec or the
+  // selectors own a given field, so this is a named rejection (which
+  // selector key collided), never a generic "malformed row".
+  const codecRaw = field(raw, 'codec');
+  let codec: string | undefined;
+  if (codecRaw !== undefined) {
+    if (!nonEmptyString(codecRaw) || !Object.hasOwn(KNOWN_INPUT_CODECS, codecRaw)) {
+      issues.push(`${rowLabel}.codec must be one of: ${Object.keys(KNOWN_INPUT_CODECS).join(', ')}`);
+    } else {
+      codec = codecRaw;
+    }
+    const collidingKeys = Object.keys(selectors);
+    if (collidingKeys.length > 0) {
+      issues.push(`${rowLabel}.codec cannot be combined with selector field(s): ${collidingKeys.join(', ')}`);
+    }
+  }
+
   if (issues.length > 0) return { issues };
-  return { value: { role: role as HarnessRole, ...selectors }, issues };
+  return { value: { role: role as HarnessRole, ...selectors, ...(codec === undefined ? {} : { codec }) }, issues };
 }
 
 function parseTools(raw: unknown, label: string): HarnessParseResult<Readonly<Record<string, HarnessToolRow>>> {
@@ -527,12 +565,11 @@ export function parseHarnessProtocol(raw: unknown, label: string): HarnessParseR
 // ADR-0006 § 4 rule 6: "an overlay moves a BASELINE harness's confirm from
 // deny to ask (a baseline deny is a measured fact, fact 3 for Codex)".
 // Pure and context-free by design (the caller supplies both sides) so it
-// can be unit-tested directly — no baseline harness ships a "deny"
-// protocol.output.confirm in ticket 15a (only claude-code carries a
-// protocol, and its confirm is "ask"), so this rule has nothing to
-// exercise end-to-end until 15b's codex.toml lands; src/policy/load.ts
-// wires it into the real overlay merge regardless, so it is enforced the
-// moment there is a baseline "deny" harness to protect.
+// can be unit-tested directly — codex (ticket 15b) is the first baseline
+// harness with a "deny" protocol.output.confirm, so this rule is now
+// exercised end-to-end too (tests/policy-harness-protocol.test.ts's own
+// "rule 6" describe block, against the real embedded BASELINE); src/
+// policy/load.ts's mergeHarnesses is the real overlay merge's call site.
 export function lintHarnessProtocolConfirmRelaxation(
   baselineConfirm: HarnessAction,
   overlayConfirm: HarnessAction,
