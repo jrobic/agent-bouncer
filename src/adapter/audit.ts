@@ -335,9 +335,9 @@ export function renderReport(
 // evidence (count, shape, window) so the OUTPUT ITSELF is valid TOML that
 // `rules lint` accepts as-is (AC3) — "fill in a reason" is the human's
 // review step, not a requirement for the snippet to parse. A rule id with
-// no policy lever (rm-rf-dangerous, sudo, mcp-write's own target string
-// beyond its prefix, and any `git-conditional-*` id — none of these are
-// resolvable via [[override]], and only three lists accept [[relax]], see
+// no policy lever (rm-rf-dangerous, sudo, an invalid mcp-write tool name,
+// and any `git-conditional-*` id — none of these are resolvable via
+// [[override]], and only four lists accept [[relax]], see
 // policy/schema.ts's RelaxableList) gets a plain `#` comment instead of a
 // fabricated, lint-rejected snippet.
 
@@ -346,30 +346,24 @@ type SuggestionAction =
   | { readonly kind: 'override'; readonly rule: string; readonly verdict: VerdictKind; }
   | { readonly kind: 'none'; };
 
-// Mirrors mcp-write-rules.ts's MCP_TOOL_NAME split (non-greedy up to the
-// SECOND `__`) — duplicated here deliberately: this is a suggestion-text
-// helper, not a security decision, and importing the security module's
-// private regex would couple a display concern to an enforcement one.
-// tests/adapter-audit.test.ts carries a drift test comparing this against
-// the real module's behavior on representative tool names.
-export const MCP_TOOL_NAME = /^mcp__.+?__(.+)$/;
+// Exact tool-name relaxation is deliberately narrower than the engine's
+// generic read-prefix posture: a candidate must name a non-empty MCP server
+// and operation, and cannot contain whitespace or glob syntax.
+const FULL_MCP_TOOL_NAME = /^mcp__[^\s*?[\]{}\\]+__[^\s*?[\]{}\\]+$(?![\s\S])/;
 
 // The two rule ids `--suggest` knows a [[relax]] lever for, and where that
 // lever's `value` comes from — extracted to a constant (rather than two
 // inline `if (cluster.ruleId === '...')` branches) so the mapping is one
 // place to read, and its `list` field is typed RelaxableList so a rename
 // in policy/schema.ts's own union is a compile error here, not a silent
-// drift; tests/adapter-audit.test.ts additionally asserts every `list`
-// here is a member of the runtime RELAXABLE_LISTS companion (schema.ts can
-// grow a new list without this table's typing alone catching a stale
-// three-way split).
-export interface RelaxLever {
+// drift.
+interface RelaxLever {
   readonly ruleId: string;
   readonly list: RelaxableList;
   readonly extractValue: (exampleTarget: string) => string | undefined;
 }
 
-export const RELAX_LEVERS: readonly RelaxLever[] = [
+const RELAX_LEVERS: readonly RelaxLever[] = [
   {
     ruleId: 'git-protected',
     list: 'command.git.safe_subcommands',
@@ -377,8 +371,8 @@ export const RELAX_LEVERS: readonly RelaxLever[] = [
   },
   {
     ruleId: 'mcp-write',
-    list: 'mcp_write.read_prefixes',
-    extractValue: (raw) => MCP_TOOL_NAME.exec(raw)?.[1],
+    list: 'mcp_write.allowed_tools',
+    extractValue: (raw) => FULL_MCP_TOOL_NAME.test(raw) ? raw : undefined,
   },
 ];
 
@@ -417,7 +411,7 @@ function reasonFor(cluster: Cluster, days: number): string {
 // `--force` included, not only the plain `git push origin <branch>` shape
 // that generated the friction. Auto-emitting that as a live, copy-pasteable
 // block would let a human relax far more than they meant to by reviewing
-// only the reason text. Every OTHER lever (mcp read_prefixes, an
+// only the reason text. Every OTHER lever (mcp allowed_tools, an
 // [[override]] on a regex rule) narrows exactly what was audited, so only
 // this one list ships commented out.
 function isGitSafeSubcommandLever(list: RelaxableList): boolean {

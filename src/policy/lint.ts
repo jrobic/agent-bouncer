@@ -8,6 +8,7 @@
 // loud-warning fallback in load.ts.
 
 import type { EffectiveRule, FileTagged } from './load.ts';
+import { RELAXABLE_LISTS } from './schema.ts';
 import type { OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
 
 export interface LintIssue {
@@ -317,9 +318,9 @@ export function lintSafeGrammarShape(entries: readonly unknown[]): LintIssue[] {
   return issues;
 }
 
-const RELAX_LISTS = new Set(['command.git.safe_subcommands', 'command.git.config_read_modes', 'mcp_write.read_prefixes']);
+const EXACT_MCP_TOOL_NAME = /^mcp__[^\s*?[\]{}\\]+__[^\s*?[\]{}\\]+$(?![\s\S])/;
 
-// `[[relax]]` entries are the ONLY sanctioned way to add to the three
+// `[[relax]]` entries are the ONLY sanctioned way to add to the four
 // pure-allowlist fields — see schema.ts's RelaxableList. Every entry
 // widens what silently passes, so `reason` is mandatory, not optional.
 export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
@@ -330,11 +331,16 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
       return;
     }
     const e = raw as Record<string, unknown>;
-    if (typeof e.list !== 'string' || !RELAX_LISTS.has(e.list)) {
-      issues.push({ message: `relax[${i}]: "list" must be one of ${[...RELAX_LISTS].join(', ')}` });
+    if (typeof e.list !== 'string' || !RELAXABLE_LISTS.some((list) => list === e.list)) {
+      issues.push({ message: `relax[${i}]: "list" must be one of ${RELAXABLE_LISTS.join(', ')}` });
     }
     if (!isNonEmptyString(e.value)) {
       issues.push({ message: `relax[${i}] (list=${JSON.stringify(e.list)}): "value" must be a non-empty string` });
+    } else if (e.list === 'mcp_write.allowed_tools' && !EXACT_MCP_TOOL_NAME.test(e.value)) {
+      issues.push({
+        message: `relax[${i}] (list=${JSON.stringify(e.list)}, value=${JSON.stringify(e.value)}): `
+          + '"value" must be an exact mcp__SERVER__OP name without whitespace or glob syntax',
+      });
     }
     if (!isNonEmptyString(e.reason)) {
       issues.push({

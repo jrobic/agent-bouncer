@@ -86,7 +86,7 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
   const command = createCommandChecker(policy.command);
   const secret = createSecretChecker(policy.secret, policy.command.git.config_read_modes);
   const protectedWrite = createProtectedWriteChecker(policy.protected_write, policy.harness);
-  const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write.read_prefixes);
+  const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write);
   const scanSecretsBound = createScanSecrets(policy.write_secret);
   const scanPromptBound = createScanPrompt(policy.prompt);
 

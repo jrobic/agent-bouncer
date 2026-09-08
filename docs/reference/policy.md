@@ -660,18 +660,47 @@ assistant that fits the existing codecs is a file.
   themselves; `doctor` for one can only report what the shim itself
   relays back.
 
+## `mcp_write.allowed_tools`
+
+Exact, case-sensitive MCP tool names that pass without confirmation. The
+baseline list is empty. Each entry includes the server and operation,
+for example `mcp__chrome-devtools__click`; it does not authorize
+`mcp__other__click` or `mcp__chrome-devtools__click_extra`.
+
+An overlay adds entries only through `[[relax]]`, with a mandatory reason:
+
+```toml
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__click"
+reason = "Human-approved Chrome clicks, including application writes"
+```
+
+Values require nonempty server and operation components. Whitespace and
+glob syntax are rejected; there is no prefix, wildcard, or regex matching.
+A direct overlay addition to `[rules.mcp_write].allowed_tools` rejects
+the containing layer.
+
+Exact permissions are checked before `read_prefixes`. They authorize all
+arguments of the named tool, including mutating operations, not just reads.
+Put them in a profile overlay to keep the permission out of other profiles.
+Unlisted tools retain the existing read-prefix/default-ask behavior.
+`bouncer audit --suggest` uses this list for MCP candidates.
+
 ## `mcp_write.read_prefixes`
 
-A plain string list — an MCP tool call is a silent read when its
-operation name (everything after the tool name's second `__`) starts
-with one of these prefixes; anything else asks for confirmation. This is
-the baseline table (`[rules.mcp_write]` directly) — an overlay can only
+A plain string list, shared across MCP servers. Unless an exact
+`allowed_tools` permission applies, a call passes silently when its operation
+name (everything after the tool name's second `__`) starts with one of
+these prefixes; anything else asks for confirmation. This is the
+baseline table (`[rules.mcp_write]` directly) — an overlay can only
 ADD to it through `[[relax]]` (§ below), never by writing this table
 itself:
 
 ```toml
 [rules.mcp_write]
 read_prefixes = ["get", "list", "search", "fetch", "read", "query", "lookup", "describe", "view"]
+allowed_tools = []
 ```
 
 ## `[[override]]`: disable, replace, or relax a regex-table rule
@@ -695,12 +724,13 @@ layer the override lives in (§ Fail-closed behavior below).
 ## `[[relax]]`: widen a pure allowlist
 
 The only sanctioned way to add to `command.git.safe_subcommands`,
-`command.git.config_read_modes`, or `mcp_write.read_prefixes` — a direct
-addition to any of the three via the table itself is rejected outright.
+`command.git.config_read_modes`, `mcp_write.read_prefixes`, or
+`mcp_write.allowed_tools`. A direct addition to any of these lists via
+the table itself is rejected outright.
 
 ```toml
 [[relax]]
-list = "command.git.safe_subcommands"   # one of the three lists above
+list = "command.git.safe_subcommands"   # one of the four lists above
 value = "push"
 reason = "..."   # mandatory, non-empty — this can only relax security
 ```

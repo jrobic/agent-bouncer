@@ -9,10 +9,8 @@ import {
   conditionalRuleIdsOf,
   filterSessionEntries,
   findDeadConditionalRules,
-  MCP_TOOL_NAME,
   normalizeTarget,
   parseLogEntries,
-  RELAX_LEVERS,
   renderReport,
   renderSuggestions,
   withinWindow,
@@ -21,7 +19,6 @@ import type { AuditEntry } from '../src/adapter/audit.ts';
 import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
 import { resolvableRuleIds } from '../src/policy/lint.ts';
 import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
-import { RELAXABLE_LISTS } from '../src/policy/schema.ts';
 
 const BASELINE_POLICY = loadPolicyFromOverlayText(null).policy;
 
@@ -428,23 +425,41 @@ describe('renderSuggestions', () => {
     expect(text.match(/\[\[relax\]\]/g)?.length).toBe(1);
   });
 
-  test('the full suggest output is valid TOML that loadPolicyFromOverlayText accepts with zero warnings, '
-    + 'and the commented git block stays inert alongside the active mcp/override ones', () => {
+  test('the full suggest output remains parseable, and an MCP relaxation names only the audited full tool', () => {
+    const toolName = 'mcp__chrome-devtools__click';
     const clusters = clusterEntries([
       entry({ target: 'git push origin main' }),
       entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/jrobic/project/.env' }),
-      entry({ ruleId: 'mcp-write', family: 'mcp-write', verdict: 'confirm', target: 'mcp__github__list_issues' }),
+      entry({ ruleId: 'mcp-write', family: 'mcp-write', verdict: 'confirm', target: toolName }),
     ]);
     const text = renderSuggestions(clusters, resolvable, { days: 30 });
     const result = loadPolicyFromOverlayText(text);
+
     expect(result.warnings).toEqual([]);
     expect(result.overlayApplied).toBe(true);
-    // The active levers (mcp read_prefixes, the dotenv override) actually
-    // applied...
-    expect(result.policy.mcp_write.read_prefixes).toContain('list_issues');
+    expect(text).toContain('list = "mcp_write.allowed_tools"');
+    expect(result.policy.mcp_write.allowed_tools).toContain(toolName);
     expect(result.activeOverrides.some((o) => o.rule === 'dotenv')).toBe(true);
-    // ...while the commented git one did not.
     expect(result.policy.command.git.safe_subcommands).not.toContain('push');
+
+    const checkMcpWrite = createCheckMcpWrite(result.policy.mcp_write);
+    expect(checkMcpWrite(toolName)).toBeNull();
+    expect(checkMcpWrite('mcp__other-server__click')).toEqual(expect.objectContaining({ verdict: 'confirm' }));
+    expect(checkMcpWrite('mcp__chrome-devtools__click_extra')).toEqual(expect.objectContaining({ verdict: 'confirm' }));
+  });
+
+  test('does not suggest an allowed_tools relaxation for malformed MCP targets', () => {
+    const clusters = clusterEntries([
+      entry({ ruleId: 'mcp-write', family: 'mcp-write', target: 'mcp__chrome-devtools__' }),
+      entry({ ruleId: 'mcp-write', family: 'mcp-write', target: 'mcp__chrome devtools__click' }),
+      entry({ ruleId: 'mcp-write', family: 'mcp-write', target: 'mcp__chrome-devtools__click*' }),
+    ]);
+    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const result = loadPolicyFromOverlayText(text);
+
+    expect(text).not.toContain('mcp_write.allowed_tools');
+    expect(result.warnings).toEqual([]);
+    expect(result.policy.mcp_write.allowed_tools).toEqual([]);
   });
 
   test('an empty-friction cluster set produces a TOML-safe "nothing to suggest" comment', () => {
@@ -452,47 +467,5 @@ describe('renderSuggestions', () => {
     expect(text).toContain('#');
     const result = loadPolicyFromOverlayText(text);
     expect(result.warnings).toEqual([]);
-  });
-});
-
-describe('RELAX_LEVERS: schema-drift guard (round-3 review item 8)', () => {
-  test('every lever\'s `list` is a member of the runtime RELAXABLE_LISTS companion', () => {
-    for (const lever of RELAX_LEVERS) {
-      expect(RELAXABLE_LISTS).toContain(lever.list);
-    }
-  });
-});
-
-describe('MCP_TOOL_NAME: drift guard against mcp-write-rules.ts\'s own (private) regex (round-3 review item 10)', () => {
-  // audit.ts deliberately duplicates the split rule rather than importing
-  // the security module's private regex (see audit.ts's own comment on
-  // MCP_TOOL_NAME). This proves the duplicate hasn't drifted: whatever
-  // audit.ts thinks the "operation" substring is, mcp-write-rules.ts's REAL
-  // checker — given a read-prefix list containing exactly that string —
-  // must treat the same tool name as a read (return null), for every
-  // vector below, real server-name shapes included.
-  const TOOL_NAMES: readonly string[] = [
-    'mcp__github__list_issues',
-    'mcp__plugin_context-mode_context-mode__ctx_execute',
-    'mcp__filesystem__read_file',
-    'mcp__plugin__deploy__getStatus', // extra `__` in the operation segment
-    'mcp__server__', // empty operation
-    'not-an-mcp-tool',
-    'Bash',
-  ];
-
-  test('audit.ts\'s extracted operation, fed back as the ONLY read prefix, is treated as a read by the real checker', () => {
-    for (const toolName of TOOL_NAMES) {
-      const operation = MCP_TOOL_NAME.exec(toolName)?.[1];
-      const checkMcpWrite = createCheckMcpWrite(operation ? [operation] : []);
-      const verdict = checkMcpWrite(toolName);
-      if (operation) {
-        expect(verdict).toBeNull();
-      } else {
-        // No operation extracted (out of scope, or an empty capture) —
-        // the real checker must agree this name is out of its scope too.
-        expect(verdict).toBeNull();
-      }
-    }
   });
 });

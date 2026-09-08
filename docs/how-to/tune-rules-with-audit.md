@@ -52,11 +52,11 @@ that into policy changes — reviewed by hand, never applied automatically.
    # reason = "UNCOMMENT ONLY AFTER REVIEWING: allows EVERY git push form without confirmation, including --force — not just the audited shape. audit: rule \"git-protected\" fired 2x on shape git push <arg> <arg> in the last 30d — review before keeping"
    ```
 
-   That specific list has a much wider blast radius than the audited
-   shape suggests — see `docs/how-to/override-a-baseline-rule.md`. Every
-   other suggested block (an mcp `read_prefixes` relaxation, an
-   `[[override]]` on a regex rule) narrows exactly what was audited and
-   ships active.
+   That list affects the whole Git subcommand, not just the audited
+   shape. MCP suggestions instead use `mcp_write.allowed_tools` with
+   the full audited name, leaving other servers and suffix neighbours
+   unchanged. Regex-rule suggestions apply to the entire rule; inspect
+   its scope before copying.
 
 3. Read every suggestion before touching your overlay. `--suggest` never
    writes to `<configDir>/bouncer/policy.toml` or any other file — it

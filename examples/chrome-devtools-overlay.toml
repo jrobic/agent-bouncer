@@ -1,0 +1,64 @@
+# Profile-local Chrome permissions, approved on 2026-09-08.
+# Install in <configDir>/bouncer/policy.d/510-chrome-devtools.toml.
+# Exact tool names only: other servers and unlisted Chrome tools are unchanged.
+# Includes human-approved JavaScript execution in the Chrome page.
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__take_screenshot"
+reason = "Human-approved Chrome screenshots without per-call confirmation"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__take_snapshot"
+reason = "Human-approved Chrome page snapshots without per-call confirmation"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__new_page"
+reason = "Human-approved Chrome page creation, including navigation requests"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__close_page"
+reason = "Human-approved Chrome page closure, including possible loss of unsaved page state"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__resize_page"
+reason = "Human-approved Chrome viewport changes"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__navigate_page"
+reason = "Human-approved Chrome navigation, including remote requests and page-state changes"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__click"
+reason = "Human-approved Chrome clicks, including actions that may change application data"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__fill_form"
+reason = "Human-approved Chrome form filling, including application input handlers"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__evaluate_script"
+reason = "Human-approved JavaScript execution in Chrome pages, including application writes and network requests"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__emulate"
+reason = "Human-approved browser emulation changes through Chrome DevTools"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__fill"
+reason = "Human-approved Chrome field filling, including application input handlers"
+
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__wait_for"
+reason = "Human-approved waiting for Chrome page content without per-call confirmation"

@@ -69,10 +69,10 @@ needs a non-empty `reason` — `rules lint` rejects one without it.
 
 ## Widen a safe allowlist with `[[relax]]`
 
-`safe_subcommands`, `config_read_modes` (both `command.git`), and
-`mcp_write.read_prefixes` can't be extended by adding to the table
-directly — `rules lint` rejects that outright. Widen them through
-`[[relax]]` instead, reason mandatory:
+`safe_subcommands`, `config_read_modes` (both `command.git`),
+`mcp_write.read_prefixes`, and `mcp_write.allowed_tools` can't be extended
+by adding to the table directly. `rules lint` rejects that outright.
+Widen them through `[[relax]]` instead, reason mandatory:
 
 ```toml
 [[relax]]
@@ -97,6 +97,31 @@ bouncer rules list | grep overlay-relax
 
 Expect a line like:
 `overlay-relax command.git.safe_subcommands push — our CI force-pushes to a scratch branch and the confirm prompt blocks the pipeline`
+
+## Authorize one MCP tool without widening other servers
+
+Add a full-name permission to the target profile's
+`<configDir>/bouncer/policy.d/`:
+
+```toml
+[[relax]]
+list = "mcp_write.allowed_tools"
+value = "mcp__chrome-devtools__click"
+reason = "Human-approved Chrome interaction, including application writes"
+```
+
+Run `bouncer rules lint` and `bouncer rules list` with that profile's
+configuration directory. The permission applies to this exact tool name
+with any arguments, not to `click` on another server or to `click_extra`.
+Do not use `mcp_write.read_prefixes` for a server-specific permission.
+
+The opt-in [Chrome overlay](../../examples/chrome-devtools-overlay.toml)
+contains explicit capture, browser-control, and emulation permissions,
+including `click`, `fill_form`, `evaluate_script`, and `emulate`.
+Script execution can change
+application data and issue network requests. Unlisted Chrome tools retain
+their existing rules. Copy the overlay only into the intended profile;
+it is not part of the baseline.
 
 ## The limit: three rules aren't override-able
 

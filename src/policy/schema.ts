@@ -94,6 +94,7 @@ export interface SecretPolicy {
 
 export interface McpWritePolicy {
   readonly read_prefixes: readonly string[];
+  readonly allowed_tools: readonly string[];
 }
 
 export interface HarnessPersistent {
@@ -244,7 +245,7 @@ export interface OverrideEntry {
   readonly verdict?: 'block' | 'confirm' | 'observe';
 }
 
-// The three allowlists an overlay can only ever RELAX by adding to (each
+// The four allowlists an overlay can only ever RELAX by adding to (each
 // addition unconditionally widens what silently passes) — `[[relax]]` is
 // the sole path onto them; a plain overlay addition to
 // `rules.command.git.safe_subcommands` etc. is rejected at load time
@@ -252,18 +253,20 @@ export interface OverrideEntry {
 export type RelaxableList =
   | 'command.git.safe_subcommands'
   | 'command.git.config_read_modes'
-  | 'mcp_write.read_prefixes';
+  | 'mcp_write.read_prefixes'
+  | 'mcp_write.allowed_tools';
 
 // The runtime companion to the type above — a string-literal union has no
 // values to iterate or check membership against at runtime, so any caller
 // that needs to validate "is this string a member of RelaxableList"
 // (src/policy/lint.ts's overlay validation, src/adapter/audit.ts's
 // suggestion levers and their own drift test) reads from here instead of
-// re-declaring the three strings a second time.
+// re-declaring the four strings a second time.
 export const RELAXABLE_LISTS: readonly RelaxableList[] = [
   'command.git.safe_subcommands',
   'command.git.config_read_modes',
   'mcp_write.read_prefixes',
+  'mcp_write.allowed_tools',
 ];
 
 export interface RelaxationEntry {

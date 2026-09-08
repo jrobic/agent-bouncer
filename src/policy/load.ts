@@ -415,7 +415,7 @@ interface MergedPolicy {
   readonly secret: { readonly path: Tagged[]; readonly bash: Tagged[]; };
   readonly protected_write: Tagged[];
   readonly harness: readonly HarnessDeclaration[];
-  readonly mcp_write: { readonly read_prefixes: readonly string[]; };
+  readonly mcp_write: RulesPolicy['mcp_write'];
   readonly write_secret: Tagged[];
   readonly prompt: Tagged[];
 }
@@ -636,7 +636,10 @@ function mergedBaselineOnly(): MergedPolicy {
     },
     protected_write: mergeRegexFamily('protected_write', baseline.protected_write, []),
     harness: baseline.harness,
-    mcp_write: { read_prefixes: baseline.mcp_write.read_prefixes },
+    mcp_write: {
+      read_prefixes: baseline.mcp_write.read_prefixes,
+      allowed_tools: baseline.mcp_write.allowed_tools,
+    },
     write_secret: mergeRegexFamily('write_secret', baseline.write_secret, []),
     prompt: mergeRegexFamily('prompt', baseline.prompt, []),
   };
@@ -1033,6 +1036,14 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
       file: plainFile(layer, filename),
       detail: `rules.mcp_write.read_prefixes cannot be extended directly — use [[relax]] `
         + `(list = "mcp_write.read_prefixes") with a reason`,
+    }]);
+  }
+  if (getPath(parsed, ['rules', 'mcp_write', 'allowed_tools']) !== undefined) {
+    throw new PolicyRejected([{
+      layer,
+      file: plainFile(layer, filename),
+      detail: `rules.mcp_write.allowed_tools cannot be extended directly — use [[relax]] `
+        + `(list = "mcp_write.allowed_tools") with a reason`,
     }]);
   }
 
@@ -1454,7 +1465,14 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     ],
     harness: mergedHarnesses,
     mcp_write: {
-      read_prefixes: appendedAfterBaseline(BASELINE.rules.mcp_write.read_prefixes, relaxedValuesFor(relax, 'mcp_write.read_prefixes')),
+      read_prefixes: appendedAfterBaseline(
+        BASELINE.rules.mcp_write.read_prefixes,
+        relaxedValuesFor(relax, 'mcp_write.read_prefixes'),
+      ),
+      allowed_tools: appendedAfterBaseline(
+        BASELINE.rules.mcp_write.allowed_tools,
+        relaxedValuesFor(relax, 'mcp_write.allowed_tools'),
+      ),
     },
     write_secret: mergeRegexFamily('write_secret', BASELINE.rules.write_secret, rawWriteSecret),
     prompt: mergeRegexFamily('prompt', BASELINE.rules.prompt, rawPrompt),

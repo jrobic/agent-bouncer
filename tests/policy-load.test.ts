@@ -6,7 +6,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import { createCommandChecker } from '../src/command-rules.ts';
-import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
+import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
+import { loadPolicyFromLayers, loadPolicyFromOverlayText } from '../src/policy/load.ts';
 
 describe('loadPolicyFromOverlayText: no overlay', () => {
   test('null overlay text is the baseline alone, silently (no warnings)', () => {
@@ -138,6 +139,82 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
     const result = loadPolicyFromOverlayText(overlay);
     expect(result.warnings).toEqual([]);
     expect(result.policy.mcp_write.read_prefixes).toContain('create');
+  });
+});
+
+describe('loadPolicyFromOverlayText: exact MCP permissions', () => {
+  const chromeClick = `
+    [[relax]]
+    list = "mcp_write.allowed_tools"
+    value = "mcp__chrome-devtools__click"
+    reason = "human-approved Chrome interaction"
+  `;
+
+  test('an exact permission cannot authorize another server, a suffix neighbour, or script execution', () => {
+    const loaded = loadPolicyFromOverlayText(chromeClick);
+    const check = createCheckMcpWrite(loaded.policy.mcp_write);
+    expect(loaded.warnings).toEqual([]);
+    expect(check('mcp__chrome-devtools__click')).toBeNull();
+    expect(check('mcp__other__click')?.verdict).toBe('confirm');
+    expect(check('mcp__chrome-devtools__click_and_delete')?.verdict).toBe('confirm');
+    expect(check('mcp__chrome-devtools__evaluate_script')?.verdict).toBe('confirm');
+    expect(check('mcp__chrome-devtools__get_network_request')).toBeNull();
+  });
+
+  test('a direct allowed_tools addition rejects the layer, including its otherwise valid permission', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      ${chromeClick}
+      [rules.mcp_write]
+      allowed_tools = ["mcp__chrome-devtools__take_snapshot"]
+    `);
+    const check = createCheckMcpWrite(loaded.policy.mcp_write);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(check('mcp__chrome-devtools__click')?.verdict).toBe('confirm');
+    expect(check('mcp__chrome-devtools__take_snapshot')?.verdict).toBe('confirm');
+  });
+
+  test.each([
+    'mcp__chrome-devtools__*',
+    'mcp____click',
+    'mcp__chrome-devtools__click extra',
+    'mcp__chrome-devtools__click\n',
+  ])('an invalid exact name rejects the whole layer: %s', (value) => {
+    const loaded = loadPolicyFromOverlayText(`
+      ${chromeClick}
+      [[relax]]
+      list = "mcp_write.allowed_tools"
+      value = ${JSON.stringify(value)}
+      reason = "invalid permission must not partially apply"
+    `);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(createCheckMcpWrite(loaded.policy.mcp_write)('mcp__chrome-devtools__click')?.verdict).toBe('confirm');
+  });
+
+  test('a rejected profile loses its exact permissions without dropping healthy common permissions', () => {
+    const loaded = loadPolicyFromLayers([
+      {
+        name: 'common',
+        files: [{
+          filename: 'policy.d/common.toml',
+          text: `
+            [[relax]]
+            list = "mcp_write.allowed_tools"
+            value = "mcp__internal__inspect"
+            reason = "approved internal inspection"
+          `,
+        }],
+      },
+      {
+        name: 'profile',
+        files: [
+          { filename: 'policy.d/chrome.toml', text: chromeClick },
+          { filename: 'policy.d/broken.toml', text: 'invalid = [' },
+        ],
+      },
+    ]);
+    const check = createCheckMcpWrite(loaded.policy.mcp_write);
+    expect(check('mcp__internal__inspect')).toBeNull();
+    expect(check('mcp__chrome-devtools__click')?.verdict).toBe('confirm');
   });
 });
 
