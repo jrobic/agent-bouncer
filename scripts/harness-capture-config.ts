@@ -20,14 +20,16 @@ export interface HarnessCaptureRecord {
   readonly exec: readonly string[];
   /** The account-dir env var this harness reads its config from (ADR-0005). */
   readonly envVar: string;
-  /** The wiring file's own basename under that account dir. */
+  /** The wiring artifact's own relative path under that account dir (a `settings.json`/`hooks.json` basename, or — for a `shim-file` harness — `extensions/bouncer.ts`). */
   readonly settingsFile: string;
   /** Extra tokens `run`/`doctor`/etc. need beyond the bare subcommand. */
   readonly flagArgs: readonly string[];
-  /** The wiring-fixture PreToolUse command a hooks/settings file should point at, given the (fake or real) bouncer binary path. */
+  /** The wiring-fixture PreToolUse command a hooks/settings file should point at, given the (fake or real) bouncer binary path. Unused for `wiring: "shim"` (ticket 15c: the artifact IS the shim source, not a JSON entry pointing at one). */
   readonly wiringCommand: (bouncerPath: string) => string;
-  /** The PreToolUse matcher regex covering every guarded tool this harness declares, derived from its own real protocol.tools — never hand-typed. */
+  /** The PreToolUse matcher regex covering every guarded tool this harness declares, derived from its own real protocol.tools — never hand-typed. Unused for `wiring: "shim"` (no per-event matcher concept). */
   readonly matcher: string;
+  /** `"settings"` (default shape, hook-file/codex-hooks): capture-protocol.ts writes `{hooks: settings}` and splices a canary. `"shim"` (ticket 15c, pi-agent): capture-protocol.ts writes the rendered shim source itself instead, no canary concept. */
+  readonly wiring: 'settings' | 'shim';
 }
 
 function matcherFor(harnessId: string): string {
@@ -49,6 +51,7 @@ export const HARNESS_CAPTURE: Readonly<Record<string, HarnessCaptureRecord>> = {
     flagArgs: [],
     wiringCommand: (bouncerPath) => `${bouncerPath} run`,
     matcher: matcherFor('claude-code'),
+    wiring: 'settings',
   },
   codex: {
     exec: ['bun', 'run', join(PROJECT_ROOT, 'src', 'cli.ts')],
@@ -57,6 +60,18 @@ export const HARNESS_CAPTURE: Readonly<Record<string, HarnessCaptureRecord>> = {
     flagArgs: ['--harness', 'codex'],
     wiringCommand: (bouncerPath) => `${bouncerPath} run --harness codex`,
     matcher: matcherFor('codex'),
+    wiring: 'settings',
+  },
+  'pi-agent': {
+    // Source capture (ADR-0006 § 10, same reasoning as codex): the
+    // installed binary predates pi-agent.toml's own [harness.protocol].
+    exec: ['bun', 'run', join(PROJECT_ROOT, 'src', 'cli.ts')],
+    envVar: 'PI_CODING_AGENT_DIR',
+    settingsFile: 'extensions/bouncer.ts',
+    flagArgs: ['--harness', 'pi-agent'],
+    wiringCommand: (bouncerPath) => `${bouncerPath} run --harness pi-agent`,
+    matcher: matcherFor('pi-agent'),
+    wiring: 'shim',
   },
 };
 

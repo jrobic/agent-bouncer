@@ -34,9 +34,7 @@
 // stderr line names the failure so a human debugging a silent allow (or
 // an unexpectedly narrow judgement) can find it.
 
-function warn(hookName: string, message: string): void {
-  console.error(`[${hookName}] ${message}`);
-}
+import { warn } from '../warn.ts';
 
 export interface ApplyPatchResult {
   readonly paths: readonly string[];

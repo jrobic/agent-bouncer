@@ -21,10 +21,10 @@ import { access, constants as fsConstants, mkdir, open, stat } from 'node:fs/pro
 import { dirname } from 'node:path';
 import type { EffectiveRule, LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration } from '../policy/schema.ts';
-import { checkCanary, checkSettings, checkWiring } from './codecs/wiring/hook-file.ts';
 import { wiringCodecFor } from './codecs/wiring/registry.ts';
 import { HOOK_NAME } from './constants.ts';
 import { hookLogPathFor } from './log-path.ts';
+import { hasShim } from './shim.ts';
 
 export interface DoctorCheck {
   readonly id: string;
@@ -51,14 +51,18 @@ export interface DoctorReport {
   readonly ok: boolean;
 }
 
-// ADR-0006 § 5/9: `harness <id> <provenance> transport=<t|none>
-// confirm=<ask|deny|none> [ask_probe]` — the one line format every
-// harness-naming surface (`doctor`, `rules list`, `harness list`) shares.
-// Provenance and its source-file bracket are read off the harness's own
-// `<id>-config-dir` derived protected-write row, which already carries
-// the real baseline/overlay/baseline+overlay provenance and contributing
-// file(s) (src/policy/load.ts's derivedHarnessRows) — never re-derived
-// here.
+// ADR-0006 § 5/9/7 (ticket 15c adds `shim=`): `harness <id> <provenance>
+// transport=<t|none> confirm=<ask|deny|none> shim=<yes|no>
+// [ask_probe]` — the one line format every harness-naming surface
+// (`doctor`, `rules list`, `harness list`) shares. Provenance and its
+// source-file bracket are read off the harness's own `<id>-config-dir`
+// derived protected-write row, which already carries the real
+// baseline/overlay/baseline+overlay provenance and contributing file(s)
+// (src/policy/load.ts's derivedHarnessRows) — never re-derived here.
+// `shim` is `hasShim(harness.id)` (src/adapter/shim.ts's embedded
+// registry), independent of `protocol`/`wiring` — a harness could in
+// principle have a printable shim without (yet) having a usable
+// protocol, though none does today.
 export function harnessAnnouncementLine(harness: HarnessDeclaration, effectiveRules: readonly EffectiveRule[]): string {
   const configDirRule = effectiveRules.find((r) => r.harnessId === harness.id && r.rule.id === `${harness.id}-config-dir`);
   const provenance = configDirRule?.provenance ?? 'baseline';
@@ -67,8 +71,9 @@ export function harnessAnnouncementLine(harness: HarnessDeclaration, effectiveRu
   const protocol = harness.protocol;
   const transport = protocol === undefined ? 'none' : protocol.transport;
   const confirm = protocol === undefined ? 'none' : protocol.output.confirm;
+  const shim = hasShim(harness.id) ? 'yes' : 'no';
   const probeSuffix = protocol?.output.ask_probe !== undefined ? ` ask_probe=${JSON.stringify(protocol.output.ask_probe)}` : '';
-  return `harness ${harness.id} ${provenance}${fileSuffix} transport=${transport} confirm=${confirm}${probeSuffix}`;
+  return `harness ${harness.id} ${provenance}${fileSuffix} transport=${transport} confirm=${confirm} shim=${shim}${probeSuffix}`;
 }
 
 // Only the harnesses an overlay actually touched — the plain six-
@@ -229,15 +234,9 @@ export async function runDoctorChecks(
         message: `wiring codec ${JSON.stringify(protocol.wiring)} has no runtime implementation`,
       });
     } else {
-      const readResult = await codec.read(settingsPathOverride, harness, protocol);
-      const { settings: settingsResult, label, path: settingsPath } = readResult;
-      settingsCheck = checkSettings(settingsResult, settingsPath, label);
-      for (const eventKind of ['pre_tool', 'prompt', 'session_start'] as const) {
-        if (protocol.events[eventKind] === undefined) continue;
-        wiringChecks.push(checkWiring(settingsResult, protocol, harness.id, eventKind, label));
-        if (eventKind === 'pre_tool') wiringChecks.push(checkCanary(settingsResult, protocol, label));
-      }
-      wiringChecks.push(...await codec.extraChecks(readResult, protocol));
+      const built = await codec.buildChecks(settingsPathOverride, harness, protocol);
+      settingsCheck = built.settingsCheck;
+      wiringChecks.push(...built.checks);
     }
   }
 

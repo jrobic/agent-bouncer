@@ -29,6 +29,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
+import { renderShim } from '../src/adapter/shim.ts';
 import { CODEX_HEALTHY_HOOKS, codexTrustToml, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 
 interface RecordedCase {
@@ -62,6 +63,12 @@ interface HarnessReplayConfig {
   // once the scratch config dir exists — undefined for a harness with no
   // such concept (claude-code's hook-file wiring).
   readonly trustTomlFor?: (caseId: string, hooksJsonPath: string) => string | undefined;
+  // ADR-0006 § 6/7, ticket 15c: `shim-file` wiring (pi-agent) installs a
+  // raw shim SOURCE FILE (`extensions/bouncer.ts`), never a `{hooks:
+  // ...}` JSON wrapper — when set, this REPLACES settingsFor/
+  // trustTomlFor's write entirely for this harness, since neither
+  // concept (a hooks table, a trust ledger) applies to it.
+  readonly installArtifact?: (caseId: string, configDir: string) => void;
   // Review round 1 S-6/P-6: the exact case ids this fixture file MUST
   // keep — a dropped case fails the meta-check by NAME, not by falling
   // under a length threshold a different added-and-dropped case could
@@ -110,6 +117,8 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       'missing-hook-event-name-silent',
       'shadow-deny-silent',
       'shadow-typo-normal-enforce',
+      'read-colon-selector-ask',
+      'grep-semicolon-list-deny',
     ],
   },
   codex: {
@@ -146,6 +155,51 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       'invalid-json-malformed',
       'posttooluse-event-silent',
       'missing-hook-event-name-silent',
+      'shadow-deny-silent',
+      'shadow-typo-normal-enforce',
+    ],
+  },
+  'pi-agent': {
+    envVarName: 'PI_CODING_AGENT_DIR',
+    configSubdir: '.pi-agent-home',
+    settingsFileName: 'extensions/bouncer.ts',
+    runHarness: 'pi-agent',
+    // shim-file wiring has no `{hooks: ...}` shape at all — `installArtifact`
+    // below fully replaces this pair for pi-agent.
+    settingsFor: () => undefined,
+    // `wiring:binary` is a REAL filesystem executability check (never
+    // hook-file's mere string matching) — `process.execPath` (this TEST
+    // process's own Bun binary) is genuinely executable wherever this
+    // ever runs, mirroring scripts/capture-protocol.ts's own choice for
+    // the SAME reason. The healthy case's captured stdout is `null`
+    // regardless of which real path was baked, so this is never itself
+    // part of the byte contract being replayed.
+    installArtifact: (caseId, configDir) => {
+      if (caseId !== 'sessionstart-healthy-silent') return;
+      mkdirSync(join(configDir, 'extensions'), { recursive: true });
+      writeFileSync(join(configDir, 'extensions', 'bouncer.ts'), renderShim('pi-agent', process.execPath)!, 'utf8');
+    },
+    requiredCaseIds: [
+      'rm-rf-root-deny',
+      'git-branch-delete-ask',
+      'git-reflog-show-observe-silent',
+      'read-ssh-key-deny',
+      'write-pi-agent-config-ask',
+      'hashline-edit-multi-section-write-secret-deny',
+      'hashline-edit-unparseable-not-judged-silent',
+      'pi-edit-shape-write-secret-deny',
+      'grep-ssh-dir',
+      'glob-ssh-dir',
+      'find-ssh-dir',
+      'ls-ssh-dir',
+      'read-zsh-history-colon-selector-ask',
+      'grep-path-list-semicolon-deny',
+      'sessionstart-healthy-silent',
+      'sessionstart-broken-shim-scream',
+      'empty-stdin-malformed',
+      'invalid-json-malformed',
+      'unknown-event-silent',
+      'missing-event-name-silent',
       'shadow-deny-silent',
       'shadow-typo-normal-enforce',
     ],
@@ -223,12 +277,16 @@ for (const file of FIXTURE_FILES) {
         const accountDir = mkdtempSync(join(tmpdir(), 'bouncer-protocol-replay-'));
         const configDir = join(accountDir, config.configSubdir);
         mkdirSync(configDir, { recursive: true });
-        const settings = config.settingsFor(recorded.id);
-        if (settings !== undefined) {
-          const settingsPath = join(configDir, config.settingsFileName);
-          writeFileSync(settingsPath, JSON.stringify({ hooks: settings }), 'utf8');
-          const trustToml = config.trustTomlFor?.(recorded.id, settingsPath);
-          if (trustToml !== undefined) writeFileSync(join(configDir, 'config.toml'), trustToml, 'utf8');
+        if (config.installArtifact !== undefined) {
+          config.installArtifact(recorded.id, configDir);
+        } else {
+          const settings = config.settingsFor(recorded.id);
+          if (settings !== undefined) {
+            const settingsPath = join(configDir, config.settingsFileName);
+            writeFileSync(settingsPath, JSON.stringify({ hooks: settings }), 'utf8');
+            const trustToml = config.trustTomlFor?.(recorded.id, settingsPath);
+            if (trustToml !== undefined) writeFileSync(join(configDir, 'config.toml'), trustToml, 'utf8');
+          }
         }
 
         const originalHome = process.env.HOME;

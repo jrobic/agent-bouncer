@@ -27,6 +27,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { renderShim } from '../src/adapter/shim.ts';
 import { harnessCaptureFor } from './harness-capture-config.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
@@ -64,6 +65,16 @@ const HARNESS_FLAG_ARGS = CAPTURE.flagArgs;
 const WIRING_BOUNCER_PATH = '/fake/checkout/dist/bouncer';
 const WIRING_BOUNCER_COMMAND = CAPTURE.wiringCommand(WIRING_BOUNCER_PATH);
 
+// Review round 2 C-3: `expandPathCandidates` (ticket 15c review round 1
+// L-1) runs for every role="read" row on EVERY harness — a harness-
+// neutral property of the role, not a pi-agent-only fix — so Claude
+// Code's own `Read`/`Grep` rows are affected too. The installed binary
+// this file's OTHER cases record from predates that fix; these two
+// cases use the SOURCE cli instead, same reasoning ticket 15b already
+// established for codex.json (`harness-capture-config.ts`'s own
+// `pi-agent`/`codex` records).
+const SOURCE_EXEC: readonly string[] = ['bun', 'run', join(PROJECT_ROOT, 'src', 'cli.ts')];
+
 interface Case {
   readonly id: string;
   readonly argv: readonly string[]; // extra tokens after `run`, e.g. ["--shadow"]
@@ -72,6 +83,14 @@ interface Case {
   // before invocation, so the SessionStart doctor cases can probe real
   // wiring.
   readonly settings?: unknown;
+  // Review round 2 C-3: overrides EXEC_CMD for this ONE case — claude-
+  // code's own default capture target is the INSTALLED binary (matching
+  // the ticket 15a recipe), but `expandPathCandidates` (ticket 15c
+  // review round 1 L-1) is source-only as of this capture; a case
+  // proving ITS behavior must run against source while every other
+  // claude-code case keeps recording the installed binary's own
+  // byte-identical output.
+  readonly execOverride?: readonly string[];
 }
 
 function json(obj: unknown): string {
@@ -174,6 +193,23 @@ function claudeCodeCases(): Case[] {
     { id: 'missing-hook-event-name-silent', argv: [], stdin: json({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }) },
     { id: 'shadow-deny-silent', argv: ['--shadow'], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
     { id: 'shadow-typo-normal-enforce', argv: ['--shadwo'], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
+    // Review round 2 C-3: NOT byte-identical to the installed binary
+    // (`9ee2286`) — `expandPathCandidates` is source-only as of this
+    // capture. `execOverride: SOURCE_EXEC` records these two against
+    // source instead; every other case above still records the
+    // installed binary's own byte-identical output, unchanged.
+    {
+      id: 'read-colon-selector-ask',
+      argv: [],
+      stdin: preToolUse('Read', { file_path: '/Users/x/.zsh_history:1-5' }),
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'grep-semicolon-list-deny',
+      argv: [],
+      stdin: preToolUse('Grep', { path: '/Users/x/.envrc; /tmp', pattern: 'x' }),
+      execOverride: SOURCE_EXEC,
+    },
   ];
 }
 
@@ -325,9 +361,114 @@ function codexCases(): Case[] {
   ];
 }
 
+// ADR-0006 § 7/10, ticket 15c: the shim's OWN event object shape
+// (`{event, toolName, input, session, cwd}`, never a real hook envelope
+// field name — the declaration describes what the SHIM sends, not what
+// pi-agent/omp's own extension API looks like on the wire). `session`
+// mirrors the other harnesses' `session_id` convention; `cwd` is `null`
+// unless a case needs a real one (the hashline relative-path case
+// below, mirroring codex's own apply-patch-relative-cwd cases).
+function piAgentToolCall(toolName: string, input: Record<string, unknown>, extra: Record<string, unknown> = {}): string {
+  return json({ event: 'tool_call', toolName, input, session: 'capture-session', cwd: null, ...extra });
+}
+
+function piAgentSessionStart(): string {
+  return json({ event: 'session_start', session: 'capture-session', cwd: null });
+}
+
+// `[PATH#TAG]` + `+` rows only (never `-`/context/CUT, ADR-0006 § 6) —
+// confirmed live and firsthand (this ticket's own dev session's `edit`
+// tool is exactly this grammar). Two sections here, mirroring codex's
+// own apply-patch move-writes-two-paths reasoning: `paths` genuinely
+// plural for a hashline payload too.
+function hashline(...lines: readonly string[]): string {
+  return lines.join('\n');
+}
+
+// ADR-0006 § 7/10, ticket 15c: pi-agent/omp are IN-PROCESS harnesses —
+// every case here uses the shim's own object shape, never a real hook
+// envelope. `confirm = "ask"` (flipped from the shipped-baseline `deny`
+// once probe 2's interactive half was confirmed live on BOTH binaries —
+// see `pi-agent.toml`'s own dated comment and the 15c report) — a
+// confirm-class command below therefore renders the `ask` template.
+function piAgentCases(): Case[] {
+  return [
+    { id: 'rm-rf-root-deny', argv: [], stdin: piAgentToolCall('bash', { command: 'rm -rf /' }) },
+    {
+      id: 'git-branch-delete-ask',
+      argv: [],
+      stdin: piAgentToolCall('bash', { command: 'git branch -D no-such-branch-zzz' }),
+    },
+    { id: 'git-reflog-show-observe-silent', argv: [], stdin: piAgentToolCall('bash', { command: 'git reflog show -n 1' }) },
+    { id: 'read-ssh-key-deny', argv: [], stdin: piAgentToolCall('read', { path: '~/.ssh/id_rsa' }) },
+    {
+      id: 'write-pi-agent-config-ask',
+      argv: [],
+      stdin: piAgentToolCall('write', { path: '~/.omp/agent/config.yaml', content: 'model: x' }),
+    },
+    {
+      id: 'hashline-edit-multi-section-write-secret-deny',
+      argv: [],
+      stdin: piAgentToolCall('edit', {
+        input: hashline(
+          '[src/new-secret.ts#AB12]',
+          'PUT 1.=1:',
+          '+export const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";',
+          '[config.toml#CD34]',
+          'PUT >5:',
+          '+updated = true',
+        ),
+      }, { cwd: '/Users/capture/project' }),
+    },
+    {
+      id: 'hashline-edit-unparseable-not-judged-silent',
+      argv: [],
+      stdin: piAgentToolCall('edit', { input: 'PUT 1.=1:\n+no section header at all\n' }),
+    },
+    // Review round 2 C-4: pi's OWN edit shape (review round 1 P-1,
+    // `edit.d.ts:10-16`) — `{path, edits: [{oldText, newText}]}`, no
+    // `input.input` string at all — was unit-tested but never had a
+    // protocol case of its own.
+    {
+      id: 'pi-edit-shape-write-secret-deny',
+      argv: [],
+      stdin: piAgentToolCall('edit', {
+        path: 'src/new-secret.ts',
+        edits: [{ oldText: 'PLACEHOLDER', newText: 'export const AWS_KEY = "AKIAIOSFODNN7EXAMPLE";' }],
+      }),
+    },
+    { id: 'grep-ssh-dir', argv: [], stdin: piAgentToolCall('grep', { path: '~/.ssh', pattern: 'id_rsa' }) },
+    { id: 'glob-ssh-dir', argv: [], stdin: piAgentToolCall('glob', { path: '~/.ssh' }) },
+    // Review round 2 C-4: pi's OWN find/ls rows (review round 1 P-2) —
+    // never had a protocol case either; `requiredCaseIds` mirrored the
+    // gap.
+    { id: 'find-ssh-dir', argv: [], stdin: piAgentToolCall('find', { path: '~/.ssh', pattern: 'id_rsa' }) },
+    { id: 'ls-ssh-dir', argv: [], stdin: piAgentToolCall('ls', { path: '~/.ssh' }) },
+    // Review round 1 L-1: neither form defeats the fix — `:1-5` still
+    // matches `shell-history` (ask) via its own stripped candidate, and
+    // the `;`-list still matches (deny — `aws-creds`, on the `~/.aws`
+    // segment) rather than defeating protection by being read as one
+    // unrecognized joined string, proving the candidate set genuinely
+    // reaches the engine's own family checkers end to end, not just
+    // expandPathCandidates in isolation (already unit-tested,
+    // tests/adapter-neutral-call.test.ts).
+    { id: 'read-zsh-history-colon-selector-ask', argv: [], stdin: piAgentToolCall('read', { path: '~/.zsh_history:1-5' }) },
+    { id: 'grep-path-list-semicolon-deny', argv: [], stdin: piAgentToolCall('grep', { path: '~/.ssh; ~/.aws', pattern: 'x' }) },
+    { id: 'sessionstart-healthy-silent', argv: [], stdin: piAgentSessionStart(), settings: { shimHealthy: true } },
+    { id: 'sessionstart-broken-shim-scream', argv: [], stdin: piAgentSessionStart(), settings: { shimHealthy: false } },
+    { id: 'empty-stdin-malformed', argv: [], stdin: '' },
+    { id: 'invalid-json-malformed', argv: [], stdin: '{not valid json' },
+    { id: 'unknown-event-silent', argv: [], stdin: json({ event: 'tool_result', toolName: 'bash', input: { command: 'echo hi' } }) },
+    { id: 'missing-event-name-silent', argv: [], stdin: json({ toolName: 'bash', input: { command: 'rm -rf /' } }) },
+    { id: 'shadow-deny-silent', argv: ['--shadow'], stdin: piAgentToolCall('bash', { command: 'rm -rf /' }) },
+    { id: 'shadow-typo-normal-enforce', argv: ['--shadwo'], stdin: piAgentToolCall('bash', { command: 'rm -rf /' }) },
+  ];
+}
+
 const CASES_BY_HARNESS: Readonly<Record<string, () => Case[]>> = {
   'claude-code': claudeCodeCases,
   codex: codexCases,
+  'pi-agent': piAgentCases,
 };
 const casesFn = CASES_BY_HARNESS[HARNESS_ID];
 if (casesFn === undefined) throw new Error(`capture-protocol.ts: no case set for harness ${JSON.stringify(HARNESS_ID)}`);
@@ -339,9 +480,15 @@ interface Recorded {
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
 }
 
-function runOnce(argv: readonly string[], stdin: string, homeDir: string, configDir: string): { stdout: string; exit: number; } {
+function runOnce(
+  argv: readonly string[],
+  stdin: string,
+  homeDir: string,
+  configDir: string,
+  execCmd: readonly string[] = EXEC_CMD,
+): { stdout: string; exit: number; } {
   const proc = Bun.spawnSync({
-    cmd: [...EXEC_CMD, 'run', ...HARNESS_FLAG_ARGS, ...argv],
+    cmd: [...execCmd, 'run', ...HARNESS_FLAG_ARGS, ...argv],
     cwd: PROJECT_ROOT,
     env: { ...process.env, HOME: homeDir, [CAPTURE.envVar]: configDir },
     stdin: Buffer.from(stdin, 'utf8'),
@@ -355,30 +502,49 @@ function main(): void {
   const results: Recorded[] = [];
   const scratchRoot = mkdtempSync(join(tmpdir(), 'bouncer-capture-'));
 
+  // `configDir`'s own subdirectory name under a case's scratch account
+  // root — an arbitrary but stable convention per harness (never read
+  // back by anything but this script and runOnce below); pi-agent's own
+  // real convention is `<dir>/agent`, mirrored here as `.pi-agent-home`
+  // for the same "obviously scratch, never confused with a real path"
+  // reason `.claude`/`.codex` already serve.
+  function configSubdirFor(): string {
+    if (HARNESS_ID === 'codex') return '.codex';
+    if (HARNESS_ID === 'pi-agent') return '.pi-agent-home';
+    return '.claude';
+  }
+
   // Derive the real canonical canary command from the target binary
   // itself (never hand-typed) for the two SessionStart cases: probe with
   // a settings/hooks file carrying only the primary PreToolUse entry, ask
   // `doctor --print-canary`, then splice the returned canary hook into
   // both SessionStart settings fixtures before capturing them for real.
-  const canaryProbeDir = join(scratchRoot, 'canary-probe');
-  const canaryProbeConfig = join(canaryProbeDir, CAPTURE.settingsFile === 'hooks.json' ? '.codex' : '.claude');
-  mkdirSync(canaryProbeConfig, { recursive: true });
-  writeFileSync(
-    join(canaryProbeConfig, CAPTURE.settingsFile),
-    json({ hooks: { PreToolUse: [{ matcher: CAPTURE.matcher, hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }] } }),
-  );
-  const canaryProc = Bun.spawnSync({
-    cmd: [...EXEC_CMD, 'doctor', '--print-canary', ...HARNESS_FLAG_ARGS],
-    cwd: PROJECT_ROOT,
-    env: { ...process.env, HOME: canaryProbeDir, [CAPTURE.envVar]: canaryProbeConfig },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  if (canaryProc.exitCode !== 0) {
-    throw new Error(`doctor --print-canary failed: ${canaryProc.stderr.toString('utf8')}`);
+  // ADR-0006 § 6/7, ticket 15c: `shim-file` wiring (pi-agent) has NO
+  // canary concept at all (the printed shim already fails closed on its
+  // own liveness) — this whole derivation is skipped for it, and its
+  // own SessionStart cases install the shim directly, in the loop below.
+  let canaryCommand: string | undefined;
+  if (CAPTURE.wiring === 'settings') {
+    const canaryProbeDir = join(scratchRoot, 'canary-probe');
+    const canaryProbeConfig = join(canaryProbeDir, configSubdirFor());
+    mkdirSync(canaryProbeConfig, { recursive: true });
+    writeFileSync(
+      join(canaryProbeConfig, CAPTURE.settingsFile),
+      json({ hooks: { PreToolUse: [{ matcher: CAPTURE.matcher, hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }] } }),
+    );
+    const canaryProc = Bun.spawnSync({
+      cmd: [...EXEC_CMD, 'doctor', '--print-canary', ...HARNESS_FLAG_ARGS],
+      cwd: PROJECT_ROOT,
+      env: { ...process.env, HOME: canaryProbeDir, [CAPTURE.envVar]: canaryProbeConfig },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (canaryProc.exitCode !== 0) {
+      throw new Error(`doctor --print-canary failed: ${canaryProc.stderr.toString('utf8')}`);
+    }
+    const canaryEntry = JSON.parse(canaryProc.stdout.toString('utf8')) as { hooks: readonly { command: string; }[]; };
+    canaryCommand = canaryEntry.hooks[0]!.command;
   }
-  const canaryEntry = JSON.parse(canaryProc.stdout.toString('utf8')) as { hooks: readonly { command: string; }[]; };
-  const canaryCommand = canaryEntry.hooks[0]!.command;
 
   // Codex-only (ADR-0006 § 6): a bouncer entry with no [hooks.state]
   // trust record is treated as unguarded regardless of how complete its
@@ -415,23 +581,47 @@ function main(): void {
 
   for (const testCase of casesFn()) {
     const caseDir = join(scratchRoot, testCase.id);
-    const configDir = join(caseDir, CAPTURE.settingsFile === 'hooks.json' ? '.codex' : '.claude');
+    const configDir = join(caseDir, configSubdirFor());
     mkdirSync(configDir, { recursive: true });
 
-    let settings = testCase.settings as
-      | { hooks: { PreToolUse: { matcher: string; hooks: { type: string; command: string; }[]; }[]; }; }
-      | undefined;
-    if (settings !== undefined) {
-      settings = structuredClone(settings);
-      settings.hooks.PreToolUse.push({ matcher: CAPTURE.matcher, hooks: [{ type: 'command', command: canaryCommand }] });
-      writeFileSync(join(configDir, CAPTURE.settingsFile), json(settings));
-      if (HARNESS_ID === 'codex') {
-        const hooksJsonPath = join(configDir, 'hooks.json');
-        writeFileSync(join(configDir, 'config.toml'), codexTrustToml(settings.hooks, hooksJsonPath));
+    if (CAPTURE.wiring === 'settings') {
+      let settings = testCase.settings as
+        | { hooks: { PreToolUse: { matcher: string; hooks: { type: string; command: string; }[]; }[]; }; }
+        | undefined;
+      if (settings !== undefined) {
+        settings = structuredClone(settings);
+        settings.hooks.PreToolUse.push({ matcher: CAPTURE.matcher, hooks: [{ type: 'command', command: canaryCommand! }] });
+        writeFileSync(join(configDir, CAPTURE.settingsFile), json(settings));
+        if (HARNESS_ID === 'codex') {
+          const hooksJsonPath = join(configDir, 'hooks.json');
+          writeFileSync(join(configDir, 'config.toml'), codexTrustToml(settings.hooks, hooksJsonPath));
+        }
+      }
+    } else {
+      // `wiring: "shim"` (pi-agent, ticket 15c): the installed artifact
+      // IS the rendered shim source, keyed off `bouncerPath` alone — no
+      // JSON hook entry, no canary splice, no trust ledger. `shimHealthy:
+      // false` leaves the file absent entirely (doctor's own "missing"
+      // path, proven directly by tests/adapter-codecs-wiring-shim-file.
+      // test.ts — this fixture only needs the END-TO-END SessionStart
+      // rendering, not a second copy of that unit coverage).
+      // `wiring:binary` is a REAL filesystem executability check (never
+      // hook-file's mere string-matching) — a fake "installed binary"
+      // path here would make the healthy case fail its OWN check for a
+      // reason that has nothing to do with what this fixture proves
+      // (SessionStart rendering). `process.execPath` (this capture
+      // process's own Bun binary) is a genuinely executable file
+      // wherever this ever runs; the healthy case's stdout is `null`
+      // regardless of WHICH real path was baked, so this choice is
+      // never itself part of the committed fixture's byte contract.
+      const shimCase = testCase.settings as { shimHealthy: boolean; } | undefined;
+      if (shimCase?.shimHealthy === true) {
+        mkdirSync(join(configDir, 'extensions'), { recursive: true });
+        writeFileSync(join(configDir, CAPTURE.settingsFile), renderShim('pi-agent', process.execPath)!);
       }
     }
 
-    const { stdout, exit } = runOnce(testCase.argv, testCase.stdin, caseDir, configDir);
+    const { stdout, exit } = runOnce(testCase.argv, testCase.stdin, caseDir, configDir, testCase.execOverride ?? EXEC_CMD);
     results.push({
       id: testCase.id,
       argv: testCase.argv,

@@ -1,0 +1,206 @@
+{
+  "cases": [
+    {
+      "id": "rm-rf-root-deny",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"bash\",\"input\":{\"command\":\"rm -rf /\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"rm-rf-dangerous: rm -rf targeting a dangerous path: /\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "git-branch-delete-ask",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"bash\",\"input\":{\"command\":\"git branch -D no-such-branch-zzz\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"ask\":true,\"reason\":\"git-protected: git branch can rewrite history, mutate a remote, or discard work — confirm before running\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "git-reflog-show-observe-silent",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"bash\",\"input\":{\"command\":\"git reflog show -n 1\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "read-ssh-key-deny",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"read\",\"input\":{\"path\":\"~/.ssh/id_rsa\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"ssh-key: SSH key file blocked\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "write-pi-agent-config-ask",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"write\",\"input\":{\"path\":\"~/.omp/agent/config.yaml\",\"content\":\"model: x\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"ask\":true,\"reason\":\"pi-agent-config: pi-agent (and Oh My Pi) loads configuration at agent startup\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "hashline-edit-multi-section-write-secret-deny",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"edit\",\"input\":{\"input\":\"[src/new-secret.ts#AB12]\\nPUT 1.=1:\\n+export const AWS_KEY = \\\"AKIAIOSFODNN7EXAMPLE\\\";\\n[config.toml#CD34]\\nPUT >5:\\n+updated = true\"},\"session\":\"capture-session\",\"cwd\":\"/Users/capture/project\"}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"aws-access-key-id: AWS access key id\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "hashline-edit-unparseable-not-judged-silent",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"edit\",\"input\":{\"input\":\"PUT 1.=1:\\n+no section header at all\\n\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "pi-edit-shape-write-secret-deny",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"edit\",\"input\":{\"path\":\"src/new-secret.ts\",\"edits\":[{\"oldText\":\"PLACEHOLDER\",\"newText\":\"export const AWS_KEY = \\\"AKIAIOSFODNN7EXAMPLE\\\";\"}]},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"aws-access-key-id: AWS access key id\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "grep-ssh-dir",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"grep\",\"input\":{\"path\":\"~/.ssh\",\"pattern\":\"id_rsa\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"ssh-key: SSH key file blocked\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "glob-ssh-dir",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"glob\",\"input\":{\"path\":\"~/.ssh\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"ssh-dir: .ssh directory blocked\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "find-ssh-dir",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"find\",\"input\":{\"path\":\"~/.ssh\",\"pattern\":\"id_rsa\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"ssh-key: SSH key file blocked\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "ls-ssh-dir",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"ls\",\"input\":{\"path\":\"~/.ssh\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"ssh-dir: .ssh directory blocked\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "read-zsh-history-colon-selector-ask",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"read\",\"input\":{\"path\":\"~/.zsh_history:1-5\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"ask\":true,\"reason\":\"shell-history: shell history file may retain commands with inline credentials\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "grep-path-list-semicolon-deny",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"grep\",\"input\":{\"path\":\"~/.ssh; ~/.aws\",\"pattern\":\"x\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"aws-creds: AWS home directory blocked — credentials, config and the sso/cli caches hold live tokens\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "sessionstart-healthy-silent",
+      "argv": [],
+      "stdin": "{\"event\":\"session_start\",\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "sessionstart-broken-shim-scream",
+      "argv": [],
+      "stdin": "{\"event\":\"session_start\",\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"notify\":\"bouncer doctor: WIRING/POLICY PROBLEM DETECTED — this session may be running partially or fully unguarded.\\n  - wiring:shim: extensions/bouncer.ts is missing — print it with `bouncer harness shim pi-agent` and write it there\\n  - wiring:binary: cannot verify — the shim itself is unreadable/missing (see wiring:shim)\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "empty-stdin-malformed",
+      "argv": [],
+      "stdin": "",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"envelope-malformed: unreadable or malformed hook envelope — failing closed\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "invalid-json-malformed",
+      "argv": [],
+      "stdin": "{not valid json",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"envelope-malformed: unreadable or malformed hook envelope — failing closed\"}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "unknown-event-silent",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_result\",\"toolName\":\"bash\",\"input\":{\"command\":\"echo hi\"}}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "missing-event-name-silent",
+      "argv": [],
+      "stdin": "{\"toolName\":\"bash\",\"input\":{\"command\":\"rm -rf /\"}}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "shadow-deny-silent",
+      "argv": [
+        "--shadow"
+      ],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"bash\",\"input\":{\"command\":\"rm -rf /\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "shadow-typo-normal-enforce",
+      "argv": [
+        "--shadwo"
+      ],
+      "stdin": "{\"event\":\"tool_call\",\"toolName\":\"bash\",\"input\":{\"command\":\"rm -rf /\"},\"session\":\"capture-session\",\"cwd\":null}",
+      "expected": {
+        "stdout": "{\"block\":true,\"reason\":\"rm-rf-dangerous: rm -rf targeting a dangerous path: /\"}",
+        "exit": 0
+      }
+    }
+  ]
+}

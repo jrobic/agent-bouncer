@@ -8,6 +8,7 @@
 // kind — 15c adds `hashline` and `shim-file` onto this same shape).
 
 import { applyPatchCodec } from './apply-patch.ts';
+import { hashlineCodec } from './hashline.ts';
 
 export type InputCodecResult = Readonly<{ paths: readonly string[]; text: string | null; }>;
 
@@ -18,6 +19,7 @@ export type InputCodec = (ti: Record<string, unknown>, hookName: string) => Inpu
 // lint-time registry must name the same key set.
 export const INPUT_CODECS: Readonly<Record<string, InputCodec>> = {
   'apply-patch': applyPatchCodec,
+  'hashline': hashlineCodec,
 };
 
 /**

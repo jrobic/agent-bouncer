@@ -15,7 +15,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "bun build --compile ./src/cli.ts --outfile ./dist/bouncer",
-    "lint": "oxlint src tests",
+    "lint": "oxlint src tests policy/harness/*.shim.ts",
     "fmt": "dprint fmt",
     "fmt:check": "dprint check",
     "verify": "bun run typecheck && bun run lint && bun run fmt:check && bun run test"

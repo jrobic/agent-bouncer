@@ -122,7 +122,7 @@
       "argv": [],
       "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"mcp__github__create_issue\",\"tool_input\":{\"title\":\"x\"},\"session_id\":\"capture-session\"}",
       "expected": {
-        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"mcp-write: Non-read MCP tool — every MCP write asks for confirmation, on any connected server\"}}",
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"mcp-write: Unapproved MCP tool — every in-scope MCP call not recognised as a read or exact allowlisted tool asks for confirmation\"}}",
         "exit": 0
       }
     },
@@ -217,6 +217,24 @@
       "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf /\"},\"session_id\":\"capture-session\"}",
       "expected": {
         "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"rm-rf-dangerous: rm -rf targeting a dangerous path: /\"}}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "read-colon-selector-ask",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/Users/x/.zsh_history:1-5\"},\"session_id\":\"capture-session\"}",
+      "expected": {
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"shell-history: shell history file may retain commands with inline credentials\"}}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "grep-semicolon-list-deny",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Grep\",\"tool_input\":{\"path\":\"/Users/x/.envrc; /tmp\",\"pattern\":\"x\"},\"session_id\":\"capture-session\"}",
+      "expected": {
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"dotenv: dotenv and direnv .envrc files blocked (only .env.example and .env.test are allowed)\"}}",
         "exit": 0
       }
     }

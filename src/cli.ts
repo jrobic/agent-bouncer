@@ -20,6 +20,7 @@ import {
   runCheck,
   runDoctor,
   runHarnessList,
+  runHarnessShim,
   runPing,
   runPrintCanary,
   runRulesLint,
@@ -125,13 +126,30 @@ async function main(): Promise<void> {
   }
 
   if (command === 'harness') {
-    const [sub] = rest;
+    const [sub, harnessId] = rest;
     if (sub === 'list') {
       const { text, ok } = await runHarnessList();
       console.log(text);
       process.exit(ok ? 0 : 1);
     }
-    usageError(sub, 'list');
+    if (sub === 'shim') {
+      if (harnessId === undefined) {
+        console.error(`${HOOK_NAME}: harness shim requires an id argument, e.g. harness shim pi-agent`);
+        process.exit(1);
+      }
+      const { text, ok } = runHarnessShim(harnessId);
+      // Byte-exact on success (see runHarnessShim's own comment):
+      // process.stdout.write, never console.log, so a shell redirect
+      // (`> extensions/bouncer.ts`) never gains an extra trailing
+      // newline `doctor`'s own drift check would then see as a
+      // mismatch against every future re-render. The failure case has
+      // no such contract — printed the same way as every other
+      // subcommand's own usage/error text.
+      if (ok) process.stdout.write(text);
+      else console.log(text);
+      process.exit(ok ? 0 : 1);
+    }
+    usageError(sub, 'list | shim <id>');
   }
 
   if (command === 'audit') {

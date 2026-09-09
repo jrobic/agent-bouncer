@@ -27,6 +27,7 @@ import { configDirFor, hookLogPathFor } from './adapter/log-path.ts';
 import { buildCommandInputBag, buildNeutralCall } from './adapter/neutral-call.ts';
 import { loadCurrentPolicy } from './adapter/policy.ts';
 import { withDispatcherLikeRun } from './adapter/run.ts';
+import { renderShim } from './adapter/shim.ts';
 import { BASELINE } from './policy/baseline.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
@@ -673,4 +674,26 @@ function overlayHarnessListLines(loaded: LoadResult): string[] {
 export async function runHarnessList(): Promise<CommandResult> {
   const loaded = await loadCurrentPolicy(DEFAULT_HARNESS_ID);
   return { text: harnessListLines(loaded).join('\n'), ok: true };
+}
+
+/**
+ * `bouncer harness shim <id>` (ADR-0006 § 7, ticket 15c) — prints the
+ * embedded shim for an in-process harness (pi-agent today), `BOUNCER`
+ * baked to THIS process's own absolute path (`process.execPath`),
+ * overridable at the shim's own runtime by `BOUNCER_BIN`. A usage error
+ * (never a crash) for a harness with no printable shim — a stdin-json
+ * hook harness (claude-code, codex), or an id nothing embeds at all.
+ * cli.ts writes the returned text to stdout WITHOUT an extra trailing
+ * newline: the printed shim already ends in one (an ordinary source
+ * file does), and `doctor --harness <id>`'s own `wiring:shim` check
+ * re-renders and compares byte for byte against whatever a human
+ * redirected this exact output into — a second, `console.log`-added
+ * newline would make every install "drift" by construction.
+ */
+export function runHarnessShim(harnessId: string): CommandResult {
+  const rendered = renderShim(harnessId, process.execPath);
+  if (rendered === undefined) {
+    return { text: `bouncer: harness ${JSON.stringify(harnessId)} has no printable shim`, ok: false };
+  }
+  return { text: rendered, ok: true };
 }

@@ -362,13 +362,23 @@ bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
 - `--settings <path>` — check this `settings.json` instead of
   `<configDir>/settings.json`. Missing its value, or immediately
   followed by another flag, is a usage error (exits 1) — the next flag
-  is never silently swallowed as if it were the path.
+  is never silently swallowed as if it were the path. Under
+  `--harness pi-agent` (`shim-file` wiring, ADR-0006 § 6/7, ticket 15c)
+  this same flag overrides the expected SHIM path instead
+  (`<dir>/extensions/bouncer.ts` by default) — there is no
+  `settings.json` for an in-process harness; the flag name stays
+  `--settings` for one shared CLI surface across every wiring shape,
+  never a per-harness flag.
 - `--print-canary` — print the canonical second `PreToolUse` entry for the
   primary bouncer command in this settings file, ready to paste beside that
   entry. Its shell command runs the same binary's `ping`; on any non-zero
   result, it writes the fixed `PreToolUse` deny envelope and exits 0. This
   mode prints no checklist and exits 1 when it cannot find a primary bouncer
-  entry.
+  entry. Under `--harness pi-agent` this always exits 1 with an error
+  instead: `shim-file` wiring has no canary concept at all — the printed
+  shim already fails closed on its own liveness (ADR-0006 § 7's fixed
+  rule 1) — the error names `bouncer harness shim <id>` as what to run
+  instead.
 - `--harness <id>` — check `<id>`'s own wiring/policy/log instead of the
   default `claude-code`. Missing its value, or immediately followed by
   another flag, is a usage error (exits 1). Fails outright (before any
@@ -413,13 +423,40 @@ wiring that otherwise looks complete can still leave a session unguarded:
 overrides: none active
 ```
 
+**`shim-file` wiring (ticket 15c, ADR-0006 § 6/7):** `--harness pi-agent`
+checks `$PI_CODING_AGENT_DIR/extensions/bouncer.ts` — the printed shim,
+an in-process harness's own extension, never a stdin-JSON hook file. No
+`settings` check, no per-event `wiring:*` lines, no canary (the shim
+already fails closed on its own liveness, ADR-0006 § 7): two checks
+instead, `wiring:shim` (byte-identical to what `bouncer harness shim
+pi-agent` prints today) and `wiring:binary` (the shim's own baked
+`BOUNCER` path resolves to an executable):
+
+```
+[pass] wiring:shim — extensions/bouncer.ts matches the printed shim
+[pass] wiring:binary — /path/to/dist/bouncer is executable
+[pass] policy — baseline only (no overlay configured) (107 effective rules)
+[pass] log — writable (/path/to/logs/hooks/bouncer.log)
+overrides: none active
+```
+
+A drifted or absent shim fails `wiring:shim` by name, never a resolved
+scratch path (the message is deliberately harness-neutral — `extensions/
+bouncer.ts`, never the full account-dir path — so a SessionStart scream
+carrying it stays identical across accounts and machines):
+
+```
+[fail] wiring:shim — extensions/bouncer.ts differs from `bouncer harness shim pi-agent`; reprint it
+[pass] wiring:binary — /path/to/dist/bouncer is executable
+```
+
 **A harness declared without a `wiring` codec (ADR-0006 § 6):** the four
 `settings`/`wiring:*` checks collapse into ONE, tagged `[warn]` — never
 `[pass]` (that would claim the wiring was actually verified, which it
 wasn't) and never `[fail]` (nothing is broken; `ok` stays true, exit 0)
 — deliberately visible rather than silently green (review round 3
-R3-1). `--harness opencode`/`pi-agent`/`gemini-cli`/`cursor` (no
-`[harness.protocol]` at all yet — 15c/later tickets' job) fail outright
+R3-1). `--harness opencode`/`gemini-cli`/`cursor` (no
+`[harness.protocol]` at all yet — later tickets' job) fail outright
 before doctor even runs (see `run`'s exit-2 contract above); an
 overlay-declared harness WITH a protocol but no `wiring` reads:
 
@@ -605,28 +642,72 @@ bouncer harness list
 **Output:**
 
 ```
-harness claude-code baseline transport=stdin-json confirm=ask ask_probe="2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
-harness codex baseline transport=stdin-json confirm=deny
-harness opencode baseline transport=none confirm=none
-harness pi-agent baseline transport=none confirm=none
-harness gemini-cli baseline transport=none confirm=none
-harness cursor baseline transport=none confirm=none
-harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny
+harness claude-code baseline transport=stdin-json confirm=ask shim=no ask_probe="2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
+harness codex baseline transport=stdin-json confirm=deny shim=no
+harness opencode baseline transport=none confirm=none shim=no
+harness pi-agent baseline transport=stdin-json confirm=ask shim=yes ask_probe="2026-09-08, pi 0.84.1 (session 01a082be-…, cmux pane) and omp 18.1.10 (session 01a082dd-…, a separate fresh pane) — both real ctx.ui.confirm dialogs, decline blocks/accept runs on both; see the 15c report's probe table and 'Probe 2, in detail' section"
+harness gemini-cli baseline transport=none confirm=none shim=no
+harness cursor baseline transport=none confirm=none shim=no
+harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny shim=no
 ```
 
 `transport=none`/`confirm=none` names a baseline harness with no
-`[harness.protocol]` yet (`opencode`, `pi-agent`, `gemini-cli`, `cursor`
-as of this ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit`
-fails closed for it (see `run`'s exit-2 contract above). `codex`'s own
-`confirm=deny` (never `ask_probe=`, since `ask_probe` is only mandatory
-when `confirm = "ask"`) is a measured, baseline fact (ADR-0006 § 4 rule
-6, ticket 15b) — no overlay may relax it back to `ask`. Provenance —
-`baseline`, `overlay [<layer>:<file>]`, `baseline+overlay [<layer>:<file>]`
-— and the trailing `transport=`/`confirm=`/`ask_probe=` fields are the
-SAME line `rules list` and `doctor` announce an overlay-touched harness
-with (one source, `src/adapter/doctor.ts`'s `harnessAnnouncementLine`).
+`[harness.protocol]` yet (`opencode`, `gemini-cli`, `cursor` as of this
+ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit` fails closed
+for it (see `run`'s exit-2 contract above). `codex`'s own `confirm=deny`
+(never `ask_probe=`, since `ask_probe` is only mandatory when `confirm =
+"ask"`) is a measured, baseline fact (ADR-0006 § 4 rule 6, ticket 15b) —
+no overlay may relax it back to `ask`; pi-agent's own `confirm=ask` is a
+DIFFERENT kind of fact — a live probe of `ctx.ui.confirm` under both
+`pi` and `omp` (ticket 15c), confirmed 2026-09-08 on both binaries (see
+`ask_probe` above and `.scratch/bouncer/reports/15c-report.md`'s probe
+table), not a permanent Codex-shaped baseline. `shim=yes` (ADR-0006 § 7,
+ticket 15c): this harness is IN-PROCESS — `harness shim <id>` below
+prints a real embedded extension for it; `shim=no` covers both a
+stdin-json hook harness (nothing to print) and an in-process harness
+with no embedded shim yet (opencode).
+Provenance — `baseline`, `overlay [<layer>:<file>]`, `baseline+overlay
+[<layer>:<file>]` — and the trailing `transport=`/`confirm=`/`shim=`/
+`ask_probe=` fields are the SAME line `rules list` and `doctor` announce
+an overlay-touched harness with (one source, `src/adapter/doctor.ts`'s
+`harnessAnnouncementLine`).
 
 **Exit code:** always 0.
 
+## `harness shim <id>`
+
+Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7,
+ticket 15c: pi-agent and omp — they share one printed file) — the dumb,
+policy-free extension that forwards the harness's own tool-call/session-
+start event to `bouncer run --harness <id>` and returns bouncer's stdout
+to the harness as is. `BOUNCER` is baked to THIS process's own absolute
+path (`process.execPath`) at print time, overridable at the shim's own
+RUNTIME by the `BOUNCER_BIN` environment variable — always run this
+through the compiled binary you intend to keep installed, never a
+`bun run src/cli.ts` source invocation (that bakes in `bun`'s own path
+instead of a useful one).
+
+```sh
+bouncer harness shim <id>
+```
+
+**Flags:** none.
+
+**Output:** the shim source, verbatim, with a trailing newline (no extra
+one added on top of it — `doctor --harness <id>`'s own `wiring:shim`
+check re-renders and compares this exact byte sequence against whatever
+was redirected into `extensions/bouncer.ts`; a second trailing newline
+would make every install "drift" by construction). A harness with no
+embedded shim (a stdin-json hook harness, or an undeclared id) is a
+usage error instead:
+
+```sh
+$ bouncer harness shim pi-agent > ~/.pi/agent/extensions/bouncer.ts
+$ bouncer harness shim codex
+bouncer: harness "codex" has no printable shim
+```
+
+**Exit code:** 0 when a shim was printed; 1 for a harness with none.
+
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts
+Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts

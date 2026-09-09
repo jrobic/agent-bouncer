@@ -124,7 +124,7 @@ const KNOWN_TRANSPORTS: Readonly<Record<string, true>> = { 'stdin-json': true };
 // registry.ts's WIRING_CODECS builds must name the same key set, or a
 // declaration that lints clean could still find nothing to dispatch to
 // at doctor/run time — checked by a real test, not just this comment.
-export const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true, 'codex-hooks': true };
+export const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true, 'codex-hooks': true, 'shim-file': true };
 // ADR-0006 § 6: an input codec on a tool row — named code that parses the
 // raw input bag itself instead of a field-map selector, for a shape a
 // selector cannot express (Codex's `apply_patch` patch text). Mirrors
@@ -134,7 +134,7 @@ export const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true
 // reads (src/adapter/neutral-call.ts) — must name the same set or a
 // declaration that lints clean could still fail to dispatch at runtime.
 // Exported for the S-3 parity test, same reason as KNOWN_WIRINGS above.
-export const KNOWN_INPUT_CODECS: Readonly<Record<string, true>> = { 'apply-patch': true };
+export const KNOWN_INPUT_CODECS: Readonly<Record<string, true>> = { 'apply-patch': true, 'hashline': true };
 const KNOWN_ROLES: Readonly<Record<HarnessRole, true>> = { command: true, read: true, write: true, fetch: true, mcp: true };
 const TOOL_ROW_SELECTOR_KEYS = ['command', 'path', 'pattern', 'text', 'url', 'urls'] as const;
 const TOOL_ROW_KNOWN_KEYS: Readonly<Record<string, true>> = {

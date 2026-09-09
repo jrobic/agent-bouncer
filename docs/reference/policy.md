@@ -481,15 +481,22 @@ stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecisio
 only one this ticket declares): one JSON object on stdin, no framing.
 
 **`wiring`** — the codec `doctor` uses to prove the hook is actually
-installed. `"hook-file"` (the only one this ticket declares, generic):
-reads `<configDir>/settings.json`, checks each of `events.pre_tool`/
-`prompt`/`session_start` names a command whose executable basename is
-`bouncer`, whose args contain `run` and — for any harness other than
-`claude-code` — also `--harness <id>` (a bare `bouncer run` under a
-non-default harness would silently judge against claude-code's table
-instead). Optional: a harness declared without one gets `wiring: not
-checkable (declared harness)` in `doctor`, visible rather than silently
-green.
+installed. `"hook-file"` (generic): reads `<configDir>/settings.json`,
+checks each of `events.pre_tool`/`prompt`/`session_start` names a command
+whose executable basename is `bouncer`, whose args contain `run` and —
+for any harness other than `claude-code` — also `--harness <id>` (a bare
+`bouncer run` under a non-default harness would silently judge against
+claude-code's table instead). `"codex-hooks"` (ticket 15b): the same
+checks, applied to Codex's own two additive sources plus a hash-trust
+ledger. `"shim-file"` (ticket 15c, ADR-0006 § 7): an IN-PROCESS harness
+(pi-agent, omp) has no settings file and no per-event matcher at all —
+checks that `<configDir>/extensions/bouncer.ts` exists and is
+byte-identical to what `bouncer harness shim <id>` prints today
+(`wiring:shim`) and that the shim's own baked `BOUNCER` path resolves to
+an executable (`wiring:binary`); no canary concept (the shim already
+fails closed on its own liveness). Optional: a harness declared without
+one gets `wiring: not checkable (declared harness)` in `doctor`, visible
+rather than silently green.
 
 **`[harness.protocol.input]`** — where things a hook invocation needs
 live in the raw envelope object, as top-level dotted keys: `event` (the
@@ -542,13 +549,37 @@ used, now general to any selector string. `path` is resolved against
 a relative reference (Codex's own `apply_patch` paths, relative to the
 session directory) still names a real file.
 
-**`codec` (ADR-0006 § 6, ticket 15b)** — a tool row may name a `codec`
-INSTEAD of selectors: the row's role still applies, but the named codec
-parses the raw input bag itself and returns the same `{paths, text}`
-(role `write`) shape selectors would have produced, cwd-joined
+**Role `read`'s `path` selector is judged as a CANDIDATE SET, not the raw
+value alone (ticket 15c review round 1 L-1)** — `src/adapter/neutral-
+call.ts`'s `expandPathCandidates`, harness-neutral (every `role="read"`
+row, on every harness, not a pi-agent-only rule): the raw value; each
+`;`-split segment, trimmed; and, for the raw value and every segment,
+every progressive strip of a trailing `:<segment>` (`a:b:c` → `a:b`,
+then `a`) — deduplicated, ALL judged, cwd-joined identically to a plain
+single value. `db.sqlite:table` (`tests/adapter-neutral-call.test.ts`'s
+own literal row selector convention) yields the bare `db.sqlite` too,
+harmless; `archive.zip:inner/.env` yields the bare `archive.zip`. A
+superset of candidates can only ADD verdicts across the family checkers
+that already loop `paths` — fail-closed by construction, no new selector
+grammar needed. Found live: a trailing `:N-M` selector suffix or a
+`;`-joined list, both riding unstripped inside the raw `path` string,
+defeated every `$`-anchored path rule (`~/.zsh_history:1-5`,
+`proj/secrets.pem:1-2`, `proj/.envrc; proj/README.md` all read `allow`
+before this fix) — because Claude Code's own `Read`/`Grep` rows are also
+`role="read"`, this is a Claude Code behavior CHANGE, not a pi-agent-only
+fix (ADR-0006's own Consequences and History document it, ticket 15c
+review round 2 C-3): two selector-suffixed/`;`-joined cases now judge in
+`fixtures/protocol/claude-code.json`, captured from source since the
+installed binary predates the fix; every other vector stays byte-
+identical to the installed binary.
+
+**`codec` (ADR-0006 § 6, tickets 15b/15c)** — a tool row may name a
+`codec` INSTEAD of selectors: the row's role still applies, but the named
+codec parses the raw input bag itself and returns the same `{paths,
+text}` (role `write`) shape selectors would have produced, cwd-joined
 identically. `rules lint` rejects a row combining `codec` with any
-selector key (naming the collision) and an unknown `codec` name. Today's
-one codec, `apply-patch` (`src/adapter/codecs/input/apply-patch.ts`):
+selector key (naming the collision) and an unknown `codec` name. Two
+codecs today: `apply-patch` (`src/adapter/codecs/input/apply-patch.ts`):
 parses Codex's `*** Begin Patch` … `*** End Patch` grammar (`*** Add
 File:`, `*** Update File:` with an optional `*** Move to:`, `*** Delete
 File:`) into every path it writes (a move writes BOTH ends — the row's
@@ -560,9 +591,16 @@ all — nothing to partially trust when the grammar's own envelope was
 never established); a patch WITH a valid frame whose BODY hits a line
 matching no recognized directive/hunk shape (review round 1 S-9) keeps
 every path and `+` text line already parsed before that line — judged on
-what was seen, not discarded over one bad trailing line. Either shape
-logs one stderr line naming the failure, the same "no value" contract a
-non-string selector field already has.
+what was seen, not discarded over one bad trailing line. `hashline`
+(`src/adapter/codecs/input/hashline.ts`, ticket 15c): pi-agent/omp's
+`edit` tool takes one patch string with `[PATH#TAG]` section headers and
+`+` body rows (never `-`/context/`CUT` rows — hashline's own grammar has
+no such thing) instead of discrete `path`/`text` fields; every header's
+path is written (plural, same reasoning as a move), `text` = every `+`
+row across every section joined by `\n`. A payload with no recognized
+`[PATH#TAG]` header anywhere is not judged at all. Either codec logs one
+stderr line naming a failure, the same "no value" contract a non-string
+selector field already has.
 
 **`[harness.protocol.output]`** — the abstract verdict → action table.
 Every action is one of `deny`, `ask`, `context`, `silent`. `rules lint`
@@ -671,15 +709,19 @@ name modules in `src/adapter/codecs/` — the ONLY code that knows a
 harness by name. Today: `stdin-json` (transport, `src/adapter/codecs/
 stdin-json.ts`); `hook-file` (wiring, `src/adapter/codecs/wiring/hook-file.ts`,
 ADR-0006 § 6, a JSON hook file whose events name a command containing
-`bouncer run --harness <id>`) and `codex-hooks` (wiring, `src/adapter/
+`bouncer run --harness <id>`), `codex-hooks` (wiring, `src/adapter/
 codecs/wiring/codex-hooks.ts`, ticket 15b — the same generic checks,
 applied to Codex's OWN two additive sources, `hooks.json` and
 `config.toml`'s `[hooks]` table, plus its hash-trust ledger,
-`config.toml`'s `[hooks.state]`); `apply-patch` (input codec on a tool
-row, `src/adapter/codecs/input/apply-patch.ts`, ticket 15b — Codex's
-`apply_patch` patch grammar). A new parser or a new wiring check is a
-codec pull request; a new assistant that fits the existing codecs is a
-file.
+`config.toml`'s `[hooks.state]`), and `shim-file` (wiring, `src/adapter/
+codecs/wiring/shim-file.ts`, ticket 15c — an in-process harness's own
+printed extension, `wiring:shim` + `wiring:binary`, no settings shape and
+no canary); `apply-patch` (input codec on a tool row, `src/adapter/
+codecs/input/apply-patch.ts`, ticket 15b — Codex's `apply_patch` patch
+grammar) and `hashline` (input codec, `src/adapter/codecs/input/
+hashline.ts`, ticket 15c — pi-agent/omp's `edit` tool's own `[PATH#TAG]`
+patch grammar). A new parser or a new wiring check is a codec pull
+request; a new assistant that fits the existing codecs is a file.
 
 ### Known limits (ADR-0006 § Consequences)
 
@@ -690,16 +732,26 @@ file.
   a legal action, `ask` carries a probe) — it never proves the harness
   actually HONOURS `ask`, `deny`, or any of it; that is what `ask_probe`
   and a real test phase are for.
-- A shim installed by copy (in-process harnesses — pi-agent, opencode;
-  not built in this ticket) is a file the user maintains
-  themselves; `doctor` for one can only report what the shim itself
-  relays back.
+- A shim installed by copy (in-process harnesses — pi-agent built in
+  ticket 15c, opencode not yet scheduled) is a file the user maintains
+  themselves (`bouncer doctor --harness <id>` reminds them to reprint it
+  after every binary upgrade); `doctor` for one can only report what the
+  shim itself relays back — a shim that never runs at all (the extension
+  failed to load, the harness never called it) looks identical to a
+  perfectly healthy, silent tool call from `doctor`'s own vantage point.
 - The `codex-hooks` trust check (ticket 15b) proves PRESENCE of a
   `[hooks.state]` record for every bouncer-pointing handler, never that
   its `trusted_hash` is CURRENT — the exact hashing rule Codex uses is
   undocumented and, as of this ticket, unconfirmed (see the 15b report);
   a stale hash that still happens to have SOME record reads as trusted
   here even though Codex itself would treat it as modified and skip it.
+- pi-agent's own `confirm` mapping was `"deny"` pending a live probe of
+  `ctx.ui.confirm` under both `pi` and `omp` (ticket 15c); confirmed live
+  on both binaries 2026-09-08 (real dialog, decline blocks, accept runs)
+  and flipped to `"ask"` — see `pi-agent.toml`'s own `ask_probe` field
+  and the 15c report's probe table for both runs' evidence, including a
+  first `omp` attempt that turned out to be a stale, reused session and
+  was retracted before the flip.
 
 ## `mcp_write.allowed_tools`
 
@@ -1026,4 +1078,4 @@ Other `baseline`-provenance lines have no suffix because the embedded
 baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/harness.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/harness.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/shim.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts

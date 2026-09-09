@@ -13,6 +13,7 @@
 import { isAbsolute, resolve } from 'node:path';
 import type { HarnessProtocol, HarnessRole, HarnessToolRow } from '../policy/schema.ts';
 import { inputCodecFor } from './codecs/input/registry.ts';
+import { warn } from './codecs/warn.ts';
 
 // ADR-0006 § 3: "a relative path is resolved against the envelope's cwd
 // before canonicalisation" — a no-op whenever `cwd` is unset (no `cwd`
@@ -20,6 +21,48 @@ import { inputCodecFor } from './codecs/input/registry.ts';
 // Code's own case) or `path` is already absolute.
 function joinCwd(path: string, cwd: string | null): string {
   return cwd === null || isAbsolute(path) ? path : resolve(cwd, path);
+}
+
+// Review round 1 L-1 (lead): a raw path selector's value may carry a
+// harness-specific SUFFIX or LIST that never reaches the filesystem
+// verbatim — pi-agent's own `read`/`grep`/`find`/`ls` (and omp's `glob`)
+// let a model append a trailing `:<selector>` (`~/.zsh_history:1-5`, this
+// codebase's own `read`/`archive.zip:inner/.env` convention) or join
+// several targets with `;` (`~/.ssh; ~/.aws`) — and every `$`-anchored
+// path rule (`ssh-key`, `dotenv`, …) is written against the LITERAL
+// target, never a superstring carrying extra trailing text. Measured
+// live (ticket 15c review round 1): `~/.zsh_history:1-5` and
+// `proj/secrets.pem:1-2` both read as `allow` against the unmodified
+// path string alone — the suffix defeats the `$`-anchor. Fix: for every
+// role="read" row's `path` selector, judge the WHOLE candidate set this
+// raw value could plausibly mean, never just the raw string: itself;
+// each `;`-split segment, trimmed; and, for every segment (including the
+// unsplit raw value), every progressive strip of a trailing `:<segment>`
+// (`a:b:c` → `a:b`, then `a` — `db.sqlite:table` also yields the bare
+// `db.sqlite`, harmless). A superset can only ADD verdicts across
+// `paths`' existing loop in dispatch.ts's own family checkers — this
+// needs no new selector grammar, no TOML change, and is a no-op for any
+// path that never contained `;` or `:` to begin with (every other
+// harness's own fixtures stay byte-identical).
+export function expandPathCandidates(raw: string): readonly string[] {
+  const candidates = new Set<string>();
+  const addWithColonStrips = (value: string): void => {
+    candidates.add(value);
+    let current = value;
+    let colonIndex = current.lastIndexOf(':');
+    while (colonIndex !== -1) {
+      current = current.slice(0, colonIndex);
+      if (current.length === 0) break;
+      candidates.add(current);
+      colonIndex = current.lastIndexOf(':');
+    }
+  };
+  addWithColonStrips(raw);
+  for (const rawSegment of raw.split(';')) {
+    const segment = rawSegment.trim();
+    if (segment.length > 0) addWithColonStrips(segment);
+  }
+  return [...candidates];
 }
 
 // What every family checker in dispatch.ts actually inspects, independent
@@ -82,10 +125,6 @@ export function buildCommandInputBag(selector: string, command: string): Record<
   const arraySelector = parseArraySelector(selector);
   if (arraySelector === null) return { [selector]: command };
   return { [arraySelector.base]: [arraySelector.rest === '' ? command : { [arraySelector.rest]: command }] };
-}
-
-function warn(hookName: string, message: string): void {
-  console.error(`[${hookName}] ${message}`);
 }
 
 // A plain (non-array) selector's single value — mirrors src/targets.ts's
@@ -240,7 +279,9 @@ export function buildNeutralCall(
 
   const commands = row.command === undefined ? [] : readCommandsSelector(ti, row.command, hookName);
   const rawPath = row.path === undefined ? null : readPlainSelector(ti, row.path, hookName);
-  const paths = rawPath === null ? [] : [joinCwd(rawPath, cwd)];
+  const paths = rawPath === null
+    ? []
+    : (row.role === 'read' ? expandPathCandidates(rawPath) : [rawPath]).map((p) => joinCwd(p, cwd));
   const pattern = row.pattern === undefined ? null : readPlainSelector(ti, row.pattern, hookName);
   const text = row.text === undefined ? null : readTextSelector(ti, row.text, hookName);
   const singleUrl = row.url === undefined ? null : readPlainSelector(ti, row.url, hookName);

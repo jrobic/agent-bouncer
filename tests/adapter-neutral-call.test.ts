@@ -9,7 +9,7 @@
 // tests/fixtures.test.ts already prove that end to end).
 
 import { describe, expect, test } from 'bun:test';
-import { buildCommandInputBag, buildNeutralCall } from '../src/adapter/neutral-call.ts';
+import { buildCommandInputBag, buildNeutralCall, expandPathCandidates } from '../src/adapter/neutral-call.ts';
 import type { HarnessProtocol } from '../src/policy/schema.ts';
 
 const PROTOCOL: HarnessProtocol = {
@@ -143,6 +143,85 @@ describe('buildNeutralCall: cwd-relative path resolution', () => {
   test('no cwd (harness never sends one) leaves a relative path exactly as given', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: 'relative.txt' }, null, 'test');
     expect(call?.paths).toEqual(['relative.txt']);
+  });
+});
+
+// Review round 1 L-1 (lead): `~/.zsh_history:1-5`, `proj/secrets.pem:1-2`,
+// `proj/.envrc; proj/README.md`, and `archive.zip:inner/.env` all read as
+// `allow` against the raw string alone — every `$`-anchored path rule is
+// written against the LITERAL target, never a superstring carrying a
+// trailing selector or list. `expandPathCandidates` is exercised directly
+// (no `[harness.protocol.tools]` row involved) so a bug in the candidate
+// algorithm itself can't hide behind buildNeutralCall's own role gate
+// (covered separately below).
+describe('expandPathCandidates', () => {
+  test('a plain path with no ":" or ";" yields exactly itself', () => {
+    expect(expandPathCandidates('~/.ssh/id_rsa')).toEqual(['~/.ssh/id_rsa']);
+  });
+
+  test('a trailing ":N-M" selector also yields the bare path', () => {
+    expect(expandPathCandidates('~/.zsh_history:1-5')).toEqual(['~/.zsh_history:1-5', '~/.zsh_history']);
+  });
+
+  test('a trailing ":raw"/":N-M" selector on a dotfile also yields the bare path', () => {
+    expect(expandPathCandidates('proj/.env:1-3')).toEqual(['proj/.env:1-3', 'proj/.env']);
+    expect(expandPathCandidates('proj/.env:raw')).toEqual(['proj/.env:raw', 'proj/.env']);
+  });
+
+  test('a trailing ":N-M" selector on a non-dotfile also yields the bare path', () => {
+    expect(expandPathCandidates('proj/secrets.pem:1-2')).toEqual(['proj/secrets.pem:1-2', 'proj/secrets.pem']);
+  });
+
+  test('a ";"-joined list yields each trimmed segment plus the raw joined string', () => {
+    expect(expandPathCandidates('proj/.envrc; proj/README.md')).toEqual([
+      'proj/.envrc; proj/README.md',
+      'proj/.envrc',
+      'proj/README.md',
+    ]);
+  });
+
+  test('multiple colon segments strip progressively, right to left ("a:b:c" -> "a:b", "a")', () => {
+    expect(expandPathCandidates('a:b:c')).toEqual(['a:b:c', 'a:b', 'a']);
+  });
+
+  test('an archive member selector also yields the bare archive path (db.sqlite:table convention)', () => {
+    expect(expandPathCandidates('archive.zip:inner/.env')).toEqual(['archive.zip:inner/.env', 'archive.zip']);
+  });
+
+  // Review round 2 C-2: the "db.sqlite:table convention" cited above (and
+  // in src/adapter/neutral-call.ts's own header comment) was only ever a
+  // test NAME, never an assertion against the literal string — this is
+  // the real one.
+  test('a sqlite row selector also yields the bare database path', () => {
+    expect(expandPathCandidates('db.sqlite:table')).toEqual(['db.sqlite:table', 'db.sqlite']);
+    expect(expandPathCandidates('db.sqlite:table:key')).toEqual(['db.sqlite:table:key', 'db.sqlite:table', 'db.sqlite']);
+  });
+
+  test('a raw path that is entirely a colon (degenerate) never loops forever and never adds an empty string', () => {
+    expect(expandPathCandidates(':')).toEqual([':']);
+  });
+
+  test('duplicate candidates across the raw value and its segments are deduplicated', () => {
+    // ";"-splitting "a;a" trims to two identical "a" segments, plus the
+    // unsplit raw "a;a" itself — three inputs, two distinct outputs.
+    expect(expandPathCandidates('a;a')).toEqual(['a;a', 'a']);
+  });
+});
+
+describe('buildNeutralCall: path-list expansion applies to role="read" only (review round 1 L-1)', () => {
+  test('a read-role path selector is expanded to the full candidate set', () => {
+    const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: '~/.zsh_history:1-5' }, null, 'test');
+    expect(call?.paths).toEqual(['~/.zsh_history:1-5', '~/.zsh_history']);
+  });
+
+  test('a write-role path selector is NOT expanded — exactly the raw value, unchanged scope', () => {
+    const call = buildNeutralCall(PROTOCOL, 'Write', { file_path: 'proj/.envrc; proj/README.md', content: 'x' }, null, 'test');
+    expect(call?.paths).toEqual(['proj/.envrc; proj/README.md']);
+  });
+
+  test('expansion composes with cwd-joining: every candidate is joined, not just the raw one', () => {
+    const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: 'a:b' }, '/session/dir', 'test');
+    expect(call?.paths).toEqual(['/session/dir/a:b', '/session/dir/a']);
   });
 });
 
