@@ -8,28 +8,25 @@
 // for PreToolUse/UserPromptSubmit and the overlay.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run, runSessionStart } from '../src/adapter/run.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import { BOUNCER_COMMAND, CANARY_COMMAND, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function accountWithSettings(hooks: unknown): Promise<string> {
-  const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-sessionstart-e2e-'));
-  cleanupDirs.push(accountDir);
+  const accountDir = tmpDir('bouncer-sessionstart-e2e-');
   await writeFile(join(accountDir, 'settings.json'), JSON.stringify({ hooks }), 'utf8');
   process.env.CLAUDE_CONFIG_DIR = accountDir;
   return accountDir;
@@ -77,8 +74,7 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
   });
 
   test('a missing settings.json entirely (naked account) screams', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-sessionstart-e2e-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-sessionstart-e2e-');
     process.env.CLAUDE_CONFIG_DIR = accountDir; // no settings.json written at all
     const { stdout } = await run(SESSION_START_ENVELOPE);
     expect(stdout).not.toBeNull();
@@ -86,8 +82,7 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
   });
 
   test('a corrupt settings.json screams with the honest "settings" failure, not a false "hook missing"', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-sessionstart-e2e-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-sessionstart-e2e-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
     await writeFile(join(accountDir, 'settings.json'), 'not valid json {{{', 'utf8');
     const { stdout } = await run(SESSION_START_ENVELOPE);
@@ -175,8 +170,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
   };
 
   test('the catch path logs a policy-warning entry instead of failing silently (round-3 review)', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-sessionstart-crash-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-sessionstart-crash-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     const throwingCheck = async (): Promise<never> => {

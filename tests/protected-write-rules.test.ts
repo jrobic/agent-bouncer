@@ -1,16 +1,11 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BASELINE } from '../src/policy/baseline.ts';
 import { createProtectedWriteChecker } from '../src/protected-write-rules.ts';
+import { tmpDir } from './tmp.ts';
 
-const cleanupDirs: string[] = [];
 const checker = createProtectedWriteChecker(BASELINE.rules.protected_write, BASELINE.rules.harness);
-
-afterEach(async () => {
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-});
 
 describe('protected-write rules: harness declarations', () => {
   test('ruleId claude-code-config-dir: the Claude Code directory itself confirms on write', async () => {
@@ -375,8 +370,7 @@ describe('protected-write rules: redirection-aware operands', () => {
 
 describe('protected-write rules: two path readings', () => {
   test('the raw symlink path wins when its resolved target is unprotected', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-protected-write-test-'));
-    cleanupDirs.push(dir);
+    const dir = tmpDir('bouncer-protected-write-test-');
     const targetDir = join(dir, 'ordinary');
     const targetFile = join(targetDir, 'settings.json');
     const visibleDir = join(dir, '.claude');
@@ -391,8 +385,7 @@ describe('protected-write rules: two path readings', () => {
   });
 
   test('the canonical path wins when an innocent symlink targets protected settings', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-protected-write-test-'));
-    cleanupDirs.push(dir);
+    const dir = tmpDir('bouncer-protected-write-test-');
     const protectedDir = join(dir, '.claude');
     const protectedFile = join(protectedDir, 'settings.json');
     const innocentFile = join(dir, 'innocent.json');

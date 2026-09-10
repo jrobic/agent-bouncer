@@ -4,23 +4,20 @@
 // tests/adapter-audit-diff.test.ts (the pure diffLogs/render logic).
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseAuditArgs, runAudit } from '../src/cli-commands.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function freshAccountDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-audit-diff-cli-test-'));
-  cleanupDirs.push(dir);
+function freshAccountDir(): string {
+  const dir = tmpDir('bouncer-audit-diff-cli-test-');
   process.env.CLAUDE_CONFIG_DIR = dir;
   return dir;
 }
@@ -104,7 +101,7 @@ describe('parseAuditArgs: --diff / --ts-logs (ticket 08)', () => {
 
 describe('runAudit({ diff: true }): end to end against real files on disk', () => {
   test('a matched pair (same target/tool/decision-bucket) produces NO divergence', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeBouncerLog(dir, [shadowVerdict()]);
     await writeTsLog(dir, 'command-guard.log', [tsDeny()]);
 
@@ -116,7 +113,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('a TS deny with no bouncer counterpart reports "bouncer would allow", naming the TS rule id', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeTsLog(dir, 'command-guard.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
 
     const { text } = await runAudit({ days: 30, suggest: false, diff: true });
@@ -125,7 +122,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('a bouncer shadow block with no TS counterpart reports "TS allowed", naming the bouncer rule id', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeBouncerLog(dir, [shadowVerdict({ target: 'sudo apt update', rule_id: 'sudo' })]);
 
     const { text } = await runAudit({ days: 30, suggest: false, diff: true });
@@ -134,7 +131,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('a matched pair with different verdicts reports a verdict divergence, naming both sides', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeBouncerLog(dir, [
       shadowVerdict({ verdict: 'confirm', rule_id: 'transcript-backup', target: '/home/user/.claude/transcripts/foo.json' }),
     ]);
@@ -150,7 +147,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('a plain (non-shadow) bouncer entry is ignored — the diff only compares the shadow window', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeBouncerLog(dir, [
       { ...shadowVerdict({ target: 'sudo apt update', rule_id: 'sudo' }), mode: undefined },
     ]);
@@ -160,7 +157,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('--sessions-only removes CLI-only divergences on both sides and labels each filtered stream', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     const timestamp = new Date().toISOString();
     await writeBouncerLog(dir, [
       shadowVerdict({ timestamp, session_id: 'session-1', rule_id: 'session-bouncer-rule', target: 'session-bouncer-target' }),
@@ -188,9 +185,8 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('--ts-logs overrides the TS log directory (a DIFFERENT account entirely)', async () => {
-    await freshAccountDir(); // sets CLAUDE_CONFIG_DIR — the bouncer-log side of the diff
-    const tsDir = await mkdtemp(join(tmpdir(), 'bouncer-audit-diff-ts-'));
-    cleanupDirs.push(tsDir);
+    freshAccountDir(); // sets CLAUDE_CONFIG_DIR — the bouncer-log side of the diff
+    const tsDir = tmpDir('bouncer-audit-diff-ts-');
 
     await writeTsLog(tsDir, 'command-guard.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
     // Nothing written under bouncerDir's own logs/hooks/ for the TS side —
@@ -201,14 +197,14 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
   });
 
   test('a missing TS log file (ENOENT — that guard never fired) is silent, not a warning', async () => {
-    await freshAccountDir(); // no TS logs at all
+    freshAccountDir(); // no TS logs at all
     const { text, ok } = await runAudit({ days: 30, suggest: false, diff: true });
     expect(ok).toBe(true);
     expect(text).not.toContain('warning:');
   });
 
   test('the report states the correlation heuristic and never writes anywhere', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeBouncerLog(dir, [shadowVerdict()]);
     await writeTsLog(dir, 'command-guard.log', [tsDeny()]);
 

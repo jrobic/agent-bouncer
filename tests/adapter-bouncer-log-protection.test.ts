@@ -9,24 +9,21 @@
 // var is set and non-empty before calling run().
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
 import { runAudit } from '../src/cli-commands.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function freshAccountWithRealLog(): Promise<{ accountDir: string; logPath: string; }> {
-  const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-log-protection-'));
-  cleanupDirs.push(accountDir);
+  const accountDir = tmpDir('bouncer-log-protection-');
   const logDir = join(accountDir, 'logs', 'hooks');
   await mkdir(logDir, { recursive: true });
   const logPath = join(logDir, 'bouncer.log');

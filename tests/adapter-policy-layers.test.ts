@@ -15,8 +15,7 @@
 // unverified, accidentally-unset override for either falls through to it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { HOOK_NAME } from '../src/adapter/constants.ts';
 import { hookLogPathFor } from '../src/adapter/log-path.ts';
@@ -24,6 +23,7 @@ import { loadCurrentPolicy } from '../src/adapter/policy.ts';
 import { run } from '../src/adapter/run.ts';
 import { runDoctor, runRulesLint, runRulesList } from '../src/cli-commands.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
+import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
@@ -37,13 +37,11 @@ const ORIGINAL_HOME = process.env.HOME;
 if (!ORIGINAL_HOME || ORIGINAL_HOME.trim() === '') {
   throw new Error('tests/setup.ts did not set a throwaway HOME before this file loaded — refusing to run');
 }
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
   process.env.HOME = ORIGINAL_HOME;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 interface Sandbox {
@@ -58,9 +56,8 @@ interface Sandbox {
 // accidentally-empty override for EITHER falls through to real state
 // (this account's real ~/.agents/bouncer/, or the real ~/.claude).
 async function sandbox(): Promise<Sandbox> {
-  const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-layers-account-'));
-  const homeDir = await mkdtemp(join(tmpdir(), 'bouncer-layers-home-'));
-  cleanupDirs.push(accountDir, homeDir);
+  const accountDir = tmpDir('bouncer-layers-account-');
+  const homeDir = tmpDir('bouncer-layers-home-');
   process.env.CLAUDE_CONFIG_DIR = accountDir;
   process.env.HOME = homeDir;
   if (!process.env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR.trim() === '') {

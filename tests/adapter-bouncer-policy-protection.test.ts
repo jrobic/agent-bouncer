@@ -5,24 +5,21 @@
 // no test can fall through to the live ~/.claude.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
 import { runRulesList } from '../src/cli-commands.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function freshAccountDir(prefix = 'bouncer-policy-protection-'): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), prefix));
-  cleanupDirs.push(dir);
+  const dir = tmpDir(prefix);
   // The ticket-13 lesson: assert before use, never trust an unverified var.
   process.env.CLAUDE_CONFIG_DIR = dir;
   if (!process.env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR.trim() === '') {
@@ -91,8 +88,7 @@ describe('run(): protected bouncer policy writes confirm while reads remain free
   test('Edit through a bouncer/policy.d mount asks', async () => {
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
-    const commonDir = await mkdtemp(join(tmpdir(), 'bouncer-common-'));
-    cleanupDirs.push(commonDir);
+    const commonDir = tmpDir('bouncer-common-');
     const sharedPolicyD = join(commonDir, 'bouncer', 'policy.d');
     await mkdir(sharedPolicyD, { recursive: true });
     const mountedPolicyFile = join(sharedPolicyD, '10-shared.toml');
@@ -115,8 +111,7 @@ describe('run(): protected bouncer policy writes confirm while reads remain free
   test('Edit through a mount with no bouncer target segment still asks from the raw path', async () => {
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
-    const noBouncerSegmentTarget = await mkdtemp(join(tmpdir(), 'shared-dotfiles-mount-'));
-    cleanupDirs.push(noBouncerSegmentTarget);
+    const noBouncerSegmentTarget = tmpDir('shared-dotfiles-mount-');
     const mountedPolicyFile = join(noBouncerSegmentTarget, '10-shared.toml');
     await writeFile(mountedPolicyFile, '# shared\n', 'utf8');
     await symlink(noBouncerSegmentTarget, join(accountDir, 'bouncer', 'policy.d'));

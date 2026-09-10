@@ -5,25 +5,22 @@
 // way of parallel work on the same source files (ticket 10 / `audit`).
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseDoctorArgs, runDoctor, runPrintCanary } from '../src/cli-commands.ts';
 import { BOUNCER_COMMAND, FULL_MATCHER, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 const PROJECT_ROOT = join(import.meta.dir, '..');
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function freshAccountDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-cli-'));
-  cleanupDirs.push(dir);
+function freshAccountDir(): string {
+  const dir = tmpDir('bouncer-doctor-cli-');
   process.env.CLAUDE_CONFIG_DIR = dir;
   return dir;
 }
@@ -62,9 +59,8 @@ describe('parseDoctorArgs: the pure argv-tail parsing cli.ts delegates to', () =
 
 describe('runPrintCanary', () => {
   test('names a missing primary PreToolUse entry', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: {} }), 'utf8');
 
@@ -75,8 +71,7 @@ describe('runPrintCanary', () => {
   });
 
   test('writes a missing primary-entry diagnosis to stderr with no stdout', async () => {
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: {} }), 'utf8');
     const command = Bun.spawn(
@@ -95,9 +90,8 @@ describe('runPrintCanary', () => {
 });
 describe('runDoctor: the manual checklist, always printed', () => {
   test('a healthy scratch settings.json passed via --settings prints an all-pass checklist', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: HEALTHY_HOOKS }), 'utf8');
 
@@ -113,9 +107,8 @@ describe('runDoctor: the manual checklist, always printed', () => {
   });
 
   test('a scratch settings.json missing SessionStart prints a failing checklist and exits non-zero', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: rest }), 'utf8');
@@ -126,7 +119,7 @@ describe('runDoctor: the manual checklist, always printed', () => {
   });
 
   test('with no --settings argument, defaults to <configDir>/settings.json', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = freshAccountDir();
     await writeFile(join(accountDir, 'settings.json'), JSON.stringify({ hooks: HEALTHY_HOOKS }), 'utf8');
 
     const { ok } = await runDoctor();
@@ -134,7 +127,7 @@ describe('runDoctor: the manual checklist, always printed', () => {
   });
 
   test('active overrides are shown in the manual checklist with their reason', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = freshAccountDir();
     await writeFile(join(accountDir, 'settings.json'), JSON.stringify({ hooks: HEALTHY_HOOKS }), 'utf8');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     await writeFile(
@@ -151,9 +144,8 @@ describe('runDoctor: the manual checklist, always printed', () => {
   });
 
   test('--print-canary emits an entry that passes after pasting beside the primary hook', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const settingsPath = join(scratchDir, 'settings.json');
     const primaryPreToolUse = {
       matcher: FULL_MATCHER,
@@ -181,9 +173,8 @@ describe('runDoctor: the manual checklist, always printed', () => {
 describe('runDoctor: `ok` is exactly the exit-code contract cli.ts relies on '
   + '(`process.exit(ok ? 0 : 1)`, round-3 review item 10)', () => {
   test('a healthy checklist maps to ok=true (cli.ts would exit 0)', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: HEALTHY_HOOKS }), 'utf8');
 
@@ -192,9 +183,8 @@ describe('runDoctor: `ok` is exactly the exit-code contract cli.ts relies on '
   });
 
   test('a failing checklist maps to ok=false (cli.ts would exit 1)', async () => {
-    await freshAccountDir();
-    const scratchDir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-settings-'));
-    cleanupDirs.push(scratchDir);
+    freshAccountDir();
+    const scratchDir = tmpDir('bouncer-doctor-settings-');
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = join(scratchDir, 'settings.json');
     await writeFile(settingsPath, JSON.stringify({ hooks: rest }), 'utf8');

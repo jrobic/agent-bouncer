@@ -3,15 +3,15 @@
 // contract on a malformed envelope.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseEnvelope, run } from '../src/adapter/run.ts';
+import { tmpDir } from './tmp.ts';
 
 // tests/setup.ts points CLAUDE_CONFIG_DIR at a fresh throwaway dir for the
 // whole session — readable here to find this file's own log entries back,
 // same discipline every other adapter test file uses for CLAUDE_CONFIG_DIR
-// itself, just without needing its own mkdtemp dance since nothing here
+// itself, just without needing its own temp-directory dance since nothing here
 // needs a FRESH per-test directory (each shadow assertion reads only the
 // LAST line it just caused).
 function currentLogPath(): string {
@@ -313,16 +313,13 @@ describe('run: unrecognized tokens (ticket 08 review) — enforce stays on, the 
 // baseline id MAY replace its protocol — never merged field by field).
 describe('run: on_malformed honored (review round 1 S-3)', () => {
   const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-  const cleanupDirs: string[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
   async function accountWithOnMalformed(onMalformed: 'allow' | 'deny'): Promise<void> {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-on-malformed-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-on-malformed-');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     await writeFile(
       join(accountDir, 'bouncer', 'policy.toml'),
@@ -441,16 +438,13 @@ describe('run: on_malformed honored (review round 1 S-3)', () => {
 // CAN when handed them by hand (tests/adapter-render.test.ts).
 describe('run: ${rule}/${verdict} actually supplied for a real verdict (review round 2 C-1)', () => {
   const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-  const cleanupDirs: string[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
   test('a deny template naming ${rule}/${verdict} gets both filled for a real rm -rf / block', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-rule-verdict-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-rule-verdict-');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     await writeFile(
       join(accountDir, 'bouncer', 'policy.toml'),
@@ -509,19 +503,16 @@ describe('run: ${rule}/${verdict} actually supplied for a real verdict (review r
 describe('run: permission logged verbatim when a harness declares input.permission (review round 1 P-4)', () => {
   const ORIGINAL_HOME = process.env.HOME;
   const ORIGINAL_CODEX_HOME = process.env.CODEX_HOME;
-  const cleanupDirs: string[] = [];
 
-  afterEach(async () => {
+  afterEach(() => {
     if (ORIGINAL_HOME === undefined) delete process.env.HOME;
     else process.env.HOME = ORIGINAL_HOME;
     if (ORIGINAL_CODEX_HOME === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = ORIGINAL_CODEX_HOME;
-    await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
   test('a codex PreToolUse envelope carrying permission_mode logs it on the verdict entry', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-permission-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-permission-');
     const codexHome = join(accountDir, '.codex');
     await mkdir(codexHome, { recursive: true });
     process.env.HOME = accountDir;
@@ -544,8 +535,7 @@ describe('run: permission logged verbatim when a harness declares input.permissi
   });
 
   test('a codex envelope with no permission_mode field logs no permission key at all', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-permission-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-permission-');
     const codexHome = join(accountDir, '.codex');
     await mkdir(codexHome, { recursive: true });
     process.env.HOME = accountDir;

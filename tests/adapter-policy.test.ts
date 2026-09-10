@@ -6,24 +6,21 @@
 // `rules list`.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadCurrentPolicy } from '../src/adapter/policy.ts';
 import { run } from '../src/adapter/run.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function accountWithOverlay(overlayText: string): Promise<string> {
-  const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-policy-e2e-'));
-  cleanupDirs.push(accountDir);
+  const accountDir = tmpDir('bouncer-policy-e2e-');
   await mkdir(join(accountDir, 'bouncer'), { recursive: true });
   await writeFile(join(accountDir, 'bouncer', 'policy.toml'), overlayText, 'utf8');
   process.env.CLAUDE_CONFIG_DIR = accountDir;
@@ -60,8 +57,7 @@ describe('run(): a valid overlay override actually changes the live verdict', ()
   });
 
   test('without that overlay, the same command is still denied (baseline)', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-policy-e2e-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-policy-e2e-');
     process.env.CLAUDE_CONFIG_DIR = accountDir; // no bouncer/policy.toml at all
     const { stdout } = await run(RM_RF_ENVELOPE);
     expect(stdout).not.toBeNull();
@@ -88,8 +84,7 @@ describe('run(): a valid overlay override actually changes the live verdict', ()
 
 describe('loadCurrentPolicy(): harness overlays use a real temporary layer', () => {
   test('an existing harness appends directories while inheriting its persistent entries', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-harness-overlay-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-harness-overlay-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
     const overlayEnvelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
@@ -175,8 +170,7 @@ describe('run(): Story 19 — the audit log opens with a header naming active ov
   });
 
   test('an account with no active override/relaxation never gets a header, even across rotation-free runs', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-policy-e2e-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-policy-e2e-');
     process.env.CLAUDE_CONFIG_DIR = accountDir; // no overlay at all
     await run(RM_RF_ENVELOPE);
 
@@ -222,8 +216,7 @@ describe('run(): a broken overlay keeps the baseline active and logs a loud warn
 
 describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)', () => {
   async function freshAccountDir(): Promise<string> {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-policy-d-e2e-'));
-    cleanupDirs.push(dir);
+    const dir = tmpDir('bouncer-policy-d-e2e-');
     process.env.CLAUDE_CONFIG_DIR = dir;
     return dir;
   }
@@ -336,8 +329,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
 
 describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is never silently dropped', () => {
   async function freshAccountDir(): Promise<string> {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-policy-review2-'));
-    cleanupDirs.push(dir);
+    const dir = tmpDir('bouncer-policy-review2-');
     process.env.CLAUDE_CONFIG_DIR = dir;
     return dir;
   }
@@ -408,8 +400,7 @@ describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is
 
 describe('loadCurrentPolicy(): review round 2 — a blank policy.toml is "no overlay", not an applied-but-empty one', () => {
   test('a whitespace-only policy.toml on disk gives overlayApplied: false (original single-file semantics)', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-policy-blank-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-policy-blank-');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     await writeFile(join(accountDir, 'bouncer', 'policy.toml'), '   \n\n\t\n', 'utf8');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
@@ -421,8 +412,7 @@ describe('loadCurrentPolicy(): review round 2 — a blank policy.toml is "no ove
   });
 
   test('an empty-string policy.toml on disk also gives overlayApplied: false', async () => {
-    const accountDir = await mkdtemp(join(tmpdir(), 'bouncer-policy-blank-'));
-    cleanupDirs.push(accountDir);
+    const accountDir = tmpDir('bouncer-policy-blank-');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
     await writeFile(join(accountDir, 'bouncer', 'policy.toml'), '', 'utf8');
     process.env.CLAUDE_CONFIG_DIR = accountDir;

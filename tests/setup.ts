@@ -19,10 +19,11 @@
 // same lesson (ticket 13): a test that needs to exercise the common layer
 // itself sets its OWN throwaway HOME (save/restore), same pattern
 // adapter-log-path.test.ts uses for CLAUDE_CONFIG_DIR.
+//
+// Ticket 39: directory creation itself (including these two throwaways)
+// now lives in tests/tmp.ts, the one file under tests/ that creates
+// temporary directories — see installGlobalFallbacks()'s own doc comment
+// there for the fallback-reassignment and exit-cleanup contract.
+import { installGlobalFallbacks } from './tmp.ts';
 
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-process.env.CLAUDE_CONFIG_DIR = mkdtempSync(join(tmpdir(), 'bouncer-test-config-'));
-process.env.HOME = mkdtempSync(join(tmpdir(), 'bouncer-test-home-'));
+installGlobalFallbacks();

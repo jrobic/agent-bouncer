@@ -6,8 +6,7 @@
 // reports, not a unit test of implementation.
 
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { formatCodexCanonicalCanaryEntry } from '../src/adapter/codecs/wiring/codex-hooks.ts';
@@ -15,6 +14,7 @@ import { runDoctorChecks } from '../src/adapter/doctor.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
+import { tmpDir } from './tmp.ts';
 
 const CODEX_HARNESS: HarnessDeclaration = BASELINE.rules.harness.find((h) => h.id === 'codex')!;
 const BOUNCER_COMMAND = '/fake/checkout/dist/bouncer run --harness codex';
@@ -35,8 +35,8 @@ function cleanLoadResult(): LoadResult {
   };
 }
 
-async function scratchCodexHome(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'bouncer-codex-hooks-test-'));
+function scratchCodexHome(): string {
+  return tmpDir('bouncer-codex-hooks-test-');
 }
 
 function healthyHooksJson(includeCanary = true) {
@@ -85,7 +85,7 @@ const CONFIG_TOML_HOOKS = (matcher: string) =>
 
 describe('codex-hooks wiring: healthy hooks.json alone', () => {
   test('every wiring check passes; trust fails (no [hooks.state] records yet)', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson());
       process.env.CODEX_HOME = codexHome;
@@ -107,14 +107,13 @@ describe('codex-hooks wiring: healthy hooks.json alone', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: [hooks] in config.toml only', () => {
   test('wiring checks read config.toml when hooks.json is absent; a fully trusted ledger passes', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       const configTomlPath = join(codexHome, 'config.toml');
       const trust = trustStateBlock([
@@ -144,14 +143,13 @@ describe('codex-hooks wiring: [hooks] in config.toml only', () => {
       expect(report.checks.find((c) => c.id === 'wiring:canary')).toMatchObject({ ok: false });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: both sources present (merged, additive)', () => {
   test('a bouncer entry in EITHER source counts as wired; trust is tracked per source independently', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson(true));
       const configTomlPath = join(codexHome, 'config.toml');
@@ -182,14 +180,13 @@ describe('codex-hooks wiring: both sources present (merged, additive)', () => {
       expect(trustCheck).toMatchObject({ ok: false, message: expect.stringContaining('3 bouncer hook(s) need review') });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: missing --harness codex fails', () => {
   test('a bare "bouncer run" (no --harness codex) is caught as a wiring failure', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, {
         hooks: {
@@ -204,14 +201,13 @@ describe('codex-hooks wiring: missing --harness codex fails', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: matcher missing apply_patch fails coverage', () => {
   test('a matcher covering only Bash (no apply_patch, no mcp__) is a coverage gap', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, {
         hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }] },
@@ -224,14 +220,13 @@ describe('codex-hooks wiring: matcher missing apply_patch fails coverage', () =>
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: untrusted entries fail with the count', () => {
   test('bouncer entries with no [hooks.state] record at all are named "need review in /hooks"', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson(false));
       // No config.toml at all — every one of the 3 bouncer entries is untrusted.
@@ -243,12 +238,11 @@ describe('codex-hooks wiring: untrusted entries fail with the count', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 
   test('a [hooks.state] record with no trusted_hash still counts as untrusted', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, {
         hooks: { PreToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }] },
@@ -265,14 +259,13 @@ describe('codex-hooks wiring: untrusted entries fail with the count', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: canary present/absent', () => {
   test('canary present in hooks.json passes wiring:canary', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson(true));
       process.env.CODEX_HOME = codexHome;
@@ -280,12 +273,11 @@ describe('codex-hooks wiring: canary present/absent', () => {
       expect(report.checks.find((c) => c.id === 'wiring:canary')).toMatchObject({ ok: true });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 
   test('canary absent from hooks.json fails wiring:canary, naming the missing binary path', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson(false));
       process.env.CODEX_HOME = codexHome;
@@ -296,14 +288,13 @@ describe('codex-hooks wiring: canary present/absent', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: neither source present', () => {
   test('absent hooks.json and absent config.toml is "no hooks configured yet", not a failure', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       process.env.CODEX_HOME = codexHome;
       const report = await runDoctorChecks(undefined, cleanLoadResult(), CODEX_HARNESS);
@@ -317,14 +308,13 @@ describe('codex-hooks wiring: neither source present', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: corrupt hooks.json (S-8)', () => {
   test('malformed hooks.json fails "settings" naming ITSELF, not config.toml', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeFile(join(codexHome, 'hooks.json'), 'not valid json {{{', 'utf8');
       process.env.CODEX_HOME = codexHome;
@@ -343,14 +333,13 @@ describe('codex-hooks wiring: corrupt hooks.json (S-8)', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks wiring: corrupt config.toml (S-8)', () => {
   test('malformed config.toml fails "settings" naming ITSELF, not hooks.json — even with a healthy hooks.json present', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson());
       await writeFile(join(codexHome, 'config.toml'), 'not = [valid toml {{{', 'utf8');
@@ -367,14 +356,13 @@ describe('codex-hooks wiring: corrupt config.toml (S-8)', () => {
       });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });
 
 describe('codex-hooks: formatCodexCanonicalCanaryEntry (S-8)', () => {
   test('a healthy hooks.json produces a real canary entry', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       await writeHooksJson(codexHome, healthyHooksJson(true));
       process.env.CODEX_HOME = codexHome;
@@ -383,12 +371,11 @@ describe('codex-hooks: formatCodexCanonicalCanaryEntry (S-8)', () => {
       expect(JSON.parse(entry.entry)).toEqual({ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: CANARY_COMMAND }] });
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 
   test('neither source present names BOTH candidate paths in the error', async () => {
-    const codexHome = await scratchCodexHome();
+    const codexHome = scratchCodexHome();
     try {
       process.env.CODEX_HOME = codexHome;
       const entry = await formatCodexCanonicalCanaryEntry(undefined, CODEX_HARNESS, CODEX_HARNESS.protocol!);
@@ -397,7 +384,6 @@ describe('codex-hooks: formatCodexCanonicalCanaryEntry (S-8)', () => {
       expect(entry.error).toContain(join(codexHome, 'config.toml'));
     } finally {
       delete process.env.CODEX_HOME;
-      await rm(codexHome, { recursive: true, force: true });
     }
   });
 });

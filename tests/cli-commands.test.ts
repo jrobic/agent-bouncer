@@ -3,24 +3,21 @@
 // discipline as tests/cli.test.ts for `run`.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCheck, runPing, runRulesLint, runRulesList } from '../src/cli-commands.ts';
 import type { CommandResult } from '../src/cli-commands.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function freshAccountDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-cli-test-'));
-  cleanupDirs.push(dir);
+function freshAccountDir(): string {
+  const dir = tmpDir('bouncer-cli-test-');
   process.env.CLAUDE_CONFIG_DIR = dir;
   return dir;
 }
@@ -32,7 +29,7 @@ async function writeOverlay(accountDir: string, text: string): Promise<void> {
 
 describe('runCheck: dry-runs a command without a session', () => {
   test('a protected git command reproduces the live confirm verdict with its rule id', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text, ok } = await runCheck('git push');
     expect(ok).toBe(true);
     expect(text).toContain('confirm');
@@ -40,20 +37,20 @@ describe('runCheck: dry-runs a command without a session', () => {
   });
 
   test('a destructive command reproduces the live block verdict', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text } = await runCheck('rm -rf /');
     expect(text).toContain('block');
     expect(text).toContain('rm-rf-dangerous');
   });
 
   test('a clean command reports allow', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text } = await runCheck('ls -la');
     expect(text.trim()).toBe('allow');
   });
 
   test('an applied harness extension changes the persistent write boundary', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     const command = 'echo x > ~/.claude-x/settings.json';
 
     await expect(runCheck(command)).resolves.toMatchObject({ text: 'allow' });
@@ -72,7 +69,7 @@ describe('runCheck: dry-runs a command without a session', () => {
     });
   });
   test('expands only the eligible fragments of a concatenated shell token', async () => {
-    await freshAccountDir();
+    freshAccountDir();
 
     await expect(runCheck('rm -rf "$CLAUDE_CONFIG_DIR"\'/hooks\'')).resolves.toMatchObject({
       text: expect.stringContaining('confirm [bash-harness-hooks]'),
@@ -87,7 +84,7 @@ describe('runCheck: dry-runs a command without a session', () => {
   });
 
   test('keeps literal syntax literal while expanding declared environment and brace fragments', async () => {
-    await freshAccountDir();
+    freshAccountDir();
 
     await expect(runCheck('rm -rf $CLAUDE_CONFIG_DIR')).resolves.toMatchObject({
       text: expect.stringContaining('confirm [bash-claude-code-config-dir]'),
@@ -108,7 +105,7 @@ describe('runCheck: dry-runs a command without a session', () => {
     ['character class', '(^|/)\\\\.numeric-[0-9]+', '~/.numeric-7', 'NUMERIC_AGENT_HOME'],
     ['absolute path', '^/var/lib/absolute-[0-9]+', '/var/lib/absolute-7', 'ABSOLUTE_AGENT_HOME'],
   ])('uses the derived rule matcher for a %s witness through runCheck', async (_kind, dir, witness, env) => {
-    const accountDir = await freshAccountDir();
+    const accountDir = freshAccountDir();
     await writeOverlay(
       accountDir,
       `[[harness]]\nid = "shape-agent"\ndir = ["${dir}"]\nwitness = "${witness}"\nenv = ["${env}"]\nreason = "Shape witness"\n\n[[harness.persistent]]\nid = "shape-settings"\npath = "config\\\\.json$"\nreason = "Shape settings"\n`,
@@ -135,8 +132,7 @@ describe('runCheck: dry-runs a command without a session', () => {
   // freshAccountDir()'s CLAUDE_CONFIG_DIR-only setup.
   async function checkThroughCommandSelector(harnessId: string, toolsLine: string, command: string): Promise<CommandResult> {
     const ORIGINAL_HOME = process.env.HOME;
-    const home = await mkdtemp(join(tmpdir(), 'bouncer-check-tool-row-'));
-    cleanupDirs.push(home);
+    const home = tmpDir('bouncer-check-tool-row-');
     await mkdir(join(home, '.agents', 'bouncer', 'harness.d'), { recursive: true });
     await writeFile(
       join(home, '.agents', 'bouncer', 'harness.d', `${harnessId}.toml`),
@@ -214,7 +210,7 @@ describe('runCheck: dry-runs a command without a session', () => {
   });
 
   test('claude-code output is unchanged by the selector fix', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text } = await runCheck('rm -rf /');
     expect(text).toBe('block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (claude-code)');
   });
@@ -222,7 +218,7 @@ describe('runCheck: dry-runs a command without a session', () => {
 
 describe('runRulesLint', () => {
   test('no overlay present: OK, baseline only', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text, ok } = await runRulesLint();
     expect(ok).toBe(true);
     expect(text).toContain('OK');
@@ -230,7 +226,7 @@ describe('runRulesLint', () => {
   });
 
   test('a valid overlay: OK', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[override]]\nrule = "mkfs"\naction = "disable"\nreason = "test reason"\n',
@@ -241,7 +237,7 @@ describe('runRulesLint', () => {
   });
 
   test('a lookaround regex fails lint', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[rules.command.bash]]\nid = "bad"\nregex = "foo(?=bar)"\nreason = "should never load"\n',
@@ -253,14 +249,14 @@ describe('runRulesLint', () => {
   });
 
   test('an override with an empty reason fails lint', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(dir, '[[override]]\nrule = "mkfs"\naction = "disable"\nreason = ""\n');
     const { ok } = await runRulesLint();
     expect(ok).toBe(false);
   });
 
   test('rejects a witness that only matches a directory prefix', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[harness]]\nid = "numeric-agent"\ndir = ["(^|/)\\\\.numeric-[0-9]+"]\nwitness = "~/.numeric-7oops"\nenv = ["NUMERIC_AGENT_HOME"]\nreason = "Numeric agent configuration"\n',
@@ -275,7 +271,7 @@ describe('runRulesLint', () => {
 
 describe('runRulesList', () => {
   test('lists every baseline rule with provenance "baseline"', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text, ok } = await runRulesList();
     expect(ok).toBe(true);
     expect(text).toContain('rule command.bash mkfs baseline');
@@ -285,7 +281,7 @@ describe('runRulesList', () => {
   });
 
   test('lists a new overlay harness and its companion normal rule as overlay', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[harness]]\nid = "new-agent"\ndir = ["(^|/)\\\\.new-agent"]\nwitness = "~/.new-agent"\nenv = ["NEW_AGENT_HOME"]\nreason = "New agent configuration"\n\n[[harness.persistent]]\nid = "new-agent-settings"\npath = "settings\\\\.json$"\nreason = "New agent settings"\n\n[[rules.command.bash]]\nid = "new-agent-command"\nregex = "^new-agent-command"\nreason = "New agent command"\n',
@@ -307,7 +303,7 @@ describe('runRulesList', () => {
   });
 
   test('an active override is visible with its provenance and reason, counted in the summary', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[override]]\nrule = "mkfs"\naction = "disable"\nreason = "not relevant to our sandbox"\n',
@@ -320,7 +316,7 @@ describe('runRulesList', () => {
   });
 
   test('a broken overlay is reported via a warning line, baseline rules still listed', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(dir, 'not valid toml {{{');
     const { text } = await runRulesList();
     expect(text).toContain('warning:');
@@ -328,7 +324,7 @@ describe('runRulesList', () => {
   });
 
   test('an overlay rule\'s provenance names its source file (ticket 12)', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeOverlay(
       dir,
       '[[rules.command.bash]]\nid = "block-npm-publish"\nregex = "npm publish"\nreason = "test"\n',
@@ -338,7 +334,7 @@ describe('runRulesList', () => {
   });
 
   test('a policy.d rule\'s provenance names its file, and an override/relax from policy.d does too', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await mkdir(join(dir, 'bouncer', 'policy.d'), { recursive: true });
     await writeFile(
       join(dir, 'bouncer', 'policy.d', '10-npm.toml'),
@@ -358,12 +354,12 @@ describe('runRulesList', () => {
 
 describe('runPing', () => {
   test('loads a healthy account policy silently', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     await expect(runPing()).resolves.toEqual({ text: '', ok: true });
   });
 
   test('fails silently when the configured account root cannot be read', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     const unreadableConfigRoot = join(dir, 'not-a-directory');
     await writeFile(unreadableConfigRoot, '', 'utf8');
     process.env.CLAUDE_CONFIG_DIR = unreadableConfigRoot;
@@ -371,7 +367,7 @@ describe('runPing', () => {
   });
 
   test('keeps the embedded baseline runnable when the overlay is rejected', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = freshAccountDir();
     await writeOverlay(accountDir, 'not valid toml {{{');
     await expect(runPing()).resolves.toEqual({ text: '', ok: true });
   });

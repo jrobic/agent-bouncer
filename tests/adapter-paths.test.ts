@@ -4,28 +4,20 @@
 // canonicalizePath() behavior and the end-to-end run() bypass-closure are
 // covered with a real symlink in a tmpdir, not a mocked fs.
 
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { realpath, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { canonicalizePath } from '../src/adapter/paths.ts';
 import { run } from '../src/adapter/run.ts';
-
-const cleanupDirs: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
-});
+import { tmpDir } from './tmp.ts';
 
 // macOS's own tmpdir() is itself behind a symlink (/tmp -> /private/tmp), so
-// the raw mkdtemp() result is NOT canonical — realpath()ing it here once
+// the raw tmpDir() result is NOT canonical — realpath()ing it here once
 // keeps every "expected" value in this file honest, independent of that
 // platform quirk. canonicalizePath() itself is what is under test; this is
 // test scaffolding, not a workaround for it.
 async function freshDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-paths-test-'));
-  cleanupDirs.push(dir);
-  return await realpath(dir);
+  return await realpath(tmpDir('bouncer-paths-test-'));
 }
 
 describe('canonicalizePath: unit behavior', () => {

@@ -4,24 +4,21 @@
 // CLAUDE_CONFIG_DIR, no subprocess spawned.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseAuditArgs, runAudit, runRulesLint } from '../src/cli-commands.ts';
 import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
+import { tmpDir } from './tmp.ts';
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function freshAccountDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-audit-cli-test-'));
-  cleanupDirs.push(dir);
+function freshAccountDir(): string {
+  const dir = tmpDir('bouncer-audit-cli-test-');
   process.env.CLAUDE_CONFIG_DIR = dir;
   return dir;
 }
@@ -120,7 +117,7 @@ describe('parseAuditArgs', () => {
 
 describe('runAudit: report mode', () => {
   test('no log file at all: every conditional rule is reported dead, no friction', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(ok).toBe(true);
     expect(text).toContain('no deny/ask entries');
@@ -128,7 +125,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('a frequent block/confirm cluster is surfaced as friction', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
@@ -139,7 +136,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('pin (review round on ticket 08): a MIXED shadow+enforce log still clusters as one continuous history', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ target: 'git push origin main', mode: 'shadow' }),
       verdictLine({ target: 'git push origin feature-x' }), // enforced, no mode field
@@ -150,7 +147,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('an observe entry marks its conditional rule as fired (its own section), not dead', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ verdict: 'observe', rule_id: 'git-conditional-apply', target: 'git apply --check p.diff' }),
     ]);
@@ -161,7 +158,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('--days excludes entries outside the window', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ timestamp: '2020-01-01T00:00:00.000Z', target: 'git push origin main' }),
     ]);
@@ -170,7 +167,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('audit-header and policy-warning lines in the log do not break parsing', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       { timestamp: '2026-08-10T00:00:00.000Z', kind: 'audit-header', overrides: [], relaxations: [] },
       verdictLine({ target: 'git push origin main' }),
@@ -181,14 +178,14 @@ describe('runAudit: report mode', () => {
   });
 
   test('a missing log file (ENOENT) is treated as empty, no warning line (round-3 review item 6)', async () => {
-    await freshAccountDir();
+    freshAccountDir();
     const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(text).not.toContain('warning:');
   });
 
   test('an EXISTING but unreadable log file surfaces an honest warning, not silent emptiness '
     + '(round-3 review item 6: ENOENT ≠ EACCES/EISDIR)', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [verdictLine({ target: 'git push origin main' })]);
     const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
     await chmod(logFile, 0o000); // unreadable by anyone but root
@@ -202,7 +199,7 @@ describe('runAudit: report mode', () => {
   });
 
   test('a directory at the log path (EISDIR) surfaces the same honest warning', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await mkdir(join(dir, 'logs', 'hooks', 'bouncer.log'), { recursive: true }); // a DIR, not a file
     const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(ok).toBe(true);
@@ -212,7 +209,7 @@ describe('runAudit: report mode', () => {
 
 describe('runAudit: --sessions-only across modes', () => {
   test('filters a mixed log and labels the active filter in every mode', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     const timestamp = new Date().toISOString();
     await writeLog(dir, [
       verdictLine({ timestamp, session_id: null, rule_id: 'cli-only-rule', target: 'cli-only-target', mode: 'shadow' }),
@@ -251,7 +248,7 @@ describe('runAudit: --sessions-only across modes', () => {
 
 describe('runAudit: --suggest mode', () => {
   test('produces TOML that `rules lint` accepts as-is (AC3)', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),
@@ -272,7 +269,7 @@ describe('runAudit: --suggest mode', () => {
   });
 
   test('an unreadable log in --suggest mode gets a `#`-commented warning (stays valid TOML)', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [verdictLine({ target: 'git push origin main' })]);
     const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
     await chmod(logFile, 0o000);
@@ -287,7 +284,7 @@ describe('runAudit: --suggest mode', () => {
   });
 
   test('an empty window produces a lint-safe "nothing to suggest" comment', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     const { text } = await runAudit({ days: 30, suggest: true, diff: false });
     await writeOverlay(dir, text);
     const { ok } = await runRulesLint();
@@ -295,7 +292,7 @@ describe('runAudit: --suggest mode', () => {
   });
 
   test('never writes to the account overlay file itself (no auto-apply, AC4)', async () => {
-    const dir = await freshAccountDir();
+    const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ target: 'git push origin main' }),
       verdictLine({ target: 'git push origin feature-x' }),

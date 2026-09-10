@@ -4,29 +4,21 @@
 // itself proceeds silently (nothing on stdout).
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { appendFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logVerdict, MAX_LOG_SIZE } from '../src/adapter/log.ts';
 import { run } from '../src/adapter/run.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { Verdict } from '../src/types.ts';
+import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
-const cleanupDirs: string[] = [];
 
-afterEach(async () => {
+afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
-  await Promise.all(cleanupDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-
-async function freshAccountDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-log-test-'));
-  cleanupDirs.push(dir);
-  return dir;
-}
 
 function logPathFor(accountDir: string): string {
   return join(accountDir, 'logs', 'hooks', 'bouncer.log');
@@ -41,7 +33,7 @@ const BLOCK: Verdict = {
 
 describe('logVerdict: JSONL entry shape', () => {
   test('writes a JSONL line with family, verdict, rule id, and truncated target', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     await logVerdict('command', { toolName: 'Bash', sessionId: 'sess-1' }, BLOCK, CLAUDE_CODE_HARNESS);
@@ -58,7 +50,7 @@ describe('logVerdict: JSONL entry shape', () => {
   });
 
   test('the log file is created with restrictive mode (0600)', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
@@ -70,7 +62,7 @@ describe('logVerdict: JSONL entry shape', () => {
 
 describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
   test('mode: "shadow" is passed through, tagged on the entry', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS, undefined, 'shadow');
@@ -80,7 +72,7 @@ describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
   });
 
   test('a normal (non-shadow) call carries no "mode" key at all', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
@@ -92,8 +84,8 @@ describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
 
 describe('logVerdict: per-account routing (two accounts, two logs)', () => {
   test('two different CLAUDE_CONFIG_DIR values never share a log file', async () => {
-    const accountA = await freshAccountDir();
-    const accountB = await freshAccountDir();
+    const accountA = tmpDir('bouncer-log-test-');
+    const accountB = tmpDir('bouncer-log-test-');
 
     process.env.CLAUDE_CONFIG_DIR = accountA;
     await logVerdict('command', { toolName: 'Bash', sessionId: null }, BLOCK, CLAUDE_CODE_HARNESS);
@@ -110,7 +102,7 @@ describe('logVerdict: per-account routing (two accounts, two logs)', () => {
 
 describe('logVerdict: rotation', () => {
   test('rotates the log file once it exceeds MAX_LOG_SIZE', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
     const logFile = logPathFor(accountDir);
 
@@ -131,7 +123,7 @@ describe('logVerdict: rotation', () => {
 
 describe('run(): conditional-rule allows are logged with their rule id (AC4)', () => {
   test('a ratified git grammar (apply --check) is silent on stdout but logged as observe', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     const envelope = JSON.stringify({
@@ -149,7 +141,7 @@ describe('run(): conditional-rule allows are logged with their rule id (AC4)', (
   });
 
   test('an unconditionally safe command (git status) is not logged at all', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     const envelope = JSON.stringify({
@@ -164,7 +156,7 @@ describe('run(): conditional-rule allows are logged with their rule id (AC4)', (
   });
 
   test('a deny verdict is logged exactly like today (block, with rule id)', async () => {
-    const accountDir = await freshAccountDir();
+    const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
     const envelope = JSON.stringify({

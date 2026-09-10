@@ -6,8 +6,7 @@
 // a proof of what `bouncer doctor --harness pi-agent` actually reports.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runDoctorChecks } from '../src/adapter/doctor.ts';
 import { renderShim } from '../src/adapter/shim.ts';
@@ -15,6 +14,7 @@ import { runPrintCanary } from '../src/cli-commands.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
+import { tmpDir } from './tmp.ts';
 
 const PI_AGENT_HARNESS: HarnessDeclaration = BASELINE.rules.harness.find((h) => h.id === 'pi-agent')!;
 
@@ -32,8 +32,8 @@ function cleanLoadResult(): LoadResult {
   };
 }
 
-async function scratchAgentDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), 'bouncer-shim-file-test-'));
+function scratchAgentDir(): string {
+  return tmpDir('bouncer-shim-file-test-');
 }
 
 async function writeExecutableBouncer(dir: string): Promise<string> {
@@ -53,7 +53,7 @@ async function writeShimFile(agentDir: string, content: string): Promise<string>
 
 describe('shim-file wiring: identical to the printed shim', () => {
   test('wiring:shim and wiring:binary both pass', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       const bouncerPath = await writeExecutableBouncer(agentDir);
       await writeShimFile(agentDir, renderShim('pi-agent', bouncerPath)!);
@@ -66,14 +66,13 @@ describe('shim-file wiring: identical to the printed shim', () => {
       expect(report.checks.find((c) => c.id === 'settings')).toBeUndefined();
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });
 
 describe('shim-file wiring: drifted (one byte edited)', () => {
   test('wiring:shim fails, names the reprint command; wiring:binary still passes (BOUNCER path untouched)', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       const bouncerPath = await writeExecutableBouncer(agentDir);
       const source = renderShim('pi-agent', bouncerPath)!;
@@ -87,14 +86,13 @@ describe('shim-file wiring: drifted (one byte edited)', () => {
       expect(report.checks.find((c) => c.id === 'wiring:binary')).toMatchObject({ ok: true });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });
 
 describe('shim-file wiring: absent', () => {
   test('wiring:shim fails, names the print command; wiring:binary reports "cannot verify"', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       process.env.PI_CODING_AGENT_DIR = agentDir;
       const report = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
@@ -108,14 +106,13 @@ describe('shim-file wiring: absent', () => {
       });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });
 
 describe('shim-file wiring: non-executable BOUNCER', () => {
   test('wiring:shim passes (the file matches byte for byte); wiring:binary fails', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       const bouncerPath = join(agentDir, 'not-executable-bouncer');
       await writeFile(bouncerPath, 'not a real binary', 'utf8');
@@ -130,14 +127,13 @@ describe('shim-file wiring: non-executable BOUNCER', () => {
       });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });
 
 describe('shim-file wiring: a file that is not a printed shim at all', () => {
   test('no BOUNCER line found: wiring:shim fails naming the reprint, wiring:binary "cannot verify"', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       await writeShimFile(agentDir, 'export default function (pi) { /* not a real shim */ }\n');
       process.env.PI_CODING_AGENT_DIR = agentDir;
@@ -152,14 +148,13 @@ describe('shim-file wiring: a file that is not a printed shim at all', () => {
       });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });
 
 describe('shim-file wiring: policy and log checks are unaffected (ADR-0006 § 6: "leaves policy/log unchanged")', () => {
   test('policy and log checks still run and pass alongside the two shim checks', async () => {
-    const agentDir = await scratchAgentDir();
+    const agentDir = scratchAgentDir();
     try {
       const bouncerPath = await writeExecutableBouncer(agentDir);
       await writeShimFile(agentDir, renderShim('pi-agent', bouncerPath)!);
@@ -170,7 +165,6 @@ describe('shim-file wiring: policy and log checks are unaffected (ADR-0006 § 6:
       expect(report.ok).toBe(true);
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
-      await rm(agentDir, { recursive: true, force: true });
     }
   });
 });

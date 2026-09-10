@@ -9,9 +9,9 @@
 // REAL shim module, never a hand-reimplemented copy of its logic.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpDir } from './tmp.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 
@@ -65,7 +65,7 @@ async function ensureBuilt(): Promise<void> {
 // `BOUNCER` (`process.execPath` of `dist/bouncer` at print time), which
 // `BOUNCER_BIN` always overrides at the shim's own runtime, per its own
 // contract.
-async function loadShim(bouncerBin: string): Promise<{ shim: LoadedShim; cleanup: () => Promise<void>; }> {
+async function loadShim(bouncerBin: string): Promise<LoadedShim> {
   await ensureBuilt();
   const printed = Bun.spawn([join(PROJECT_ROOT, 'dist', 'bouncer'), 'harness', 'shim', 'pi-agent'], {
     stdout: 'pipe',
@@ -75,7 +75,7 @@ async function loadShim(bouncerBin: string): Promise<{ shim: LoadedShim; cleanup
   expect(await printed.exited).toBe(0);
   expect(source).toContain('const BOUNCER = process.env.BOUNCER_BIN');
 
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-shim-test-'));
+  const dir = tmpDir('bouncer-shim-test-');
   const file = join(dir, 'bouncer.ts');
   await writeFile(file, source, 'utf8');
 
@@ -103,288 +103,210 @@ async function loadShim(bouncerBin: string): Promise<{ shim: LoadedShim; cleanup
       handlers[event as 'tool_call' | 'session_start' | 'before_agent_start'] = handler;
     },
   });
-  const shim: LoadedShim = {
+  return {
     toolCall: handlers.tool_call as ToolCallHandler,
     sessionStart: handlers.session_start as SessionStartHandler,
     beforeAgentStart: handlers.before_agent_start as BeforeAgentStartHandler,
   };
-  return { shim, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
 // A throwaway "bouncer" stand-in: a POSIX shell script the shim spawns
 // exactly as it would the real binary (`spawnSync(BOUNCER, ["run", ...],
 // {input, timeout})`) — `body` decides what it prints/exits/sleeps.
-async function fakeBouncerScript(body: string): Promise<{ path: string; cleanup: () => Promise<void>; }> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-shim-fake-bin-'));
+async function fakeBouncerScript(body: string): Promise<string> {
+  const dir = tmpDir('bouncer-shim-fake-bin-');
   const path = join(dir, 'fake-bouncer.sh');
   await writeFile(path, `#!/bin/sh\n${body}\n`, 'utf8');
   await chmod(path, 0o755);
-  return { path, cleanup: () => rm(dir, { recursive: true, force: true }) };
+  return path;
 }
 
 describe('pi-agent shim: tool_call — the four fail-closed paths (§ 4)', () => {
   test('spawn impossible (BOUNCER_BIN names a path that does not exist) blocks with a failing-closed reason', async () => {
-    const { shim, cleanup } = await loadShim('/nonexistent/path/to/bouncer');
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result?.block).toBe(true);
-      expect(result?.reason).toContain('failing closed');
-    } finally {
-      await cleanup();
-    }
+    const shim = await loadShim('/nonexistent/path/to/bouncer');
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result?.block).toBe(true);
+    expect(result?.reason).toContain('failing closed');
   });
 
   test('non-zero exit blocks with a failing-closed reason', async () => {
-    const fake = await fakeBouncerScript('exit 1');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result?.block).toBe(true);
-      expect(result?.reason).toContain('failing closed');
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('exit 1');
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result?.block).toBe(true);
+    expect(result?.reason).toContain('failing closed');
   });
 
   test('a spawn exceeding the 2s timeout blocks with a failing-closed reason', async () => {
-    const fake = await fakeBouncerScript('sleep 5');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result?.block).toBe(true);
-      expect(result?.reason).toContain('failing closed');
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('sleep 5');
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result?.block).toBe(true);
+    expect(result?.reason).toContain('failing closed');
   }, 10_000);
 
   test('unparseable stdout (not valid JSON) blocks with a failing-closed reason', async () => {
-    const fake = await fakeBouncerScript('printf "not json {{{"');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result?.block).toBe(true);
-      expect(result?.reason).toContain('failing closed');
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('printf "not json {{{"');
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result?.block).toBe(true);
+    expect(result?.reason).toContain('failing closed');
   });
 });
 
 describe('pi-agent shim: tool_call — allow on silence', () => {
   test('empty stdout (exit 0) resolves to undefined — allow, nothing returned', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result).toBeUndefined();
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('exit 0');
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result).toBeUndefined();
   });
 });
 
 describe('pi-agent shim: tool_call — {block} returned as is', () => {
   test('a real deny answer is returned unmodified', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"block":true,"reason":"rm-rf-dangerous: dangerous target"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'rm -rf /' } }, fakeCtx());
-      expect(result).toEqual({ block: true, reason: 'rm-rf-dangerous: dangerous target' });
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"block":true,"reason":"rm-rf-dangerous: dangerous target"}'`);
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'rm -rf /' } }, fakeCtx());
+    expect(result).toEqual({ block: true, reason: 'rm-rf-dangerous: dangerous target' });
   });
 });
 
 describe('pi-agent shim: tool_call — {ask, reason} degrades through ctx.ui.confirm', () => {
   test('hasUI true, confirm resolves true (accept): the call runs, nothing returned', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      let confirmCalledWith: readonly [string, string] | undefined;
-      const ctx = fakeCtx({
-        ui: {
-          confirm: async (title, text) => {
-            confirmCalledWith = [title, text];
-            return true;
-          },
-          notify: () => {},
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
+    const shim = await loadShim(fakePath);
+    let confirmCalledWith: readonly [string, string] | undefined;
+    const ctx = fakeCtx({
+      ui: {
+        confirm: async (title, text) => {
+          confirmCalledWith = [title, text];
+          return true;
         },
-      });
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
-      expect(result).toBeUndefined();
-      expect(confirmCalledWith).toEqual(['bouncer', 'git-protected: confirm before running']);
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+        notify: () => {},
+      },
+    });
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
+    expect(result).toBeUndefined();
+    expect(confirmCalledWith).toEqual(['bouncer', 'git-protected: confirm before running']);
   });
 
   test('hasUI true, confirm resolves false (decline): blocked with the same reason', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const ctx = fakeCtx({ ui: { confirm: async () => false, notify: () => {} } });
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
-      expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
+    const shim = await loadShim(fakePath);
+    const ctx = fakeCtx({ ui: { confirm: async () => false, notify: () => {} } });
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
+    expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
   });
 
   test('no UI attached (headless -p): blocked WITHOUT ever awaiting ctx.ui.confirm', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const ctx = fakeCtx({
-        hasUI: false,
-        ui: {
-          confirm: () => {
-            throw new Error('confirm must never be called when hasUI is false');
-          },
-          notify: () => {},
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
+    const shim = await loadShim(fakePath);
+    const ctx = fakeCtx({
+      hasUI: false,
+      ui: {
+        confirm: () => {
+          throw new Error('confirm must never be called when hasUI is false');
         },
-      });
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
-      expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+        notify: () => {},
+      },
+    });
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
+    expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
   });
 });
 
 describe('pi-agent shim: session_start', () => {
   test('a {notify} answer calls ctx.ui.notify with the doctor text, level "warning"', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"notify":"bouncer doctor: 1 check(s) unprovable"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      let notified: readonly [string, string | undefined] | undefined;
-      const ctx = fakeCtx({
-        ui: {
-          confirm: async () => true,
-          notify: (text, level) => {
-            notified = [text, level];
-          },
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"notify":"bouncer doctor: 1 check(s) unprovable"}'`);
+    const shim = await loadShim(fakePath);
+    let notified: readonly [string, string | undefined] | undefined;
+    const ctx = fakeCtx({
+      ui: {
+        confirm: async () => true,
+        notify: (text, level) => {
+          notified = [text, level];
         },
-      });
-      await shim.sessionStart({}, ctx);
-      expect(notified).toEqual(['bouncer doctor: 1 check(s) unprovable', 'warning']);
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+      },
+    });
+    await shim.sessionStart({}, ctx);
+    expect(notified).toEqual(['bouncer doctor: 1 check(s) unprovable', 'warning']);
   });
 
   test('silence (healthy doctor state): ctx.ui.notify is never called', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      let notifyCalled = false;
-      const ctx = fakeCtx({
-        ui: {
-          confirm: async () => true,
-          notify: () => {
-            notifyCalled = true;
-          },
+    const fakePath = await fakeBouncerScript('exit 0');
+    const shim = await loadShim(fakePath);
+    let notifyCalled = false;
+    const ctx = fakeCtx({
+      ui: {
+        confirm: async () => true,
+        notify: () => {
+          notifyCalled = true;
         },
-      });
-      await shim.sessionStart({}, ctx);
-      expect(notifyCalled).toBe(false);
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+      },
+    });
+    await shim.sessionStart({}, ctx);
+    expect(notifyCalled).toBe(false);
   });
 
   test('a fail-closed spawn failure notifies with the same failing-closed reason', async () => {
-    const { shim, cleanup } = await loadShim('/nonexistent/path/to/bouncer');
-    try {
-      let notified: string | undefined;
-      const ctx = fakeCtx({
-        ui: {
-          confirm: async () => true,
-          notify: (text) => {
-            notified = text;
-          },
+    const shim = await loadShim('/nonexistent/path/to/bouncer');
+    let notified: string | undefined;
+    const ctx = fakeCtx({
+      ui: {
+        confirm: async () => true,
+        notify: (text) => {
+          notified = text;
         },
-      });
-      await shim.sessionStart({}, ctx);
-      expect(notified).toContain('failing closed');
-    } finally {
-      await cleanup();
-    }
+      },
+    });
+    await shim.sessionStart({}, ctx);
+    expect(notified).toContain('failing closed');
   });
 });
 
 describe('pi-agent shim: before_agent_start (cross-binary notice delivery)', () => {
   test('a pending session_start notice is delivered once, then cleared', async () => {
-    const fake = await fakeBouncerScript(String.raw`printf '{"notify":"bouncer doctor: 1 check(s) unprovable"}'`);
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      await shim.sessionStart({}, fakeCtx());
-      const first = shim.beforeAgentStart({}, fakeCtx());
-      expect(first).toEqual({
-        message: { customType: 'bouncer-doctor', content: 'bouncer doctor: 1 check(s) unprovable', display: true },
-      });
-      const second = shim.beforeAgentStart({}, fakeCtx());
-      expect(second).toBeUndefined();
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"notify":"bouncer doctor: 1 check(s) unprovable"}'`);
+    const shim = await loadShim(fakePath);
+    await shim.sessionStart({}, fakeCtx());
+    const first = shim.beforeAgentStart({}, fakeCtx());
+    expect(first).toEqual({
+      message: { customType: 'bouncer-doctor', content: 'bouncer doctor: 1 check(s) unprovable', display: true },
+    });
+    const second = shim.beforeAgentStart({}, fakeCtx());
+    expect(second).toBeUndefined();
   });
 
   test('a fail-closed session_start spawn failure is ALSO delivered through before_agent_start', async () => {
-    const { shim, cleanup } = await loadShim('/nonexistent/path/to/bouncer');
-    try {
-      await shim.sessionStart({}, fakeCtx());
-      const result = shim.beforeAgentStart({}, fakeCtx());
-      expect(result?.message?.customType).toBe('bouncer-doctor');
-      expect(result?.message?.content).toContain('failing closed');
-      expect(result?.message?.display).toBe(true);
-    } finally {
-      await cleanup();
-    }
+    const shim = await loadShim('/nonexistent/path/to/bouncer');
+    await shim.sessionStart({}, fakeCtx());
+    const result = shim.beforeAgentStart({}, fakeCtx());
+    expect(result?.message?.customType).toBe('bouncer-doctor');
+    expect(result?.message?.content).toContain('failing closed');
+    expect(result?.message?.display).toBe(true);
   });
 
   test('a healthy (silent) session_start leaves before_agent_start with nothing to deliver', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      await shim.sessionStart({}, fakeCtx());
-      expect(shim.beforeAgentStart({}, fakeCtx())).toBeUndefined();
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('exit 0');
+    const shim = await loadShim(fakePath);
+    await shim.sessionStart({}, fakeCtx());
+    expect(shim.beforeAgentStart({}, fakeCtx())).toBeUndefined();
   });
 
   test('before_agent_start called before any session_start (e.g. a resumed session) delivers nothing, never throws', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      expect(shim.beforeAgentStart({}, fakeCtx())).toBeUndefined();
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('exit 0');
+    const shim = await loadShim(fakePath);
+    expect(shim.beforeAgentStart({}, fakeCtx())).toBeUndefined();
   });
 });
 
 describe('pi-agent shim: BOUNCER_PROBE_LOG (probe-phase stdin capture)', () => {
   test('appends the exact JSON payload sent to bouncer, one line, before the spawn', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const logDir = await mkdtemp(join(tmpdir(), 'bouncer-shim-probe-log-'));
+    const fakePath = await fakeBouncerScript('exit 0');
+    const logDir = tmpDir('bouncer-shim-probe-log-');
     const logPath = join(logDir, 'stdin.log');
-    const { shim, cleanup } = await loadShim(fake.path);
+    const shim = await loadShim(fakePath);
     const originalProbeLog = process.env.BOUNCER_PROBE_LOG;
     process.env.BOUNCER_PROBE_LOG = logPath;
     try {
@@ -400,21 +322,13 @@ describe('pi-agent shim: BOUNCER_PROBE_LOG (probe-phase stdin capture)', () => {
     } finally {
       if (originalProbeLog === undefined) delete process.env.BOUNCER_PROBE_LOG;
       else process.env.BOUNCER_PROBE_LOG = originalProbeLog;
-      await cleanup();
-      await fake.cleanup();
-      await rm(logDir, { recursive: true, force: true });
     }
   });
 
   test('unset BOUNCER_PROBE_LOG: no file is written, no error', async () => {
-    const fake = await fakeBouncerScript('exit 0');
-    const { shim, cleanup } = await loadShim(fake.path);
-    try {
-      const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
-      expect(result).toBeUndefined();
-    } finally {
-      await cleanup();
-      await fake.cleanup();
-    }
+    const fakePath = await fakeBouncerScript('exit 0');
+    const shim = await loadShim(fakePath);
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result).toBeUndefined();
   });
 });

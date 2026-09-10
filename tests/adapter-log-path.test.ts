@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { configDirFor, hookLogPathFor } from '../src/adapter/log-path.ts';
 import { loadCurrentPolicy } from '../src/adapter/policy.ts';
 import { run } from '../src/adapter/run.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
+import { tmpDir } from './tmp.ts';
 
 // Workstation delta: per-account log routing. The property under test is
 // "two accounts, two logs" — CLAUDE_CONFIG_DIR is how a second account
@@ -99,8 +100,8 @@ describe('hookLogPathFor(claude-code): per-account routing', () => {
 
 describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overlay protocol', () => {
   test('the log lands under $CODEX_HOME/logs/hooks/bouncer.log and the profile layer is read from $CODEX_HOME/bouncer/', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'bouncer-codex-routing-home-'));
-    const codexHome = mkdtempSync(join(tmpdir(), 'bouncer-codex-routing-codexhome-'));
+    const home = tmpDir('bouncer-codex-routing-home-');
+    const codexHome = tmpDir('bouncer-codex-routing-codexhome-');
     const commonHarnessDir = join(home, '.agents', 'bouncer', 'harness.d');
     mkdirSync(commonHarnessDir, { recursive: true });
     // Extends the BASELINE codex declaration (dir/env/witness/protocol
@@ -202,8 +203,8 @@ describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overla
   });
 
   test('Claude Code routing is unchanged by the presence of a codex declaration', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'bouncer-cc-unchanged-home-'));
-    const claudeConfigDir = mkdtempSync(join(tmpdir(), 'bouncer-cc-unchanged-config-'));
+    const home = tmpDir('bouncer-cc-unchanged-home-');
+    const claudeConfigDir = tmpDir('bouncer-cc-unchanged-config-');
     const originalHome = process.env.HOME;
     const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.HOME = home;

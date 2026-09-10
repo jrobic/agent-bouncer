@@ -6,8 +6,7 @@
 // property at this boundary, not internal structure.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
@@ -22,6 +21,7 @@ import {
   HEALTHY_HOOKS,
   PING_WORD_COMMAND,
 } from './doctor-fixtures.ts';
+import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 
@@ -50,7 +50,7 @@ const NO_WIRING_HARNESS: HarnessDeclaration = {
 };
 
 async function scratchSettingsPath(hooks: unknown): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+  const dir = tmpDir('bouncer-doctor-test-');
   const path = join(dir, 'settings.json');
   await writeFile(path, JSON.stringify({ hooks }), 'utf8');
   return path;
@@ -208,7 +208,7 @@ describe('runDoctorChecks: wiring', () => {
   });
 
   test('a missing settings.json file fails every wiring check without throwing', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+    const dir = tmpDir('bouncer-doctor-test-');
     const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
     expect(wiring.every((c) => !c.ok)).toBe(true);
@@ -413,13 +413,13 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
 
 describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs. absent)', () => {
   test('a missing settings.json is a healthy "settings" check — normal, unconfigured, not corrupt', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+    const dir = tmpDir('bouncer-doctor-test-');
     const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult(), CLAUDE_CODE_HARNESS);
     expect(report.checks.find((c) => c.id === 'settings')?.ok).toBe(true);
   });
 
   test('a malformed settings.json fails its OWN "settings" check, named honestly', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+    const dir = tmpDir('bouncer-doctor-test-');
     const path = join(dir, 'settings.json');
     await writeFile(path, 'not valid json {{{', 'utf8');
     const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
@@ -429,7 +429,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
   });
 
   test('a malformed settings.json makes wiring checks say "cannot verify", never "missing" (no false diagnosis)', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+    const dir = tmpDir('bouncer-doctor-test-');
     const path = join(dir, 'settings.json');
     await writeFile(path, 'not valid json {{{', 'utf8');
     const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
@@ -442,7 +442,7 @@ describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs
   });
 
   test('a settings.json that is valid JSON but not an object is reported as corrupt too', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-test-'));
+    const dir = tmpDir('bouncer-doctor-test-');
     const path = join(dir, 'settings.json');
     await writeFile(path, '[1,2,3]', 'utf8');
     const report = await runDoctorChecks(path, cleanLoadResult(), CLAUDE_CODE_HARNESS);
@@ -475,7 +475,7 @@ describe('runDoctorChecks: policy', () => {
 describe('runDoctorChecks: log writability', () => {
   test('a writable config dir with no log file yet passes the log check', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-log-'));
+    const dir = tmpDir('bouncer-doctor-log-');
     const original = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
@@ -484,13 +484,12 @@ describe('runDoctorChecks: log writability', () => {
     } finally {
       if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = original;
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
   test('an unwritable log directory fails the log check', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-log-'));
+    const dir = tmpDir('bouncer-doctor-log-');
     await mkdir(join(dir, 'logs'), { recursive: true });
     await chmod(join(dir, 'logs'), 0o500); // read+execute, no write
     const original = process.env.CLAUDE_CONFIG_DIR;
@@ -499,17 +498,15 @@ describe('runDoctorChecks: log writability', () => {
       const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(false);
     } finally {
-      await chmod(join(dir, 'logs'), 0o700);
       if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = original;
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
   test('an EXISTING but read-only log file fails the check even though its directory is writable '
     + '(round-3 review: the append-time failure log.ts silently swallows)', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-log-'));
+    const dir = tmpDir('bouncer-doctor-log-');
     const logsDir = join(dir, 'logs', 'hooks');
     await mkdir(logsDir, { recursive: true });
     const logFile = join(logsDir, 'bouncer.log');
@@ -521,16 +518,14 @@ describe('runDoctorChecks: log writability', () => {
       const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
       expect(report.checks.find((c) => c.id === 'log')?.ok).toBe(false);
     } finally {
-      await chmod(logFile, 0o600);
       if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = original;
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
   test('an EXISTING, writable log file (with content already in it) still passes', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
-    const dir = await mkdtemp(join(tmpdir(), 'bouncer-doctor-log-'));
+    const dir = tmpDir('bouncer-doctor-log-');
     const logsDir = join(dir, 'logs', 'hooks');
     await mkdir(logsDir, { recursive: true });
     const logFile = join(logsDir, 'bouncer.log');
@@ -548,7 +543,6 @@ describe('runDoctorChecks: log writability', () => {
     } finally {
       if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = original;
-      await rm(dir, { recursive: true, force: true });
     }
   });
 });

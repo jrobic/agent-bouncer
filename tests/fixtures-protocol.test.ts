@@ -25,12 +25,12 @@
 // bytes a real installed/source path produced.
 
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
 import { renderShim } from '../src/adapter/shim.ts';
 import { CODEX_HEALTHY_HOOKS, codexTrustToml, HEALTHY_HOOKS } from './doctor-fixtures.ts';
+import { tmpDir } from './tmp.ts';
 
 interface RecordedCase {
   readonly id: string;
@@ -274,7 +274,7 @@ for (const file of FIXTURE_FILES) {
   describe(`fixtures/protocol/${file}: byte-for-byte replay against run() (permissionDecisionReason on its ruleId prefix)`, () => {
     for (const recorded of cases) {
       test(recorded.id, async () => {
-        const accountDir = mkdtempSync(join(tmpdir(), 'bouncer-protocol-replay-'));
+        const accountDir = tmpDir('bouncer-protocol-replay-');
         const configDir = join(accountDir, config.configSubdir);
         mkdirSync(configDir, { recursive: true });
         if (config.installArtifact !== undefined) {
