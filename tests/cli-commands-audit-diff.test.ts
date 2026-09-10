@@ -36,7 +36,7 @@ async function writeTsLog(dir: string, filename: string, lines: readonly Record<
 
 function shadowVerdict(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    timestamp: '2026-08-10T12:00:00.000Z',
+    timestamp: new Date().toISOString(),
     session_id: 'sess-1',
     tool_name: 'Bash',
     family: 'command',
@@ -50,7 +50,7 @@ function shadowVerdict(overrides: Record<string, unknown> = {}): Record<string, 
 
 function tsDeny(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    timestamp: '2026-08-10T12:00:00.000Z',
+    timestamp: new Date().toISOString(),
     session_id: 'sess-1',
     tool_name: 'Bash',
     decision: 'deny',

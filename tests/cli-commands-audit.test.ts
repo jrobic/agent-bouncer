@@ -36,7 +36,7 @@ async function writeLog(accountDir: string, lines: readonly Record<string, unkno
 
 function verdictLine(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    timestamp: '2026-08-10T12:00:00.000Z',
+    timestamp: new Date().toISOString(),
     session_id: 'sess-1',
     tool_name: 'Bash',
     family: 'command',
@@ -169,7 +169,7 @@ describe('runAudit: report mode', () => {
   test('audit-header and policy-warning lines in the log do not break parsing', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [
-      { timestamp: '2026-08-10T00:00:00.000Z', kind: 'audit-header', overrides: [], relaxations: [] },
+      { timestamp: new Date().toISOString(), kind: 'audit-header', overrides: [], relaxations: [] },
       verdictLine({ target: 'git push origin main' }),
     ]);
     const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
