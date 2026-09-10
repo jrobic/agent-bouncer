@@ -32,7 +32,18 @@ reason = "Shell redirection writing to a block device (potential disk corruption
 
 [[rules.command.bash]]
 id = "device-redirect-tee"
-regex = "\\btee\\s+(?:-\\S+\\s+)*\\/dev\\/(sda|sdb|disk|nvme|hd|md|loop)\\w*"
+# Ticket 41 round 1: any operand (flag or an extra destination file -- tee
+# writes every file it's given) may sit before the target, bounded to 8;
+# the excluded shell control characters keep a pipe/semicolon/`&`
+# boundary from being crossed (`tee out.txt | grep /dev/sda1` stays
+# allow). A quoted target ("/dev/sda") is a known limit (see the
+# known-limit fixture): a quoted operand still matches this class, so it
+# is consumed as one more operand instead of recognized as the target.
+# The bound is doctrine here, not a fix: the mandatory part below is a
+# fixed literal, not a pattern a padding token can also satisfy, so this
+# row was already linear unbounded (see chmod-root's comment below for
+# the row that needed the bound).
+regex = "\\btee\\s+(?:[^\\s|;&]+\\s+){0,8}\\/dev\\/(sda|sdb|disk|nvme|hd|md|loop)\\w*"
 reason = "tee writing to a block device (potential disk corruption)"
 
 [[rules.command.bash]]
@@ -40,16 +51,30 @@ id = "chmod-root"
 # Ticket 41: -R must appear somewhere among the flags (bundled or split,
 # before or after other flags: -Rf, -fR, -v -R, -R -v, --recursive), never
 # via lookaround — recursion stays required, chmod -v 777 / (no -R) stays
-# allow.
-regex = "\\bchmod\\s+(?:-\\S+\\s+)*-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+)*0?[0-7]{1,4}\\s+\\/(?:\\s|$)"
+# allow. Round 1: both repetitions are bounded to {0,8}, not `*`. A `-R`
+# token satisfies BOTH the leading repetition and the mandatory R group,
+# so unbounded repetitions made this O(n^2) in the number of flag-shaped
+# tokens -- past ~16000 of them the regex engine exhausted its
+# backtracking budget and reported "no match" on a string that DOES
+# contain a real `chmod -R 777 /` later (a silent fail-open). Bounding
+# caps that at O(1) per position regardless of input size; the cost is
+# that a 9th-or-later flag before the mode escapes detection -- no real
+# chmod invocation carries that many (see
+# tests/command-rules.test.ts's adversarial-padding lock). `0*`, not
+# `0?`, on the mode's leading zeros: `0?` missed `chmod -R 000777 /`
+# (three leading zeros), matching setuid's own convention.
+regex = "\\bchmod\\s+(?:-\\S+\\s+){0,8}-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+){0,8}0*[0-7]{1,4}\\s+\\/(?:\\s|$)"
 reason = "Recursive chmod on / — likely to break the system"
 
 [[rules.command.bash]]
 id = "chown-root"
-# Ticket 41: same -R-anywhere-in-flags idiom as chmod-root above (bundled or
-# split, before or after other flags: -Rh, -R -h, --recursive) — recursion
-# stays required, chown root / (no -R) stays allow.
-regex = "\\bchown\\s+(?:-\\S+\\s+)*-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+)*\\S+\\s+\\/(?:\\s|$)"
+# Ticket 41: same -R-anywhere-in-flags idiom as chmod-root above (bundled
+# or split, before or after other flags: -Rh, -R -h, --recursive) —
+# recursion stays required, chown root / (no -R) stays allow. Round 1:
+# both repetitions bounded to {0,8} for the same reason as chmod-root's
+# comment above (a `-R` token satisfies both groups, unbounded that's
+# O(n^2) and fails open past ~16000 tokens).
+regex = "\\bchown\\s+(?:-\\S+\\s+){0,8}-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+){0,8}\\S+\\s+\\/(?:\\s|$)"
 reason = "Recursive chown on / — likely to break the system"
 
 # Debatable (ticket 13): fires on ANY curl file upload, including a
@@ -105,26 +130,40 @@ reason = "Writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_
 
 [[rules.command.bash]]
 id = "etc-write-tee"
-regex = "\\btee\\s+(?:-\\S+\\s+)*\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b"
+# Ticket 41 round 1: same operand-before-target idiom as
+# device-redirect-tee above.
+regex = "\\btee\\s+(?:[^\\s|;&]+\\s+){0,8}\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b"
 reason = "tee writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_config)"
 
 [[rules.command.bash]]
 id = "kill-init"
-# Ticket 41: any signal spelling before the pid, zero or more times, in any
-# order relative to a `--` end-of-options separator — a literal numeric or
-# named signal (`-9`, `-15`, `-TERM`, `-SIGKILL`), `-s <sig>`, `--signal
-# <sig>`/`--signal=<sig>`, or a bare `--`. Each recognized token must be
-# followed by whitespace before the next one is tried, which is what keeps
-# a final `-1` target from being swallowed as one more signal token instead
-# of matching the target alternation (backtracking settles on the split
-# that lets the whole regex match). The target set is explicit: `1`, `init`,
-# and `-1` (every process this agent can signal) — `kill -9 -1` used to
-# block by a regex accident (an unrelated `-?-?` shim happened to eat one
-# leading dash) and `kill -- -1` used to pass; both are deliberate now.
-# Only enumerated signal spellings are skipped: a killall-specific flag
-# ahead of the signal (`-q`, `-u`, `-t`, …) is not, and neither is a
-# shell-expanded signal or target (see the known-limit fixtures).
-regex = "\\bkill(?:all)?\\s+(?:(?:-s\\s+\\S+|--signal(?:=|\\s+)\\S+|-[0-9]+|-[A-Z]+[0-9]*|--)\\s+)*(?:1|init|-1)\\b"
+# Ticket 41: any signal spelling before the pid, zero or more times
+# (bounded to {0,8}, round 1 — doctrine only: this row's mandatory target
+# below is three fixed literals, not a pattern a signal token can also
+# satisfy the way chmod-root's `-R` alternation could, so it was already
+# linear unbounded), in any order relative to a `--` end-of-options
+# separator — a literal numeric or named signal (`-9`, `-15`, `-TERM`,
+# `-SIGKILL`, any case: round 1, `killall` lists its own signals in
+# lowercase on this platform and bash's `kill -term` kills), `-s <sig>` or
+# `-n <signum>` (round 1: bash `kill`'s own `-n` form was missing),
+# `--signal <sig>`/`--signal=<sig>`, or a bare `--`. The letter class
+# requires at least two characters (`{2,}`), which is what keeps `-l`
+# (list signal names, one letter) and `kill -l 1` (lists signal 1's
+# name — kills nothing) from being read as a signal, without lookaround:
+# every real signal name is at least two characters (the shortest is
+# `IO`). Each recognized token must be followed by whitespace before the
+# next one is tried, which is what keeps a final `-1` target from being
+# swallowed as one more signal token instead of matching the target
+# alternation (backtracking settles on the split that lets the whole
+# regex match). The target set is explicit: `1`, `init`, and `-1` (every
+# process this agent can signal) — `kill -9 -1` used to block by a regex
+# accident (an unrelated `-?-?` shim happened to eat one leading dash)
+# and `kill -- -1` used to pass; both are deliberate now. Only enumerated
+# signal spellings are skipped: a killall-specific flag ahead of the
+# signal (`-q`, `-u`, `-t`, …) is not, and neither is a shell-expanded
+# signal or target (see docs/reference/policy.md § Known limits and the
+# known-limit fixtures).
+regex = "\\bkill(?:all)?\\s+(?:(?:-[sn]\\s+\\S+|--signal(?:=|\\s+)\\S+|-[0-9]+|-[A-Za-z]{2,}[0-9]*|--)\\s+){0,8}(?:1|init|-1)\\b"
 reason = "Killing PID 1, init, or -1 (every process this agent can signal) — system halt"
 
 [[rules.command.bash]]

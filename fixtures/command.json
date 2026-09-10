@@ -186,6 +186,50 @@
       "expected": []
     },
     {
+      "id": "device-redirect-tee-operand-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a /tmp/x /dev/sda"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "device-redirect-tee"
+        }
+      ]
+    },
+    {
+      "id": "device-redirect-tee-long-append-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee --append /dev/nvme0n1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "device-redirect-tee"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-device-redirect-tee-quoted-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a \"/dev/sda\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the matcher reads the literal target token; a quoted /dev/sda does not equal the bare /dev/sda pattern"
+    },
+    {
+      "id": "tee-operand-scan-stops-at-pipe-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee out.txt | grep /dev/sda1"
+      },
+      "expected": []
+    },
+    {
       "id": "chmod-root",
       "toolName": "Bash",
       "toolInput": {
@@ -262,6 +306,84 @@
       "expected": []
     },
     {
+      "id": "chmod-root-long-recursive-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod --recursive 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-bundle-R-at-end-f",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -fR 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-bundle-R-at-end-v",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -vR 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-uppercase-H-not-R-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -H 777 /"
+      },
+      "expected": []
+    },
+    {
+      "id": "chmod-root-uppercase-L-P-not-R-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -L -P 777 /"
+      },
+      "expected": []
+    },
+    {
+      "id": "chmod-root-leading-zeros-mode",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R 000777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-chmod-root-reference-copy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R --reference=other /"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "--reference copies another file's mode; chmod-root requires a literal octal mode in the command text, which --reference does not supply"
+    },
+    {
       "id": "chown-root",
       "toolName": "Bash",
       "toolInput": {
@@ -313,6 +435,53 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "chown root /"
+      },
+      "expected": []
+    },
+    {
+      "id": "chown-root-literal-root-owner",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -R root /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chown-root"
+        }
+      ]
+    },
+    {
+      "id": "chown-root-long-recursive-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown --recursive root /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chown-root"
+        }
+      ]
+    },
+    {
+      "id": "chown-root-bundle-R-at-end",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -hR root /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chown-root"
+        }
+      ]
+    },
+    {
+      "id": "chown-root-uppercase-H-not-R-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -H root /"
       },
       "expected": []
     },
@@ -805,6 +974,45 @@
       "expected": []
     },
     {
+      "id": "etc-write-tee-operand-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x | tee out.log /etc/sudoers"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
+      "id": "etc-write-tee-dashdash-separator",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -- /etc/shadow"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
+      "id": "etc-write-tee-long-append-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee --append /etc/sudoers"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
       "id": "kill-init-signal",
       "toolName": "Bash",
       "toolInput": {
@@ -993,6 +1201,213 @@
       "expected": [],
       "knownLimit": true,
       "knownLimitReason": "the target must be a literal 1, init, or -1; a shell-expanded pid is not resolved before scanning"
+    },
+    {
+      "id": "kill-init-bare-target-literal",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-KILL-name-literal",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -KILL 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-long-signal-flag-space",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill --signal KILL 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-long-signal-flag-equals",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill --signal=KILL 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-long-signal-flag-equals-neg1",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill --signal=TERM -1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-lowercase-signal-name",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -term 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-killall-lowercase-signal-name",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -term init"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-n-flag-signal",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -n 9 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-s-flag-then-dashdash",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -s KILL -- 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-killall-s-numeric",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -s 9 init"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-list-flag-with-arg-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -l 1"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-n-flag-large-pid-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -n 9 12345"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-s-flag-numeric-large-pid-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -s 1 1234"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-signal-zero-probe-target-neg1",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -0 -1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-kill-init-killall-nonsignal-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -q -TERM init"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "killall's own non-signal flags (-q, -u, -t, -c, ...) are not in the recognized signal grammar and are not skipped; only enumerated signal spellings and -- are"
+    },
+    {
+      "id": "known-limit-kill-init-signal-number-collides-with-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -1 12345"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "a bare numeric signal spelling (-1 for SIGHUP) is syntactically identical to the -1 target; the row cannot distinguish a signal number that precedes a harmless pid from the target itself"
+    },
+    {
+      "id": "known-limit-killall-init-signal-number-collides-with-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -1 node"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "same collision as kill -1 12345, on killall: a bare numeric signal spelling (-1 for SIGHUP) is syntactically identical to the -1 target"
     },
     {
       "id": "fork-bomb",

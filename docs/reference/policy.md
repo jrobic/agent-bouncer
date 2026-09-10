@@ -175,6 +175,19 @@ elsewhere"` without removing the baseline guard.
 - `kill-init` requires a literal signal spelling and target; a signal or PID
   reached through a shell variable or command substitution (`kill -$SIG 1`,
   `kill -9 $PID`) is not resolved before scanning.
+- `kill-init` recognizes only the enumerated signal spellings and `--`; a
+  `killall`-specific flag ahead of the signal (`-q`, `-u`, `-t`, `-c`, …)
+  is not skipped, so `killall -q -TERM init` evades the row — a deliberate
+  scope boundary, not an oversight (the ticket's own decision names "any
+  signal spelling…and a `--` separator", not "any flag").
+- `kill-init` blocks `kill -0 -1`: signal `0` is a pure existence probe (it
+  kills nothing) but the row's numeric signal alternative does not
+  special-case it. Accepted over-blocking, not a gap.
+- `kill-init`'s numeric signal spelling (`-<number>`) is syntactically
+  identical to the `-1` target: `kill -1 12345` and `killall -1 node`
+  (sending SIGHUP to a harmless pid or name) block, not because `-1` names
+  the target here but because the row cannot tell a signal number from the
+  target it precedes. Accepted over-blocking, pre-existing.
 - protected-write: a redirect embedded in a heredoc body is source text, not
   an executable write segment.
 - protected-write: `sed -f` can name a script that writes a protected path,

@@ -995,3 +995,33 @@ describe('command-rules: harness self-configuration', () => {
     expect(checkBash('claude plugin list')).toBeNull();
   });
 });
+
+// Ticket 41 round 1 (Standards F1): `chmod-root`/`chown-root` briefly let a
+// `-R`-bearing token satisfy BOTH the leading flag repetition and the
+// mandatory `-R` group, so an unbounded `(?:-\S+\s+)*` on both sides made
+// the match O(n^2) in the number of flag-shaped tokens. Past ~16000 of
+// them (~48 KB) the regex engine exhausted its backtracking budget and
+// returned "no match" on a string that DOES contain a real
+// `chmod -R 777 /` right after the padding — a non-match reads as allow,
+// so the guard opened in silence on a valid, executable command. Bounding
+// both repetitions to `{0,8}` caps the work at any one starting position
+// to a constant, so a failed match on the padding is instant regardless
+// of its length and the engine reaches the real payload immediately. A
+// committed fixture carrying ~60 KB of padding would be its own
+// maintenance hazard, so this is a behavioral + timing lock instead: a
+// 20000-token adversarial prefix (well past the ~16000-token threshold
+// that broke the unbounded regex) must still resolve, and fast.
+describe('command-rules: flag-repetition rows stay linear under adversarial padding (ticket 41 round 1)', () => {
+  test.each([
+    ['chmod-root', 'chmod ' + '-R '.repeat(20000) + 'z ; chmod -R 777 /'],
+    ['chmod-root', 'chmod ' + '--recursive '.repeat(20000) + 'z ; chmod -R 777 /'],
+    ['chown-root', 'chown ' + '-R '.repeat(20000) + 'z ; chown -R root /'],
+    ['chown-root', 'chown ' + '--recursive '.repeat(20000) + 'z ; chown -R root /'],
+  ])('%s still fires past 20000 hostile flag tokens, in under 100ms', (ruleId, cmd) => {
+    const t0 = performance.now();
+    const deny = checkBash(cmd);
+    const elapsed = performance.now() - t0;
+    expect(deny?.ruleId).toBe(ruleId);
+    expect(elapsed).toBeLessThan(100);
+  });
+});
