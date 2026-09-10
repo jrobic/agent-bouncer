@@ -131,6 +131,61 @@
       ]
     },
     {
+      "id": "device-redirect-tee-append-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a /dev/sda"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "device-redirect-tee"
+        }
+      ]
+    },
+    {
+      "id": "device-redirect-tee-flag-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -i /dev/sda"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "device-redirect-tee"
+        }
+      ]
+    },
+    {
+      "id": "device-redirect-tee-flag-bundle-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -ai /dev/sda"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "device-redirect-tee"
+        }
+      ]
+    },
+    {
+      "id": "device-redirect-tee-non-device-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee /dev/null"
+      },
+      "expected": []
+    },
+    {
+      "id": "tee-flag-before-non-device-path-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo x | tee /tmp/sda"
+      },
+      "expected": []
+    },
+    {
       "id": "chmod-root",
       "toolName": "Bash",
       "toolInput": {
@@ -144,6 +199,69 @@
       ]
     },
     {
+      "id": "chmod-root-flag-bundle-after-R",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -Rf 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-flag-before-R",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -v -R 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-flag-after-R-split",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R -v 777 /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chmod-root"
+        }
+      ]
+    },
+    {
+      "id": "chmod-root-non-root-target-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -R 777 ./dist"
+      },
+      "expected": []
+    },
+    {
+      "id": "chmod-root-non-recursive-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod -v 777 /"
+      },
+      "expected": []
+    },
+    {
+      "id": "chmod-root-no-recursion-flag-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chmod 755 /"
+      },
+      "expected": []
+    },
+    {
       "id": "chown-root",
       "toolName": "Bash",
       "toolInput": {
@@ -155,6 +273,48 @@
           "ruleId": "chown-root"
         }
       ]
+    },
+    {
+      "id": "chown-root-flag-bundle-after-R",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -Rh root /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chown-root"
+        }
+      ]
+    },
+    {
+      "id": "chown-root-flag-after-R-split",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -R -h root /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "chown-root"
+        }
+      ]
+    },
+    {
+      "id": "chown-root-non-root-target-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown -R u:g ./dist"
+      },
+      "expected": []
+    },
+    {
+      "id": "chown-root-no-recursion-flag-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "chown root /"
+      },
+      "expected": []
     },
     {
       "id": "curl-file-upload-short-form",
@@ -590,6 +750,61 @@
       ]
     },
     {
+      "id": "etc-write-tee-append-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a /etc/sudoers"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
+      "id": "etc-write-tee-flag-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -i /etc/sudoers"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
+      "id": "etc-write-tee-flag-bundle-before-target",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -ai /etc/sudoers"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "etc-write-tee"
+        }
+      ]
+    },
+    {
+      "id": "etc-write-tee-non-critical-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee /etc/motd"
+      },
+      "expected": []
+    },
+    {
+      "id": "tee-flag-before-plain-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee -a notes.txt"
+      },
+      "expected": []
+    },
+    {
       "id": "kill-init-signal",
       "toolName": "Bash",
       "toolInput": {
@@ -614,6 +829,170 @@
           "ruleId": "kill-init"
         }
       ]
+    },
+    {
+      "id": "kill-init-numeric-signal-15",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -15 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-named-signal-TERM",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -TERM 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-short-signal-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -s KILL 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-sig-prefixed-name",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -SIGKILL 1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-dashdash-separator-target-neg1",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -- -1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-killall-short-signal-flag",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -s KILL init"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-named-signal-target-neg1",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -TERM -1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-numeric-signal-target-neg1",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -9 -1"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "kill-init"
+        }
+      ]
+    },
+    {
+      "id": "kill-init-large-pid-signal-9-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -9 12345"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-large-pid-signal-15-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -15 1234"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-command-substitution-target-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -TERM $(pgrep x)"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-killall-name-target-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "killall -9 node"
+      },
+      "expected": []
+    },
+    {
+      "id": "kill-init-list-flag-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -l"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-kill-init-signal-variable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -$SIG 1"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the signal must be a literal spelling this regex recognizes; a shell-expanded signal is not resolved before scanning"
+    },
+    {
+      "id": "known-limit-kill-init-target-variable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "kill -9 $PID"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the target must be a literal 1, init, or -1; a shell-expanded pid is not resolved before scanning"
     },
     {
       "id": "fork-bomb",

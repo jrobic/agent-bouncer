@@ -172,6 +172,9 @@ elsewhere"` without removing the baseline guard.
 - `sql-destructive-inline` sees SQL quoted directly after `-c` or `-e`, or
   SQLite's positional statement argument; statements passed with `-f` or stdin
   remain a known limit.
+- `kill-init` requires a literal signal spelling and target; a signal or PID
+  reached through a shell variable or command substitution (`kill -$SIG 1`,
+  `kill -9 $PID`) is not resolved before scanning.
 - protected-write: a redirect embedded in a heredoc body is source text, not
   an executable write segment.
 - protected-write: `sed -f` can name a script that writes a protected path,

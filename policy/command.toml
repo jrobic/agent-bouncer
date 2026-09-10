@@ -32,17 +32,24 @@ reason = "Shell redirection writing to a block device (potential disk corruption
 
 [[rules.command.bash]]
 id = "device-redirect-tee"
-regex = "\\btee\\s+(?:-a\\s+|--append\\s+)?\\/dev\\/(sda|sdb|disk|nvme|hd|md|loop)\\w*"
+regex = "\\btee\\s+(?:-\\S+\\s+)*\\/dev\\/(sda|sdb|disk|nvme|hd|md|loop)\\w*"
 reason = "tee writing to a block device (potential disk corruption)"
 
 [[rules.command.bash]]
 id = "chmod-root"
-regex = "\\bchmod\\s+-R\\s+0?[0-7]{1,4}\\s+\\/(?:\\s|$)"
+# Ticket 41: -R must appear somewhere among the flags (bundled or split,
+# before or after other flags: -Rf, -fR, -v -R, -R -v, --recursive), never
+# via lookaround — recursion stays required, chmod -v 777 / (no -R) stays
+# allow.
+regex = "\\bchmod\\s+(?:-\\S+\\s+)*-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+)*0?[0-7]{1,4}\\s+\\/(?:\\s|$)"
 reason = "Recursive chmod on / — likely to break the system"
 
 [[rules.command.bash]]
 id = "chown-root"
-regex = "\\bchown\\s+-R\\s+\\S+\\s+\\/(?:\\s|$)"
+# Ticket 41: same -R-anywhere-in-flags idiom as chmod-root above (bundled or
+# split, before or after other flags: -Rh, -R -h, --recursive) — recursion
+# stays required, chown root / (no -R) stays allow.
+regex = "\\bchown\\s+(?:-\\S+\\s+)*-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+)*\\S+\\s+\\/(?:\\s|$)"
 reason = "Recursive chown on / — likely to break the system"
 
 # Debatable (ticket 13): fires on ANY curl file upload, including a
@@ -98,13 +105,27 @@ reason = "Writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_
 
 [[rules.command.bash]]
 id = "etc-write-tee"
-regex = "\\btee\\s+(?:-a\\s+|--append\\s+)?\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b"
+regex = "\\btee\\s+(?:-\\S+\\s+)*\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b"
 reason = "tee writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_config)"
 
 [[rules.command.bash]]
 id = "kill-init"
-regex = "\\bkill(?:all)?\\s+(?:-(?:9|KILL)\\s+)?(?:-?-?\\s*)?(?:1|init)\\b"
-reason = "Killing PID 1 / init — system halt"
+# Ticket 41: any signal spelling before the pid, zero or more times, in any
+# order relative to a `--` end-of-options separator — a literal numeric or
+# named signal (`-9`, `-15`, `-TERM`, `-SIGKILL`), `-s <sig>`, `--signal
+# <sig>`/`--signal=<sig>`, or a bare `--`. Each recognized token must be
+# followed by whitespace before the next one is tried, which is what keeps
+# a final `-1` target from being swallowed as one more signal token instead
+# of matching the target alternation (backtracking settles on the split
+# that lets the whole regex match). The target set is explicit: `1`, `init`,
+# and `-1` (every process this agent can signal) — `kill -9 -1` used to
+# block by a regex accident (an unrelated `-?-?` shim happened to eat one
+# leading dash) and `kill -- -1` used to pass; both are deliberate now.
+# Only enumerated signal spellings are skipped: a killall-specific flag
+# ahead of the signal (`-q`, `-u`, `-t`, …) is not, and neither is a
+# shell-expanded signal or target (see the known-limit fixtures).
+regex = "\\bkill(?:all)?\\s+(?:(?:-s\\s+\\S+|--signal(?:=|\\s+)\\S+|-[0-9]+|-[A-Z]+[0-9]*|--)\\s+)*(?:1|init|-1)\\b"
+reason = "Killing PID 1, init, or -1 (every process this agent can signal) — system halt"
 
 [[rules.command.bash]]
 id = "fork-bomb"
