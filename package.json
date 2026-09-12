@@ -1,6 +1,6 @@
 {
   "name": "@jrobic/agent-bouncer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The bouncer for your coding agent's tool calls — a single guard binary with declarative TOML policy",
   "private": true,
   "type": "module",
@@ -14,8 +14,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build --compile ./src/cli.ts --outfile ./dist/bouncer",
-    "lint": "oxlint src tests policy/harness/*.shim.ts",
+    "build": "bun run scripts/build.ts",
+    "lint": "oxlint src tests scripts policy/harness/*.shim.ts",
     "fmt": "dprint fmt",
     "fmt:check": "dprint check",
     "verify": "bun run typecheck && bun run lint && bun run fmt:check && bun run test"

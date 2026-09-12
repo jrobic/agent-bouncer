@@ -146,6 +146,21 @@ describe('runAudit: report mode', () => {
     expect(text).toContain('2x'); // both count toward the SAME cluster, mode or not
   });
 
+  test('a mixed legacy and provenance log preserves report and suggestion output', async () => {
+    const dir = freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git push origin main' }),
+      verdictLine({ target: 'git push origin feature-x', build: '56b1e5a', policy: '0123456789ab' }),
+    ]);
+
+    const report = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(report.text).toContain('git-protected');
+    expect(report.text).toContain('2x');
+
+    const suggestion = await runAudit({ days: 30, suggest: true, diff: false, sessionsOnly: true });
+    expect(suggestion.text).toContain('# [[relax]]');
+  });
+
   test('an observe entry marks its conditional rule as fired (its own section), not dead', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [

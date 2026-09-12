@@ -19,6 +19,8 @@
 
 import { access, constants as fsConstants, mkdir, open, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { BOUNCER_VERSION, type BuildInfo, currentBuild, formatBuild } from '../build-info.ts';
+import { policyDigest } from '../policy/digest.ts';
 import type { EffectiveRule, LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration } from '../policy/schema.ts';
 import { wiringCodecFor } from './codecs/wiring/registry.ts';
@@ -29,14 +31,11 @@ import { hasShim } from './shim.ts';
 export interface DoctorCheck {
   readonly id: string;
   readonly ok: boolean;
-  // Review round 3 R3-1: a THIRD tag, `[warn]` — always paired with
-  // `ok: true` (exit 0: nothing is broken), reserved for a fact that is
-  // unprovable rather than unhealthy (today: a declared harness with no
-  // `wiring` codec, ADR-0006 § 6's "visible rather than silently green").
-  // `[pass]` alone would say the fact was actually verified, which it
-  // wasn't; `[fail]` would say something is broken, which it isn't
-  // either.
-  readonly warn?: true;
+  // A warning always remains `ok: true`: it carries a fact worth showing
+  // without converting a usable setup into a failure. `unprovable` marks
+  // wiring whose state cannot be verified; `build` identifies a source or
+  // dirty executable.
+  readonly warn?: 'unprovable' | 'build';
   readonly message: string;
 }
 
@@ -131,6 +130,21 @@ function layerStateParts(loaded: LoadResult): string[] {
   });
 }
 
+function checkBinary(loaded: LoadResult, build: BuildInfo): DoctorCheck {
+  return {
+    id: 'binary',
+    ok: true,
+    ...(build.sha === 'source' || build.dirty ? { warn: 'build' as const } : {}),
+    message: `${BOUNCER_VERSION} (${formatBuild(build)}), effective policy ${
+      policyDigest(
+        loaded.policy,
+        loaded.activeOverrides,
+        loaded.activeRelaxations,
+      )
+    }`,
+  };
+}
+
 function checkPolicy(loaded: LoadResult): DoctorCheck {
   const tail = `(${loaded.effectiveRules.length} effective rules${layerCountSuffix(loaded)})`;
   const rejectedLayers = loaded.layers.filter((l) => l.rejected !== undefined);
@@ -213,13 +227,14 @@ export async function runDoctorChecks(
   settingsPathOverride: string | undefined,
   loaded: LoadResult,
   harness: HarnessDeclaration,
+  build: BuildInfo = currentBuild(),
 ): Promise<DoctorReport> {
   const protocol = harness.protocol;
   const wiringChecks: DoctorCheck[] = [];
   let settingsCheck: DoctorCheck | undefined;
 
   if (protocol === undefined || protocol.wiring === undefined) {
-    wiringChecks.push({ id: 'wiring', ok: true, warn: true, message: 'not checkable (declared harness)' });
+    wiringChecks.push({ id: 'wiring', ok: true, warn: 'unprovable', message: 'not checkable (declared harness)' });
   } else {
     const codec = wiringCodecFor(protocol.wiring);
     if (codec === undefined) {
@@ -244,6 +259,7 @@ export async function runDoctorChecks(
     ...(settingsCheck !== undefined ? [settingsCheck] : []),
     ...wiringChecks,
     checkPolicy(loaded),
+    checkBinary(loaded, build),
     await checkLogWritability(harness),
   ];
   const overrideLines = overrideLinesOf(loaded);
@@ -258,7 +274,7 @@ export async function runDoctorChecks(
 
 /** The manual `bouncer doctor` form: every check, pass/fail/warn, plus the override count — always printed, healthy or not. */
 export function formatDoctorChecklist(report: DoctorReport): string {
-  const lines = report.checks.map((c) => `[${c.warn === true ? 'warn' : c.ok ? 'pass' : 'fail'}] ${c.id} — ${c.message}`);
+  const lines = report.checks.map((c) => `[${c.warn === undefined ? (c.ok ? 'pass' : 'fail') : 'warn'}] ${c.id} — ${c.message}`);
   lines.push(
     report.overrideCount > 0
       ? `overrides: ${report.overrideCount} active`
@@ -275,15 +291,16 @@ export function formatDoctorChecklist(report: DoctorReport): string {
  * reserved for the one case where every check passes, no check is a
  * `[warn]`, AND no override/relaxation is active. Anything else produces
  * a message: a genuine anomaly screams first (settings/wiring/policy/log
- * FAILURES), then two calm blocks — an override/relaxation count, and
- * (review round 3 R3-1) any `[warn]` check (unprovable, never unhealthy:
- * `ok` stays true, so it never joins the scream) — Story 19's
- * "impossible to overlook, never silent" applies even when nothing is
- * actually broken.
+ * FAILURES), then calm blocks for override/relaxation state, unprovable
+ * wiring, and a source or dirty binary. Each warning remains non-failing;
+ * it never joins the scream. Story 19's "impossible to overlook, never
+ * silent" applies even when nothing is actually broken.
  */
 export function buildSessionStartContext(report: DoctorReport): string | null {
   const failing = report.checks.filter((c) => !c.ok);
-  const warnings = report.checks.filter((c) => c.warn === true);
+  const warnings = report.checks.filter((c) => c.warn !== undefined);
+  const unprovableWarnings = warnings.filter((c) => c.warn === 'unprovable');
+  const buildWarnings = warnings.filter((c) => c.warn === 'build');
   if (failing.length === 0 && report.overrideCount === 0 && warnings.length === 0) return null;
 
   const lines: string[] = [];
@@ -299,11 +316,17 @@ export function buildSessionStartContext(report: DoctorReport): string | null {
     );
     lines.push(...report.overrideLines.map((l) => `  - ${l}`));
   }
-  if (warnings.length > 0) {
+  if (unprovableWarnings.length > 0) {
     lines.push(
-      `${HOOK_NAME} doctor: ${warnings.length} check(s) unprovable, not broken — visible rather than silently green:`,
+      `${HOOK_NAME} doctor: ${unprovableWarnings.length} check(s) unprovable, not broken — visible rather than silently green:`,
     );
-    lines.push(...warnings.map((w) => `  - ${w.id}: ${w.message}`));
+    lines.push(...unprovableWarnings.map((w) => `  - ${w.id}: ${w.message}`));
+  }
+  if (buildWarnings.length > 0) {
+    lines.push(
+      `${HOOK_NAME} doctor: ${buildWarnings.length} build warning(s) — source or dirty build, visible but not broken:`,
+    );
+    lines.push(...buildWarnings.map((w) => `  - ${w.id}: ${w.message}`));
   }
   return lines.join('\n');
 }

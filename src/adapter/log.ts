@@ -10,6 +10,9 @@
 
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { buildIdentity, type BuildInfo, currentBuild } from '../build-info.ts';
+import { BASELINE } from '../policy/baseline.ts';
+import { policyDigest } from '../policy/digest.ts';
 import type { LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration } from '../policy/schema.ts';
 import type { Family, Verdict } from '../types.ts';
@@ -134,7 +137,12 @@ export async function logVerdict(
   harness: HarnessDeclaration,
   loaded?: LoadResult,
   mode?: LogMode,
+  build: BuildInfo = currentBuild(),
 ): Promise<void> {
+  const effectivePolicy = loaded?.policy ?? BASELINE.rules;
+  const activeOverrides = loaded?.activeOverrides ?? [];
+  const activeRelaxations = loaded?.activeRelaxations ?? [];
+
   await appendLogEntry({
     session_id: context.sessionId,
     tool_name: context.toolName,
@@ -143,6 +151,8 @@ export async function logVerdict(
     verdict: verdict.verdict,
     rule_id: verdict.ruleId,
     target: truncateTarget(verdict.target),
+    build: buildIdentity(build),
+    policy: policyDigest(effectivePolicy, activeOverrides, activeRelaxations),
     ...(mode !== undefined ? { mode } : {}),
   }, harness, loaded);
 }

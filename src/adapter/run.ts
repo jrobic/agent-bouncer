@@ -39,6 +39,7 @@
 // calls, so an edited overlay takes effect on the very next tool call, no
 // restart or session reload needed.
 
+import { type BuildInfo, currentBuild } from '../build-info.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration, HarnessProtocol } from '../policy/schema.ts';
@@ -86,6 +87,8 @@ export interface RunOptions {
   readonly shadow?: boolean;
   readonly unrecognizedTokens?: readonly string[];
   readonly harness?: string;
+  // Test seam for replaying the clean compiled-binary SessionStart contract.
+  readonly build?: BuildInfo;
 }
 
 const SILENT: RunResult = { stdout: null };
@@ -124,6 +127,7 @@ async function runPreToolUse(
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
   shadow: boolean,
+  build: BuildInfo,
 ): Promise<RunResult> {
   const toolName = stringField(envelope, protocol.input.tool);
   if (toolName === undefined) return SILENT;
@@ -146,7 +150,7 @@ async function runPreToolUse(
 
   const hit: FamilyVerdict | null = await dispatcher.inspectPreToolUse(call);
   if (hit) {
-    await logVerdict(hit.family, context, hit.verdict, harness, loaded, mode);
+    await logVerdict(hit.family, context, hit.verdict, harness, loaded, mode, build);
     if (shadow) return SILENT;
     const action = degradePreToolUseVerdict(hit.verdict.verdict, protocol.output);
     const rendered = renderAction(protocol, action, {
@@ -161,7 +165,7 @@ async function runPreToolUse(
   // earned an audit-log entry (allow proceeds either way, shadow or not).
   const observe = dispatcher.classifyObserve(call);
   if (observe) {
-    await logVerdict(observe.family, context, observe.verdict, harness, loaded, mode);
+    await logVerdict(observe.family, context, observe.verdict, harness, loaded, mode, build);
   }
   return SILENT;
 }
@@ -173,6 +177,7 @@ async function runUserPromptSubmit(
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
   shadow: boolean,
+  build: BuildInfo,
 ): Promise<RunResult> {
   // `input.prompt` is guaranteed defined here — this function is only ever
   // called when `protocol.events.prompt` is declared, and lint requires
@@ -189,7 +194,7 @@ async function runUserPromptSubmit(
   };
   for (const hit of hits) {
     // oxlint-disable-next-line no-await-in-loop
-    await logVerdict('prompt', context, hit, harness, loaded, mode);
+    await logVerdict('prompt', context, hit, harness, loaded, mode, build);
   }
   if (shadow) return SILENT;
   const rendered = renderAction(protocol, protocol.output.flag, { context: assembleFlagContext(hits) });
@@ -218,10 +223,12 @@ export async function runSessionStart(
     settingsPath: string | undefined,
     loaded: LoadResult,
     harness: HarnessDeclaration,
+    build: BuildInfo,
   ) => Promise<DoctorReport> = runDoctorChecks,
+  build: BuildInfo = currentBuild(),
 ): Promise<RunResult> {
   try {
-    const report = await checkFn(undefined, loaded, harness);
+    const report = await checkFn(undefined, loaded, harness, build);
     const context = buildSessionStartContext(report);
     if (shadow) {
       // Ticket 08 decision 2: the scream/announcement never reaches
@@ -293,12 +300,13 @@ async function dispatchByEvent(
   dispatcher: Dispatcher,
   loaded: LoadResult | undefined,
   shadow: boolean,
+  build: BuildInfo,
 ): Promise<RunResult> {
   if (eventName === protocol.events.pre_tool) {
-    return runPreToolUse(envelope, harness, protocol, dispatcher, loaded, shadow);
+    return runPreToolUse(envelope, harness, protocol, dispatcher, loaded, shadow, build);
   }
   if (protocol.events.prompt !== undefined && eventName === protocol.events.prompt) {
-    return runUserPromptSubmit(envelope, harness, protocol, dispatcher, loaded, shadow);
+    return runUserPromptSubmit(envelope, harness, protocol, dispatcher, loaded, shadow, build);
   }
   return SILENT;
 }
@@ -326,6 +334,7 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
   const unrecognizedTokens = options?.unrecognizedTokens ?? [];
   const harnessId = options?.harness ?? DEFAULT_HARNESS_ID;
   const mode = toLogMode(shadow);
+  const build = options?.build ?? currentBuild();
 
   // Loaded (and, on a broken overlay, silently fell back) before dispatch
   // — a policy-load warning is logged regardless of which event this turns
@@ -371,13 +380,13 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
 
   const eventName = stringField(input, protocol.input.event);
   if (protocol.events.session_start !== undefined && eventName === protocol.events.session_start) {
-    return runSessionStart(harness, protocol, loaded, shadow);
+    return runSessionStart(harness, protocol, loaded, shadow, runDoctorChecks, build);
   }
 
   try {
     return await withDispatcherLikeRun(
       loaded,
-      (dispatcher, effectiveLoaded) => dispatchByEvent(input, eventName, harness, protocol, dispatcher, effectiveLoaded, shadow),
+      (dispatcher, effectiveLoaded) => dispatchByEvent(input, eventName, harness, protocol, dispatcher, effectiveLoaded, shadow, build),
       async (err) => {
         const message = err instanceof Error ? err.message : String(err);
         try {

@@ -29,6 +29,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
 import { renderShim } from '../src/adapter/shim.ts';
+import type { BuildInfo } from '../src/build-info.ts';
 import { CODEX_HEALTHY_HOOKS, codexTrustToml, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 import { tmpDir } from './tmp.ts';
 
@@ -41,6 +42,7 @@ interface RecordedCase {
 
 const FIXTURE_DIR = join(import.meta.dir, '..', 'fixtures', 'protocol');
 const FIXTURE_FILES = readdirSync(FIXTURE_DIR).filter((f) => f.endsWith('.json'));
+const FIXTURE_BUILD: BuildInfo = { sha: 'fixture', dirty: false, date: '2026-01-01T00:00Z' };
 
 // Mirrors scripts/capture-protocol.ts's own settings fixtures exactly —
 // see that script's `settings` field on each `sessionstart-*` case.
@@ -132,7 +134,9 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       return undefined;
     },
     trustTomlFor: (caseId, hooksJsonPath) => {
-      if (caseId === 'sessionstart-healthy-silent' || caseId === 'sessionstart-missing-hook-scream') return codexTrustToml(hooksJsonPath);
+      if (caseId === 'sessionstart-healthy-silent' || caseId === 'sessionstart-missing-hook-scream') {
+        return codexTrustToml(hooksJsonPath);
+      }
       return undefined;
     },
     requiredCaseIds: [
@@ -167,13 +171,14 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
     // shim-file wiring has no `{hooks: ...}` shape at all — `installArtifact`
     // below fully replaces this pair for pi-agent.
     settingsFor: () => undefined,
-    // `wiring:binary` is a REAL filesystem executability check (never
-    // hook-file's mere string matching) — `process.execPath` (this TEST
-    // process's own Bun binary) is genuinely executable wherever this
-    // ever runs, mirroring scripts/capture-protocol.ts's own choice for
-    // the SAME reason. The healthy case's captured stdout is `null`
-    // regardless of which real path was baked, so this is never itself
-    // part of the byte contract being replayed.
+    // `wiring:binary` validates an actual executable, never a hook-file
+    // string. A fake installed path would make the healthy case fail a
+    // check unrelated to SessionStart rendering, so `process.execPath`
+    // provides the real executable path. The healthy stdout is `null`
+    // regardless of which executable path was baked into the shim; that
+    // path is therefore outside the fixture byte contract.
+    // Keep this executable-path rationale synchronized with
+    // scripts/capture-protocol.ts's matching shim capture branch.
     installArtifact: (caseId, configDir) => {
       if (caseId !== 'sessionstart-healthy-silent') return;
       mkdirSync(join(configDir, 'extensions'), { recursive: true });
@@ -298,6 +303,7 @@ for (const file of FIXTURE_FILES) {
           const result = await run(recorded.stdin, {
             shadow,
             unrecognizedTokens,
+            build: FIXTURE_BUILD,
             ...(config.runHarness !== undefined ? { harness: config.runHarness } : {}),
           });
           expect(normalizeReasonPrefix(result.stdout)).toBe(normalizeReasonPrefix(recorded.expected.stdout));
@@ -322,5 +328,13 @@ for (const file of FIXTURE_FILES) {
     expect(ids.size).toBe(cases.length);
     const missing = config.requiredCaseIds.filter((id) => !ids.has(id));
     expect(missing).toEqual([]);
+  });
+
+  test(`${file}: fixture stdout excludes runtime provenance`, () => {
+    for (const recorded of cases) {
+      if (recorded.expected.stdout === null) continue;
+      expect(recorded.expected.stdout).not.toContain('effective policy');
+      expect(recorded.expected.stdout).not.toMatch(/[0-9a-f]{12}/);
+    }
   });
 }

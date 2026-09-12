@@ -6,7 +6,7 @@
 // block each — split from the single policy/harness.toml, ticket 15a, so a
 // harness declaration reviews and diffs like any other assistant-specific
 // file) — merged at build time into the same shape a single file used to
-// produce. `bun build --compile` inlines every parsed TOML file into the
+// produce. `bun run scripts/build.ts` inlines every parsed TOML file into the
 // compiled binary — there is no on-disk file to find at runtime for any of
 // them. This is deliberately separate from the overlay, which is read from
 // disk at runtime (see load.ts) — the baseline can never be missing or

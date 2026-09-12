@@ -59,6 +59,33 @@ describe('parseLogEntries', () => {
     });
   });
 
+  test('parses a mixed legacy and provenance log without changing audit entries', () => {
+    const lines = [
+      JSON.stringify({
+        timestamp: '2026-08-10T12:00:00.000Z',
+        session_id: 'legacy',
+        tool_name: 'Bash',
+        family: 'command',
+        verdict: 'confirm',
+        rule_id: 'git-protected',
+        target: 'git push origin main',
+      }),
+      JSON.stringify({
+        timestamp: '2026-08-10T12:01:00.000Z',
+        session_id: 'provenance',
+        tool_name: 'Bash',
+        family: 'command',
+        verdict: 'confirm',
+        rule_id: 'git-protected',
+        target: 'git push origin feature-x',
+        build: '56b1e5a',
+        policy: '0123456789ab',
+      }),
+    ].join('\n');
+
+    expect(parseLogEntries(lines).map((auditEntry) => auditEntry.sessionId)).toEqual(['legacy', 'provenance']);
+  });
+
   test('skips audit-header and policy-warning lines (no rule_id/verdict/family)', () => {
     const lines = [
       JSON.stringify({ timestamp: 't', kind: 'audit-header', overrides: [], relaxations: [] }),

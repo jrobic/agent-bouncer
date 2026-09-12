@@ -8,15 +8,17 @@
 // for PreToolUse/UserPromptSubmit and the overlay.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run, runSessionStart } from '../src/adapter/run.ts';
+import type { BuildInfo } from '../src/build-info.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import { BOUNCER_COMMAND, CANARY_COMMAND, HEALTHY_HOOKS } from './doctor-fixtures.ts';
 import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
+const CLEAN_BUILD: BuildInfo = { sha: 'fixture', dirty: false, date: '2026-01-01T00:00Z' };
 
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
@@ -35,13 +37,17 @@ async function accountWithSettings(hooks: unknown): Promise<string> {
 const SESSION_START_ENVELOPE = JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'sess-1' });
 
 describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
-  test('a fully wired, healthy settings.json produces total silence', async () => {
+  test('a fully wired source run announces the binary warning', async () => {
     await accountWithSettings(HEALTHY_HOOKS);
     const { stdout } = await run(SESSION_START_ENVELOPE);
-    expect(stdout).toBeNull();
+    expect(stdout).not.toBeNull();
+    const context = JSON.parse(stdout!).hookSpecificOutput.additionalContext;
+    expect(context).toContain('binary');
+    expect(context).toContain('source');
+    expect(context).not.toContain('WIRING/POLICY PROBLEM');
   });
 
-  test('a PreToolUse matcher of "*" (CC\'s "all tools" wildcard) is silent too — never a cry-wolf scream', async () => {
+  test('a fully wired clean build stays silent through the real run pipeline', async () => {
     await accountWithSettings({
       ...HEALTHY_HOOKS,
       PreToolUse: [
@@ -49,7 +55,7 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
         { matcher: '*', hooks: [{ type: 'command', command: CANARY_COMMAND }] },
       ],
     });
-    const { stdout } = await run(SESSION_START_ENVELOPE);
+    const { stdout } = await run(SESSION_START_ENVELOPE, { build: CLEAN_BUILD });
     expect(stdout).toBeNull();
   });
 
@@ -140,13 +146,20 @@ describe('run: SessionStart in shadow mode (ticket 08) — never screams, logs w
     expect(shadowEntry.message).toContain('unguarded');
   });
 
-  test('a fully healthy wiring stays silent in shadow too, and logs nothing (context is null — nothing to log)', async () => {
+  test('a fully wired source build stays silent in shadow and logs the binary warning', async () => {
     const accountDir = await accountWithSettings(HEALTHY_HOOKS);
     const { stdout } = await run(SESSION_START_ENVELOPE, { shadow: true });
     expect(stdout).toBeNull();
 
-    const logExists = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8').catch(() => null);
-    expect(logExists).toBeNull(); // nothing was ever worth logging, so the file was never created
+    const logContent = await readFile(join(accountDir, 'logs', 'hooks', 'bouncer.log'), 'utf8');
+    expect(logContent).toContain('source');
+  });
+
+  test('a fully wired clean build remains silent in shadow and creates no log', async () => {
+    const accountDir = await accountWithSettings(HEALTHY_HOOKS);
+    const { stdout } = await run(SESSION_START_ENVELOPE, { shadow: true, build: CLEAN_BUILD });
+    expect(stdout).toBeNull();
+    expect(await stat(join(accountDir, 'logs', 'hooks', 'bouncer.log')).catch(() => null)).toBeNull();
   });
 
   test('WITHOUT shadow, the same broken wiring DOES scream on stdout — confirms shadow, not something else, is what changed', async () => {

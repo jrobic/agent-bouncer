@@ -12,6 +12,7 @@
 
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunOptions, type RunResult } from './adapter/run.ts';
+import { formatVersion, versionInfo } from './build-info.ts';
 import {
   extractHarnessFlag,
   parseAuditArgs,
@@ -53,6 +54,16 @@ function usageError(command: string | undefined, expected: string): never {
 
 async function main(): Promise<void> {
   const [command, ...rest] = Bun.argv.slice(2);
+
+  if (command === '--version' || command === '-V') {
+    if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--json')) {
+      console.error(`${HOOK_NAME}: --version accepts only --json`);
+      process.exit(1);
+    }
+    const info = versionInfo();
+    console.log(rest[0] === '--json' ? JSON.stringify(info) : formatVersion(info));
+    process.exit(0);
+  }
 
   if (command === 'run') {
     const harnessFlag = extractHarnessFlag(rest);
@@ -183,7 +194,7 @@ async function main(): Promise<void> {
     process.exit(ok ? 0 : 1);
   }
 
-  usageError(command, 'run | ping | check | rules | harness | audit | doctor');
+  usageError(command, '--version | -V | run | ping | check | rules | harness | audit | doctor');
 }
 
 if (import.meta.main) {

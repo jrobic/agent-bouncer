@@ -1,7 +1,8 @@
 # CLI reference
 
-`bouncer <subcommand> [args]`. No subcommand, or an unrecognized one,
-prints a usage error to stderr and exits 1.
+`bouncer [--version | -V]` or `bouncer <subcommand> [args]`. No subcommand, option,
+or subcommand variant outside the documented grammar prints a usage error to stderr
+and exits 1.
 
 Two output styles, by design: `rules list` (and every warning/summary
 line other subcommands print) is a stable, prefix-based, greppable
@@ -9,6 +10,68 @@ contract — `^summary`, `^rule`, `^override`, `^overlay-relax`,
 `^harness`, `^warning`. `audit`'s report and `doctor`'s checklist are
 free-form prose for a human to read; their exact wording is not a
 contract and may change between versions.
+
+## `--version` / `-V`
+
+Prints the binary's name, package version, build identity, and the embedded baseline
+policy digest. It does not load account overlays, so a broken overlay cannot delay or
+change this result.
+
+```sh
+bouncer --version [--json]
+bouncer -V [--json]
+```
+
+The human-readable form is one line:
+
+```text
+bouncer 0.1.0 (56b1e5a, built 2026-09-12T14:02Z) baseline 0123456789ab
+```
+
+An executable built from a dirty tree appends `-dirty` to its short SHA. A source
+invocation (`bun run src/cli.ts`) never invents build metadata; it prints
+`(source, uncommitted build info)` instead.
+
+Two dirty builds produced in the same UTC minute share the same identity fields;
+use `dist/bouncer.sha256` to distinguish their executable bytes.
+
+`--json` emits this JSON schema:
+
+```json
+{
+  "type": "object",
+  "required": ["name", "version", "build", "policy"],
+  "properties": {
+    "name": { "const": "bouncer" },
+    "version": { "type": "string" },
+    "build": {
+      "type": "object",
+      "required": ["sha", "dirty", "date"],
+      "properties": {
+        "sha": { "type": "string" },
+        "dirty": { "type": ["boolean", "null"] },
+        "date": { "type": ["string", "null"] }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "required": ["baseline"],
+      "properties": { "baseline": { "type": "string", "pattern": "^[0-9a-f]{12}$" } }
+    }
+  }
+}
+```
+
+Compiled binaries report a short SHA, boolean `dirty`, and UTC `date`. Source mode
+reports `"source"`, `null`, and `null` for those fields. `policy.baseline` is the
+first 12 hexadecimal characters of the SHA-256 digest of the embedded baseline.
+
+The digest canonicalizes object keys while preserving table order. It hashes rule
+`id`, `regex`, `flags`, `except`, `verdict`, `special`, and family; the
+`rm_rf`/privilege command lists; every safe-git list and conditional form; MCP read
+prefixes and allowed tools; secret path and bash rows; protected-write,
+write-secret, and prompt rows; harness declarations; and active overrides and
+relaxations. It excludes `reason`, comments, and overlay provenance.
 
 ## `run`
 
@@ -386,12 +449,11 @@ bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
 
 **Output:** without `--print-canary`, one `[pass]`/`[fail]`/`[warn]` line
 per check (`settings`, `wiring:PreToolUse`, `wiring:canary`,
-`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `log`), then
+`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `binary`, `log`), then
 an `overrides: N active` line and, when `N > 0`, one indented line per
-active override/relaxation, then one `harness <id> ...` line (ADR-0006
-§ 5) per harness the account's overlay declared or extended — never the
-plain baseline six, which need no announcement. Always printed in full,
-healthy or not.
+active override/relaxation, then one `harness <id> ...` line (ADR-0006 § 5) per
+harness the account's overlay declared or extended — never the plain baseline six,
+which need no announcement. Always printed in full, healthy or not.
 
 ```
 [pass] settings — settings.json parsed (/path/to/settings.json)
@@ -400,6 +462,7 @@ healthy or not.
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
 [pass] policy — overlay active (54 effective rules; common: 4 files, profile: 0 files)
+[pass] binary — 0.1.0 (56b1e5a, built 2026-09-12T14:02Z), effective policy 0123456789ab
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
 ```
@@ -473,6 +536,9 @@ to overrides (never the scream, since nothing is actually broken):
 bouncer doctor: 1 check(s) unprovable, not broken — visible rather than silently green:
   - wiring: not checkable (declared harness)
 ```
+
+Source and dirty binaries also produce a distinct non-failing build warning at
+`SessionStart`; this is not a wiring failure.
 
 **Overlay-declared/extended harnesses (ADR-0006 § 5):**
 
@@ -710,4 +776,4 @@ bouncer: harness "codex" has no printable shim
 **Exit code:** 0 when a shim was printed; 1 for a harness with none.
 
 ---
-Source: src/cli.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/harness.ts
+Source: src/cli.ts, src/build-info.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/digest.ts, src/policy/harness.ts

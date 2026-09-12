@@ -19,6 +19,10 @@
 // per-harness default executable; unset, claude-code defaults to the
 // installed binary (`~/.local/bin/bouncer`, matching the original
 // recipe) and every other harness defaults to the source CLI.
+
+// The healthy SessionStart case must be captured from a clean executable. For a
+// harness whose default command is source mode, set `BOUNCER_BIN` to the clean
+// executable that is intended to produce the committed fixture.
 //
 // Kept in the repo (not thrown away) as the reproducible recipe for a
 // future re-capture against a newer binary — see the 15a/15b report for
@@ -472,6 +476,8 @@ const CASES_BY_HARNESS: Readonly<Record<string, () => Case[]>> = {
 };
 const casesFn = CASES_BY_HARNESS[HARNESS_ID];
 if (casesFn === undefined) throw new Error(`capture-protocol.ts: no case set for harness ${JSON.stringify(HARNESS_ID)}`);
+// Preserve TypeScript's narrowing across main(), where it cannot infer the prior guard.
+const captureCases = casesFn;
 
 interface Recorded {
   readonly id: string;
@@ -579,7 +585,7 @@ function main(): void {
     return lines.join('\n');
   }
 
-  for (const testCase of casesFn()) {
+  for (const testCase of captureCases()) {
     const caseDir = join(scratchRoot, testCase.id);
     const configDir = join(caseDir, configSubdirFor());
     mkdirSync(configDir, { recursive: true });

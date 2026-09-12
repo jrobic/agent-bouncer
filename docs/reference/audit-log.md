@@ -25,7 +25,7 @@ never reaches the model and never appears on stdout (see
 produces no line at all.
 
 ```json
-{"timestamp":"2026-08-17T08:56:56.332Z","harness":"claude-code","session_id":null,"tool_name":"Bash","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /"}
+{"timestamp":"2026-08-17T08:56:56.332Z","harness":"claude-code","session_id":null,"tool_name":"Bash","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","build":"56b1e5a","policy":"0123456789ab"}
 ```
 
 A harness whose `[harness.protocol.input]` declares an optional
@@ -34,7 +34,7 @@ is the only one today) adds a `permission` field carrying that value
 verbatim, whenever the envelope actually sent one:
 
 ```json
-{"timestamp":"2026-09-08T20:00:00.000Z","harness":"codex","session_id":"01a...","tool_name":"Bash","permission":"bypassPermissions","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /"}
+{"timestamp":"2026-09-08T20:00:00.000Z","harness":"codex","session_id":"01a...","tool_name":"Bash","permission":"bypassPermissions","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","build":"56b1e5a","policy":"0123456789ab"}
 ```
 
 | Field | Type | Notes |
@@ -48,6 +48,11 @@ verbatim, whenever the envelope actually sent one:
 | `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"`. |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
 | `target` | string | The command/path/URL/prompt text the rule matched against, truncated to 200 characters (`...` appended when cut). |
+| `build` | string | `"source"` for source execution; otherwise the short SHA with `-dirty` when the build tree was dirty. |
+| `policy` | string | First 12 hexadecimal characters of the SHA-256 digest of the effective policy that produced this verdict. |
+
+Older verdict entries have neither `build` nor `policy`. `audit`, `audit --diff`,
+and `audit --suggest` ignore both fields, so mixed logs remain readable.
 
 ## Audit-header entry
 
@@ -124,4 +129,4 @@ resolves a DIFFERENT harness's own env names instead (`docs/reference/cli.md`);
 two harnesses never share a log file, even on the same account.
 
 ---
-Source: src/adapter/log.ts, src/adapter/log-path.ts, src/policy/load.ts, src/policy/schema.ts
+Source: src/adapter/log.ts, src/adapter/log-path.ts, src/build-info.ts, src/policy/digest.ts, src/policy/load.ts, src/policy/schema.ts

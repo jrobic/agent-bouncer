@@ -8,6 +8,7 @@ import { appendFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logVerdict, MAX_LOG_SIZE } from '../src/adapter/log.ts';
 import { run } from '../src/adapter/run.ts';
+import type { BuildInfo } from '../src/build-info.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { Verdict } from '../src/types.ts';
 import { tmpDir } from './tmp.ts';
@@ -30,9 +31,10 @@ const BLOCK: Verdict = {
   reason: 'rm -rf targeting a dangerous path: /',
   target: 'rm -rf /',
 };
+const DIRTY_BUILD: BuildInfo = { sha: 'fixture', dirty: true, date: '2026-01-01T00:00Z' };
 
 describe('logVerdict: JSONL entry shape', () => {
-  test('writes a JSONL line with family, verdict, rule id, and truncated target', async () => {
+  test('writes family, verdict, rule, target, build, and policy provenance', async () => {
     const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
@@ -47,6 +49,18 @@ describe('logVerdict: JSONL entry shape', () => {
     expect(entry.tool_name).toBe('Bash');
     expect(entry.harness).toBe('claude-code');
     expect(typeof entry.timestamp).toBe('string');
+    expect(entry.build).toBe('source');
+    expect(entry.policy).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  test('writes the dirty build identity rather than the ambiguous bare SHA', async () => {
+    const accountDir = tmpDir('bouncer-log-test-');
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+
+    await logVerdict('command', { toolName: 'Bash', sessionId: 'sess-1' }, BLOCK, CLAUDE_CODE_HARNESS, undefined, undefined, DIRTY_BUILD);
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect(entry.build).toBe('fixture-dirty');
   });
 
   test('the log file is created with restrictive mode (0600)', async () => {
@@ -155,7 +169,7 @@ describe('run(): conditional-rule allows are logged with their rule id (AC4)', (
     expect(logged).toBeNull();
   });
 
-  test('a deny verdict is logged exactly like today (block, with rule id)', async () => {
+  test('a deny verdict carries its dirty build identity through run()', async () => {
     const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 
@@ -164,10 +178,11 @@ describe('run(): conditional-rule allows are logged with their rule id (AC4)', (
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /' },
     });
-    await run(envelope);
+    await run(envelope, { build: DIRTY_BUILD });
 
     const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
     expect(entry.verdict).toBe('block');
     expect(entry.rule_id).toBe('rm-rf-dangerous');
+    expect(entry.build).toBe('fixture-dirty');
   });
 });

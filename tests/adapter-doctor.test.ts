@@ -10,6 +10,7 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
+import { BOUNCER_VERSION, type BuildInfo } from '../src/build-info.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
@@ -24,6 +25,8 @@ import {
 import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
+const CLEAN_BUILD: BuildInfo = { sha: 'fixture', dirty: false, date: '2026-01-01T00:00Z' };
+const DIRTY_BUILD: BuildInfo = { sha: 'fixture', dirty: true, date: '2026-01-01T00:00Z' };
 
 // Review round 3 R3-1: a declared harness with no `wiring` codec — the
 // `[warn]` case ("not checkable", never `[pass]`, never `[fail]`, `ok`
@@ -589,6 +592,7 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
     expect(healthy).toContain('[pass] settings');
     expect(healthy).toContain('[pass] policy');
     expect(healthy).toContain('[pass] log');
+    expect(healthy).toContain(`[warn] binary — ${BOUNCER_VERSION} (source, uncommitted build info), effective policy `);
     expect(healthy.toLowerCase()).toContain('overrides: none active');
 
     const withOverrides = formatDoctorChecklist(await runDoctorChecks(settingsPath, loadResultWithOverrides(), CLAUDE_CODE_HARNESS));
@@ -613,12 +617,27 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
 });
 
 describe('buildSessionStartContext: silent when healthy, screams on anomaly, announces on override', () => {
-  test('healthy setup + zero overrides is fully silent (null)', async () => {
+  test('a source build warns even when every operational check passes', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
+    expect(report.checks.find((check) => check.id === 'binary')).toMatchObject({ ok: true, warn: 'build' });
+    expect(buildSessionStartContext(report)).toContain('source');
+  });
+
+  test('a fully wired clean build is silent through real doctor checks', async () => {
+    const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS, CLEAN_BUILD);
+    expect(report.checks.find((check) => check.id === 'binary')).toMatchObject({ ok: true });
+    expect(report.checks.find((check) => check.id === 'binary')?.warn).toBeUndefined();
     expect(buildSessionStartContext(report)).toBeNull();
   });
 
+  test('a fully wired dirty build warns and announces its dirty identity', async () => {
+    const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS, DIRTY_BUILD);
+    expect(report.checks.find((check) => check.id === 'binary')).toMatchObject({ ok: true, warn: 'build' });
+    expect(buildSessionStartContext(report)).toContain('fixture-dirty');
+  });
   test('a wiring anomaly produces non-null context naming the problem', async () => {
     const { SessionStart: _omit, ...rest } = HEALTHY_HOOKS;
     const settingsPath = await scratchSettingsPath(rest);

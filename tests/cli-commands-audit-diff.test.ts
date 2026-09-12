@@ -112,6 +112,24 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     expect(sectionOf(text, 'matched, but verdicts differ')).toContain('none');
   });
 
+  test('a mixed legacy and provenance shadow log still matches the TS audit trail', async () => {
+    const dir = freshAccountDir();
+    const timestamp = new Date().toISOString();
+    await writeBouncerLog(dir, [
+      shadowVerdict({ timestamp, target: 'rm -rf /' }),
+      shadowVerdict({ timestamp, target: 'sudo apt update', rule_id: 'sudo', build: '56b1e5a', policy: '0123456789ab' }),
+    ]);
+    await writeTsLog(dir, 'command-guard.log', [
+      tsDeny({ timestamp, target: 'rm -rf /' }),
+      tsDeny({ timestamp, target: 'sudo apt update', rule_id: 'sudo' }),
+    ]);
+
+    const { text } = await runAudit({ days: 30, suggest: false, diff: true });
+    expect(sectionOf(text, 'TS denied/asked, bouncer would allow')).toContain('none');
+    expect(sectionOf(text, 'bouncer would deny/ask, TS allowed')).toContain('none');
+    expect(sectionOf(text, 'matched, but verdicts differ')).toContain('none');
+  });
+
   test('a TS deny with no bouncer counterpart reports "bouncer would allow", naming the TS rule id', async () => {
     const dir = freshAccountDir();
     await writeTsLog(dir, 'command-guard.log', [tsDeny({ target: 'mkfs /dev/sda1', rule_id: 'mkfs' })]);
