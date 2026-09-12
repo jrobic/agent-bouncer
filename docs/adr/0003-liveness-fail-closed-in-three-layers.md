@@ -124,7 +124,7 @@ workstation's shell config, not in this repository.
 
 Three layers, each covering what the one above cannot:
 
-1. **Canary (this repository, ticket 25, commit `a8ab900`)** — covers the
+1. **Canary (this repository, ticket 25, commit `903b052`)** — covers the
    session in progress against a binary that is missing, not executable,
    corrupted, replaced mid-session by a rebuild, or a Bun runtime that
    fails to start. Canonical entry, printed by `bouncer doctor
@@ -207,7 +207,7 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
       present/absent/other path/no deny/shadow; `pointsAtBouncer` unchanged.
 - [x] `docs/reference/cli.md` (`ping`, `--print-canary`, the check),
       `docs/how-to/wire-into-claude-code.md` step 4, seven `[pass]` lines.
-- [x] Shipped in the grouped reinstall of 2026-09-04 (`a8ab900`).
+- [x] Shipped in the grouped reinstall of 2026-09-04 (`903b052`).
 
 ### Phase 2 — workstation (dotfiles lead, gated there)
 - [ ] Canary entry pasted into both profiles' `settings.json`; `doctor` ×2

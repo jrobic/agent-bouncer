@@ -115,7 +115,7 @@ every fixture, including the three false positives above as allows.
 ## Decision
 
 **Option 2.** The rows, as shipped in `policy/secret.toml` (commit
-`bd1461f`, ticket 24):
+`7b86e18`, ticket 24):
 
 - `sops-decrypt` (bash): the explicit forms `-d`, `--decrypt`, `decrypt`,
   `exec-env`, `exec-file`, `edit` anywhere after a `sops` word, plus the
@@ -180,8 +180,8 @@ doctrine, the override states the exception and its reason.
 - [x] Ticket 24 — four rows, fixtures both directions, digest lock, TOML
       comments (doctrine, known limits, `debatable`), `docs/reference/policy.md`
       (`rules.secret.bash` row, known limits), ticket-13 triage table
-      (universal ×3, debatable ×1). Commit `bd1461f`.
-- [x] Shipped in the grouped reinstall of 2026-09-04 (`a8ab900`).
+      (universal ×3, debatable ×1). Commit `7b86e18`.
+- [x] Shipped in the grouped reinstall of 2026-09-04 (`903b052`).
 
 ## Success metrics
 

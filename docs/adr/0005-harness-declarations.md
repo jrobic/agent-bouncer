@@ -12,7 +12,7 @@ ADR-0004 gave `bouncer` a `protected_write` table whose rows name the files a
 harness loads at every session start: `settings(.local).json`, `hooks/`,
 `plugins/`, `CLAUDE.md`. Every row is a hand-written regex on a `.claude`
 path. Three gaps follow from that shape, all measured on the installed binary
-`df9af8d`, both profiles:
+`d5e2e54`, both profiles:
 
 1. **The directory itself has no row.** `rm -rf ~/.claude`, `rm -rf
    ~/.claude/*`, `mv ~/.claude ~/.claude.bak`, `cp -r ./cfg ~/.claude`,
@@ -185,4 +185,4 @@ facts.
 |---|---|
 | 2026-09-05 | Proposed after the design session (two rounds, seven decisions); accepted the same day. |
 | 2026-09-05 | Built on `feat/37-harness-declarations`; gate commit pending human approval. |
-| 2026-09-07 | Added the optional `witness` field, lint-checked against the derived directory row with a verified fallback; fragment-level expansion eligibility; brace cap 64; provenance per contributing source. Built and merged as `9b146ad` (ticket 37), installed the same day. |
+| 2026-09-07 | Added the optional `witness` field, lint-checked against the derived directory row with a verified fallback; fragment-level expansion eligibility; brace cap 64; provenance per contributing source. Built and merged as `02673f5` (ticket 37), installed the same day. |

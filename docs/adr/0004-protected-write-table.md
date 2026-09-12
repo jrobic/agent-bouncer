@@ -23,7 +23,7 @@ one — `bouncer` is wired in it, `doctor` reads it, the agent reads it to
 answer questions about hooks — and a write to it is exactly the act that
 disarms every other rule. Because the only table blocks both directions,
 none of these files can be in it, so today none of them is guarded.
-Measured on the installed binary (`a8ab900`, then `e8f25a3`, both
+Measured on the installed binary (`903b052`, then `3c80f2b`, both
 profiles): `echo x > ~/.claude/settings.json`, `Write(~/.claude.json)`,
 `Edit(~/.claude/settings.json)`, `yq -i '.a=1' ~/.claude/settings.json`,
 `cat > ~/.zshrc`, `claude mcp add x -- npx y` are all **allow**. The
