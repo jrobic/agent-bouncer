@@ -157,8 +157,8 @@ doctrine, the override states the exception and its reason.
 
 - Literal matching does not see `sops` hidden behind a package script
   (`pnpm start:prod` wrapping `sops exec-env`) or run by direnv from an
-  `.envrc`. Workstation convention, not a rule: decrypting scripts stay
-  human-run, never repository scripts the agent can invoke.
+  `.envrc`. Operating convention, not a rule: decrypting scripts stay
+  operator-run, never repository scripts the agent can invoke.
 - `sops --config cfg.yaml prod.enc.yaml` (a flag plus a file) falls outside
   "exactly one non-flag token" and is allowed — recorded as a `knownLimit`
   fixture.
@@ -198,8 +198,6 @@ doctrine, the override states the exception and its reason.
 
 ## References
 
-- `.scratch/bouncer/issues/24-sops-age-decrypt-human-only.md` (ticket,
-  measurements), `.scratch/bouncer/reports/24-report.md` (review rounds).
 - `policy/secret.toml` (rows and comments), `fixtures/secret.json`
   (`sops-*`, `age-*`, `aws-creds-*` cases, `knownLimit` on `--config`).
 - `docs/reference/policy.md` § The five regex tables, § Known limits,

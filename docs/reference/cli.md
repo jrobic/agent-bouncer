@@ -22,7 +22,7 @@ bouncer --version [--json]
 bouncer -V [--json]
 ```
 
-The human-readable form is one line:
+The readable form is one line:
 
 ```text
 bouncer 0.1.0 (56b1e5a, built 2026-09-12T14:02Z) baseline 0123456789ab
@@ -71,7 +71,7 @@ The digest canonicalizes object keys while preserving table order. It hashes rul
 `rm_rf`/privilege command lists; every safe-git list and conditional form; MCP read
 prefixes and allowed tools; secret path and bash rows; protected-write,
 write-secret, and prompt rows; harness declarations; and active overrides and
-relaxations. It excludes `reason`, comments, and overlay provenance.
+relaxations. It excludes `reason`, `ask_probe`, comments, and overlay provenance.
 
 ## `run`
 
@@ -85,6 +85,9 @@ the target harness's own declaration (`policy/harness/<id>.toml`'s
 `[harness.protocol]`, ADR-0006) — this page describes Claude Code's
 (the default, `claude-code`), which reproduces the pre-ADR-0006 binary
 byte for byte.
+
+`run` reads stdin and local policy files, writes guarded verdicts to the local
+JSONL audit log, and makes no network request in the decision path.
 
 ```sh
 bouncer run [--harness <id>] < envelope.json
@@ -621,7 +624,7 @@ bouncer audit --diff [--days <n>] [--sessions-only] [--ts-logs <dir>] [--harness
   entries excluded · TS: N' entries, M' CLI entries excluded`. Omit the flag
   to retain direct CLI checks and `run < file` probes in the complete audit.
 - `--suggest` — print candidate `[[relax]]`/`[[override]]` TOML
-  snippets instead of the human report. Mutually exclusive with `--diff`.
+  snippets instead of the prose report. Mutually exclusive with `--diff`.
 - `--diff` — compare bouncer's shadow-mode log entries (`mode:"shadow"`
   only — a non-shadow entry is never part of this comparison) against
   the TS generation's four independent guard logs
@@ -683,7 +686,7 @@ constant referencing the ticket — see `src/adapter/audit-diff.ts`'s
 `--ff-only`, or a bouncer rule firing on a NON-read access to a
 `guard-*.log` path, are real, UNTAGGED divergences, not absorbed into a
 same-named family by a loose match) — informational only, it never
-filters a divergence OUT of the report; the human triage step this
+filters a divergence OUT of the report; the reviewer triage step this
 exists to support still sees everything, tagged or not. Correlation
 being a heuristic, and the settings.json permissions blind spot, are
 both stated in the report itself, not just in this doc.
@@ -708,10 +711,10 @@ bouncer harness list
 **Output:**
 
 ```
-harness claude-code baseline transport=stdin-json confirm=ask shim=no ask_probe="2026-08-16, workstation THREAT_MODEL §1: under --dangerously-skip-permissions an unanswerable ask is enforced as deny"
+harness claude-code baseline transport=stdin-json confirm=ask shim=no ask_probe="2026-08-16, Claude Code (version unrecorded): an unanswerable ask under --dangerously-skip-permissions is enforced as deny"
 harness codex baseline transport=stdin-json confirm=deny shim=no
 harness opencode baseline transport=none confirm=none shim=no
-harness pi-agent baseline transport=stdin-json confirm=ask shim=yes ask_probe="2026-09-08, pi 0.84.1 (session 01a082be-…, cmux pane) and omp 18.1.10 (session 01a082dd-…, a separate fresh pane) — both real ctx.ui.confirm dialogs, decline blocks/accept runs on both; see the 15c report's probe table and 'Probe 2, in detail' section"
+harness pi-agent baseline transport=stdin-json confirm=ask shim=yes ask_probe="2026-09-08, pi 0.84.1 and omp 18.1.10: real ctx.ui.confirm dialogs; decline blocks and accept runs on both"
 harness gemini-cli baseline transport=none confirm=none shim=no
 harness cursor baseline transport=none confirm=none shim=no
 harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny shim=no
@@ -724,12 +727,10 @@ for it (see `run`'s exit-2 contract above). `codex`'s own `confirm=deny`
 (never `ask_probe=`, since `ask_probe` is only mandatory when `confirm =
 "ask"`) is a measured, baseline fact (ADR-0006 § 4 rule 6, ticket 15b) —
 no overlay may relax it back to `ask`; pi-agent's own `confirm=ask` is a
-DIFFERENT kind of fact — a live probe of `ctx.ui.confirm` under both
-`pi` and `omp` (ticket 15c), confirmed 2026-09-08 on both binaries (see
-`ask_probe` above and `.scratch/bouncer/reports/15c-report.md`'s probe
-table), not a permanent Codex-shaped baseline. `shim=yes` (ADR-0006 § 7,
-ticket 15c): this harness is IN-PROCESS — `harness shim <id>` below
-prints a real embedded extension for it; `shim=no` covers both a
+different measured fact: a live `ctx.ui.confirm` probe under both `pi` and
+`omp` confirmed 2026-09-08 that decline blocks and accept runs. `shim=yes`
+(ADR-0006 § 7, ticket 15c): this harness is IN-PROCESS — `harness shim <id>`
+below prints a real embedded extension for it; `shim=no` covers both a
 stdin-json hook harness (nothing to print) and an in-process harness
 with no embedded shim yet (opencode).
 Provenance — `baseline`, `overlay [<layer>:<file>]`, `baseline+overlay

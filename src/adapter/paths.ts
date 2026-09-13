@@ -1,7 +1,7 @@
 // Path canonicalization before checkPath. Adapter-only (needs real
 // filesystem I/O, which the engine deliberately does not touch).
 //
-// Closes the workstation's documented symlink bypass: `checkPath` matches
+// Closes the legacy implementation's documented symlink bypass: `checkPath` matches
 // on the literal path string, so `ln -s ~/.ssh/id_rsa innocent.txt` followed
 // by `Read innocent.txt` would sail past a guard that never resolves the
 // symlink. `realpath()` handles the common case (the target exists); when it

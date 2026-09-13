@@ -1,44 +1,145 @@
-# agent-bouncer
+# bouncer
 
-**The bouncer for your coding agent's tool calls.**
+`bouncer` is one standalone binary that guards coding-agent tool calls before
+they run: destructive commands, protected writes, secret reads, MCP writes,
+and prompt-injection signatures.
 
-`bouncer` is a single standalone binary that guards the tool calls of coding
-agent harnesses (Claude Code first): destructive commands, secret reads and
-writes, MCP writes, prompt-injection signatures — one process, one verdict
-path, one audit log. The engine is compiled; the policy is TOML (an embedded
-vetted baseline plus a user overlay with loud, reasoned overrides).
+## At a glance
 
-> **Status: pre-v1, spec-driven.** No packaged release yet — build it from
-> this checkout (Quickstart below). The spec and the ticket breakdown live
-> in `.scratch/bouncer/` — a local, untracked tracker (same convention as
-> the author's other repos) — for the design rationale behind anything not
-> covered in `docs/`.
+- Guards [Claude Code, Codex, and pi/omp](#harnesses) today.
+- Build with `bun run build && scripts/install.sh`, then follow a [wiring how-to](docs/how-to/wire-into-claude-code.md).
+- Verify what you run: [`bouncer --version`](#trust), `dist/bouncer.sha256`, and the policy digest.
 
-## Quickstart
+
+<!-- demo:start -->
+```console
+$ bouncer check "rm -rf /"
+block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (claude-code)
+$ bouncer check "git push --force origin main"
+confirm [git-protected] git push can rewrite history, mutate a remote, or discard work — confirm before running → ask (claude-code)
+$ bouncer check "cat ~/.ssh/id_ed25519"
+block [bash-ssh-key] Bash command references sensitive path: SSH key file blocked → deny (claude-code)
+$ bouncer check "echo x > ~/.zshrc"
+confirm [bash-shell-rc] Bash write target protected by shell-rc: Shell startup files execute commands in future terminal sessions → ask (claude-code)
+$ bouncer check "ls -la"
+allow
+```
+<!-- demo:end -->
+
+![Terminal recording of bouncer decisions](docs/assets/readme/demo.gif)
+
+*Terminal recording: a deny, an ask, a blocked secret read, an allow, and
+`doctor` on a wired profile; recorded at `49b5caf`.*
+
+## Harnesses
+
+This matrix is derived from [`policy/harness/*.toml`](policy/harness/) and
+checked against `bouncer harness list`. Adapted harnesses receive a verdict;
+writes to declared-only harnesses' configuration directories are guarded, but
+they have no verdict transport yet.
+
+| Harness | Wiring | Transport | Status | Confirm verdict |
+| --- | --- | --- | --- | --- |
+| Claude Code | `hook-file` | `stdin-json` | adapted | `ask` |
+| Codex CLI | `codex-hooks` | `stdin-json` | adapted | `deny` |
+| pi-agent and omp | `shim-file` | `stdin-json` | adapted | `ask` |
+| OpenCode | — | `none` | declared only | none |
+| Gemini CLI | — | `none` | declared only | none |
+| Cursor | — | `none` | declared only | none |
+
+## Install and wire
+
+From a checkout with Bun and dependencies installed:
 
 ```sh
-bun run build   # produces dist/bouncer
+bun run build
+scripts/install.sh
 ```
 
-Wire `dist/bouncer` into a Claude Code `settings.json`
-(`docs/how-to/wire-into-claude-code.md` has the exact hooks block), then
-verify:
+Then wire the installed binary into your adapted harness and verify it:
+
+- [Claude Code](docs/how-to/wire-into-claude-code.md)
+- [Codex CLI](docs/how-to/wire-into-codex.md)
+- [pi-agent and omp](docs/how-to/wire-into-pi-agent.md)
 
 ```sh
-./dist/bouncer doctor
+bouncer doctor
 ```
+
+## Trust
+
+`bouncer` identifies both the binary and its embedded policy. The text
+line and JSON form expose the version, build provenance, and baseline policy
+digest; the checksum verifies the compiled artifact before installation.
+
+<!-- trust:start -->
+Example values for a compiled binary; `sha` and `date` vary by build:
+```console
+$ bouncer --version
+bouncer 0.1.1 (example build SHA, built example UTC time) baseline 0b41bf352a2a
+$ bouncer --version --json
+{"name":"bouncer","version":"0.1.1","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
+$ shasum -a 256 -c dist/bouncer.sha256
+dist/bouncer: OK
+```
+<!-- trust:end -->
+
+The baseline is compiled into the binary, then local common and profile layers
+are merged in order. A malformed layer is rejected rather than partially
+applied; the remaining policy continues fail-closed. [`run`](docs/reference/cli.md#run)
+reads stdin and local policy files, writes guarded verdicts to the local JSONL
+[audit log](docs/reference/audit-log.md), and makes no network request in the decision path.
+
+Read [ADR-0003](docs/adr/0003-liveness-fail-closed-in-three-layers.md) for the
+three fail-closed layers, [the policy reference](docs/reference/policy.md) for
+the policy digest and merge rules, and
+[ADR-0006](docs/adr/0006-declarative-harness-adapters.md) for harness adapters.
+
+## Policy layers
+
+```mermaid
+flowchart LR
+  baseline[Embedded baseline policy] --> common[Common layer]
+  common --> profile[Profile layer]
+  profile --> engine[Policy engine]
+  engine --> verdict[Verdict: block ask observe flag]
+  verdict --> harness[Harness response]
+  verdict --> log[JSONL audit log]
+```
+
+Scope: policy loading and verdict routing. Sources:
+[`src/policy/load.ts`](src/policy/load.ts),
+[policy layers](docs/reference/policy.md#baseline-vs-overlay), and
+[ADR-0001](docs/adr/0001-layered-policy-common-then-profile.md). Inspected at
+`49b5caf`.
+
+An embedded baseline is merged with the common layer, then the profile layer.
+The engine returns a harness response and records guarded verdicts in JSONL.
+
+## Why use bouncer beside declarative permissions?
+
+| Concern | bouncer | Declarative `permissions` alone |
+| --- | --- | --- |
+| Failure behavior | A canary, launcher, and declarative layer provide three fail-closed checks. [ADR-0003](docs/adr/0003-liveness-fail-closed-in-three-layers.md) | A permissions decision can stop a call before hooks run, so it does not check hook wiring. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) |
+| Matching | Regex rule rows and named structural algorithms evaluate the tool input. [Policy reference](docs/reference/policy.md#the-rule-row-id-regex-reason-flags-except-special-verdict) | A short-circuited call never reaches bouncer's matchers. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) |
+| Audit trail | Guarded verdicts are written to an account-local JSONL log. [Audit log](docs/reference/audit-log.md) | A permissions short-circuit is invisible to bouncer's audit log. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) |
+| Shadow migration | `--shadow` evaluates and logs without writing a verdict to stdout. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) | Calls stopped by permissions cannot appear in bouncer's shadow comparison. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) |
+| Policy changes | The embedded baseline accepts common and profile overlays with explicit reasons and precedence. [ADR-0001](docs/adr/0001-layered-policy-common-then-profile.md) | In Claude Code, `settings.json` `permissions` short-circuits a call before `PreToolUse`; that call does not reach bouncer. [Shadow mode](docs/how-to/wire-into-claude-code.md#shadow-first-recommended-before-cutover) |
 
 ## Documentation
 
-| I want to...                                         | Read                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| wire bouncer into a Claude Code session              | [`docs/how-to/wire-into-claude-code.md`](docs/how-to/wire-into-claude-code.md)       |
-| add a rule of my own                                 | [`docs/how-to/add-a-custom-rule.md`](docs/how-to/add-a-custom-rule.md)               |
-| disable/soften a baseline rule, or widen a safe list | [`docs/how-to/override-a-baseline-rule.md`](docs/how-to/override-a-baseline-rule.md) |
-| find frequent friction and dead rules                | [`docs/how-to/tune-rules-with-audit.md`](docs/how-to/tune-rules-with-audit.md)       |
-| look up a subcommand's flags, output, exit code      | [`docs/reference/cli.md`](docs/reference/cli.md)                                     |
-| look up the TOML policy format                       | [`docs/reference/policy.md`](docs/reference/policy.md)                               |
-| look up the audit log's JSONL shape                  | [`docs/reference/audit-log.md`](docs/reference/audit-log.md)                         |
+| I want to... | Read |
+| --- | --- |
+| build, install, and create a local release | [Release](docs/how-to/release.md) |
+| wire bouncer into a Claude Code session | [Wire into Claude Code](docs/how-to/wire-into-claude-code.md) |
+| wire bouncer into Codex CLI | [Wire into Codex CLI](docs/how-to/wire-into-codex.md) |
+| wire bouncer into pi-agent or omp | [Wire into pi-agent and omp](docs/how-to/wire-into-pi-agent.md) |
+| add a rule of my own | [Add a custom rule](docs/how-to/add-a-custom-rule.md) |
+| disable, soften, or safely widen a baseline rule | [Override a baseline rule](docs/how-to/override-a-baseline-rule.md) |
+| find recurring friction and dead rules | [Tune rules with the audit log](docs/how-to/tune-rules-with-audit.md) |
+| look up a subcommand's flags, output, or exit code | [CLI reference](docs/reference/cli.md) |
+| look up the TOML policy format | [Policy reference](docs/reference/policy.md) |
+| inspect the audit log's JSONL shape | [Audit log reference](docs/reference/audit-log.md) |
 
 ## Provenance
 
@@ -52,3 +153,8 @@ origin.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Status
+
+Version 0.1.1. Build and install from a checkout (`scripts/install.sh`); no
+packaged binary is published yet. See [Release](docs/how-to/release.md).

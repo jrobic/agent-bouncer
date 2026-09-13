@@ -12,14 +12,14 @@ function canonicalize(value: unknown): CanonicalValue {
   const source = value as Record<string, unknown>;
   const result: { [key: string]: CanonicalValue; } = {};
   for (const key of Object.keys(source).toSorted()) {
-    if (key === 'reason' || key === 'sourceFile' || key === 'sourceFiles' || key === 'shadows') continue;
+    if (key === 'reason' || key === 'ask_probe' || key === 'sourceFile' || key === 'sourceFiles' || key === 'shadows') continue;
     const item = source[key];
     if (item !== undefined) result[key] = canonicalize(item);
   }
   return result;
 }
 
-/** Hashes the policy decisions, excluding explanations and load provenance. */
+/** Hashes policy behavior, excluding explanations, probe evidence, and load provenance. */
 export function policyDigest(
   policy: RulesPolicy,
   overrides: readonly ActiveOverride[],

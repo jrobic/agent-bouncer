@@ -111,7 +111,7 @@ describe('run(): protected bouncer policy writes confirm while reads remain free
   test('Edit through a mount with no bouncer target segment still asks from the raw path', async () => {
     const accountDir = await freshAccountDir();
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });
-    const noBouncerSegmentTarget = tmpDir('shared-dotfiles-mount-');
+    const noBouncerSegmentTarget = tmpDir('shared-common-mount-');
     const mountedPolicyFile = join(noBouncerSegmentTarget, '10-shared.toml');
     await writeFile(mountedPolicyFile, '# shared\n', 'utf8');
     await symlink(noBouncerSegmentTarget, join(accountDir, 'bouncer', 'policy.d'));

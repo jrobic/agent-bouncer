@@ -161,7 +161,7 @@ describe('secret-rules: PATH_RULES', () => {
   // hook-log moved OUT of the baseline by ticket 13 (baseline universality
   // triage) — predecessor-tool/personal-migration artifact, not a
   // universal hazard. Its behavioral cases, including the "documented
-  // gap: rotated .log.1 is not blocked" case and the workstation-naming
+  // gap: rotated .log.1 is not blocked" case and the legacy-naming
   // negative discriminator, moved with it to tests/personal-policy.test.ts,
   // exercised against examples/personal-overlay.toml instead of BASELINE
   // directly.
@@ -669,7 +669,7 @@ describe('secret-rules: path scan exclusions for search patterns', () => {
   });
 });
 
-// Workstation delta: checkUrl gives extractTargets()'s `urls` bucket
+// Legacy delta: checkUrl gives extractTargets()'s `urls` bucket
 // (ctx_fetch_and_index) a matching check function. Unlike checkSecretBash, it
 // skips the PATH_RULES path-token scan — a URL's path segment names a web
 // page, not a file on disk, so `/secrets/` inside a documentation URL is not
@@ -699,7 +699,7 @@ describe('secret-rules: checkUrl (target-extraction parity)', () => {
 });
 
 // The documented bypasses of the shell-obfuscation matcher, ported from the
-// workstation generation. Verified against this engine — these commands DO
+// legacy implementation. Verified against this engine — these commands DO
 // leak secrets but pass the hook by design: the tokenizer cannot interpret
 // real shell semantics. A test here documents the gap rather than hiding it.
 describe('secret-rules: known limits (shell obfuscation bypasses)', () => {

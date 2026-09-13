@@ -1,4 +1,4 @@
-// Path canonicalization: closes the workstation's documented symlink bypass
+// Path canonicalization: closes the legacy implementation's documented symlink bypass
 // (secret-guard.ts resolved realpath() before checkPath; the ported engine
 // had it nowhere — src, tests, or ticket 03/04). Both the unit-level
 // canonicalizePath() behavior and the end-to-end run() bypass-closure are

@@ -112,17 +112,14 @@ runtime.
 ## What `confirm` looks like in the UI, and headless
 
 pi-agent's own `confirm` degrades to **`ask`** as of this writing
-(`policy/harness/pi-agent.toml`'s own dated comment) — the live probe of
-`ctx.ui.confirm` under both binaries (ADR-0006 § 7, ticket 15c's own
-acceptance box) landed 2026-09-08: a real confirm dialog rendered on
-both `pi` 0.84.1 and `omp` 18.1.10, decline blocked the tool with
-bouncer's own reason, accept let it run — see `.scratch/bouncer/reports/
-15c-report.md` for both runs' evidence. The shim's own contract (ADR-0006
-§ 7) is `ctx.hasUI ? await ctx.ui.confirm("bouncer", reason) : false` — a
-real TUI session prompts and waits for accept/decline; a headless
-session (`pi -p "…"`/`omp -p "…"`) has no UI at all, so `hasUI` is
-`false` and the call is blocked outright, never left hanging (also
-measured live, both binaries).
+(`policy/harness/pi-agent.toml`'s dated measurement): a live probe under
+both `pi` 0.84.1 and `omp` 18.1.10 confirmed real `ctx.ui.confirm` dialogs.
+Decline blocked the tool with bouncer's own reason; accept let it run. The
+shim's own contract (ADR-0006 § 7) is `ctx.hasUI ? await
+ctx.ui.confirm("bouncer", reason) : false` — a real TUI session prompts and
+waits for accept/decline; a headless session (`pi -p "…"`/`omp -p "…"`) has
+no UI at all, so `hasUI` is `false` and the call is blocked outright, never
+left hanging (also measured live, both binaries).
 
 ## Doctor notices at session start
 
@@ -180,5 +177,4 @@ matches what the CURRENT binary would print, naming the reprint command.
 Source: policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts,
 src/adapter/shim.ts, src/adapter/codecs/wiring/shim-file.ts,
 src/adapter/codecs/input/hashline.ts, src/adapter/doctor.ts,
-src/cli-commands.ts, src/cli.ts, scripts/probe-pi-agent.sh,
-.scratch/bouncer/reports/15c-report.md
+src/cli-commands.ts, src/cli.ts, scripts/probe-pi-agent.sh

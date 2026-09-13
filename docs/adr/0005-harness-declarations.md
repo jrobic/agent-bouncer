@@ -12,7 +12,7 @@ ADR-0004 gave `bouncer` a `protected_write` table whose rows name the files a
 harness loads at every session start: `settings(.local).json`, `hooks/`,
 `plugins/`, `CLAUDE.md`. Every row is a hand-written regex on a `.claude`
 path. Three gaps follow from that shape, all measured on the installed binary
-`d5e2e54`, both profiles:
+`d5e2e54`, on two profiles:
 
 1. **The directory itself has no row.** `rm -rf ~/.claude`, `rm -rf
    ~/.claude/*`, `mv ~/.claude ~/.claude.bak`, `cp -r ./cfg ~/.claude`,
@@ -21,13 +21,14 @@ path. Three gaps follow from that shape, all measured on the installed binary
    **allow**. Each of them replaces or destroys every protected file at once;
    the per-file rows never see the directory token. The 35 A/B report
    recorded this as the `harness-config-dir` candidate.
-2. **Only Claude Code is described.** The workstation runs four assistants.
-   `echo x > ~/.omp/agent/config.yml` (model roles, `approvalMode`),
-   `rm -rf ~/.omp/agent/extensions`, `echo x > ~/.codex/config.toml`,
-   `echo x > ~/.codex/AGENTS.md`, `echo x > ~/.config/opencode/opencode.json`
-   are all **allow**. These files play exactly the role of `settings.json`
-   for their harness, and omp is the harness the workstation actually uses.
-   ADR-0004 did not exclude them; it did not see them.
+2. **Only Claude Code is described.** The installed configuration ran four
+   assistants. `echo x > ~/.omp/agent/config.yml` (model roles,
+   `approvalMode`), `rm -rf ~/.omp/agent/extensions`, `echo x >
+   ~/.codex/config.toml`, `echo x > ~/.codex/AGENTS.md`, `echo x >
+   ~/.config/opencode/opencode.json` are all **allow**. These files play
+   exactly the role of `settings.json` for their harness, and omp was the
+   most-used unguarded harness. ADR-0004 did not exclude them; it did not
+   see them.
 3. **Environment names are opaque.** `$HOME/.claude/hooks` matches only
    because the regex finds `.claude/hooks` inside the token; the engine
    expands nothing. `rm -rf "$CLAUDE_CONFIG_DIR"` and `rm -rf
@@ -52,8 +53,8 @@ facts.
   and the baseline stands alone. Whatever a workstation adds must degrade to
   a still-correct baseline.
 - Verdict `confirm`, not `block` (ADR-0004): deleting or moving one's own
-  configuration is legitimate during a reinstall; the human must see it, not
-  be prevented.
+  configuration is legitimate during a reinstall; the human must see it,
+  not be prevented.
 
 ## Decision
 
@@ -132,15 +133,15 @@ facts.
    where they are.
 
 7. **The profile suffix leaves the baseline.** Today's rows accept
-   `.claude(-[\w.-]+)?`; the suffix is a convention of this workstation
-   (`~/.claude-work`), not of the harness. Baseline `dir` is `~/.claude`
-   only. **Overlay merge is by `id`**: a `[[harness]] id = "claude-code"`
-   block in `policy.d/` appends its `dir`, `parents` and `env` to the
-   baseline block and inherits its `persistent` list — a profile that forgot
-   a persistent file is exactly the bug the merge is there to prevent.
-   Consequence to state plainly: `~/.claude-work/settings.json` is protected
-   by the common overlay (`~/.agents/bouncer/policy.d/`), and if that overlay
-   is rejected the baseline protects `~/.claude` alone.
+   `.claude(-[\w.-]+)?`; the suffix is a convention of a second profile, not
+   of the harness. Baseline `dir` is `~/.claude` only. **Overlay merge is by
+   `id`**: a `[[harness]] id = "claude-code"` block in `policy.d/` appends
+   its `dir`, `parents` and `env` to the baseline block and inherits its
+   `persistent` list — a profile that forgot a persistent file is exactly
+   the bug the merge is there to prevent. Consequence to state plainly: a
+   second profile's `settings.json` is protected by the common overlay
+   (`~/.agents/bouncer/policy.d/`), and if that overlay is rejected the
+   baseline protects `~/.claude` alone.
 
 8. **Unknown heads** (`trash`, `ditto`, `tar -C`, `unzip -d`) are not
    registered as writers. A derived row matching one of their tokens reaches
@@ -171,8 +172,8 @@ facts.
 - `ls ~/.claude`, `cat ~/.omp/agent/config.yml`, `rm -rf ~/.claude/skills`,
   `echo x > ~/.claude/projects/x/memory/MEMORY.md`, `rm -rf ~/.claude_backup`,
   `rm -rf $CONFIG/hooks` → allow.
-- Baseline only: `rm -rf ~/.claude-work`, `echo x > ~/.claude-work/settings.json`
-  → allow. The workstation overlay restores them (dotfiles, after the ship).
+- Baseline only: operations on a second profile's configuration directory
+  → allow. The common overlay restores its protection after the ship.
 - `fixtures/protected-write.json` cases written against the profile suffix
   are rewritten to baseline semantics; overlay merge gets its own cases.
 - Known limits, documented in `docs/reference/policy.md`: truncated globs

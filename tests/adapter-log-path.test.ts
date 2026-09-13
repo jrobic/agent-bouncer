@@ -8,7 +8,7 @@ import { run } from '../src/adapter/run.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import { tmpDir } from './tmp.ts';
 
-// Workstation delta: per-account log routing. The property under test is
+// Legacy delta: per-account log routing. The property under test is
 // "two accounts, two logs" — CLAUDE_CONFIG_DIR is how a second account
 // (a client seat running the same binary through an absolute path) tells
 // the engine which tree its own state lives in. Without honoring it, a

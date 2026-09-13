@@ -78,21 +78,18 @@ apply_patch = { role = "write",   codec = "apply-patch" }
 
 [harness.protocol.output]
 block = "deny"
-# `ask` probe (measured live 2026-09-08, Codex CLI 0.153.2, real
-# authenticated `codex exec` session, ticket 15b probe 3 — see
-# .scratch/bouncer/reports/15b-report.md's probe table): a throwaway
-# hook (not bouncer) answered `permissionDecision: "ask"` on a plain
-# `echo`; the session transcript showed `hook: PreToolUse Failed`
-# (never `Blocked`) and the command RAN — confirms ADR-0006 fact 3
-# (hooks reference: "parsed but not supported yet — Codex marks the
-# hook run as failed, reports the error, and continues the tool
-# call") end to end, not just from the reference doc. A `confirm =
-# "ask"` table here would let every confirm-class verdict through
-# unjudged, so this baseline degrades straight to "deny" instead —
-# no `[harness.protocol.output.ask]` template exists below (one
-# would be a dead template while confirm != "ask", rejected by
-# lint). ADR-0006 § 4 rule 6 protects this: an overlay may not relax
-# it back to "ask".
+# `ask` was measured live on 2026-09-08 with Codex CLI 0.153.2 in an
+# authenticated `codex exec` session: a throwaway hook (not bouncer)
+# answered `permissionDecision: "ask"` on a plain `echo`; the session
+# transcript showed `hook: PreToolUse Failed` (never `Blocked`) and the
+# command RAN — confirms ADR-0006 fact 3 (hooks reference: "parsed but not
+# supported yet — Codex marks the hook run as failed, reports the error,
+# and continues the tool call") end to end, not just from the reference doc.
+# A `confirm = "ask"` table here would let every confirm-class verdict
+# through unjudged, so this baseline degrades straight to "deny" instead —
+# no `[harness.protocol.output.ask]` template exists below (one would be a
+# dead template while confirm != "ask", rejected by lint). ADR-0006 § 4 rule
+# 6 protects this: an overlay may not relax it back to "ask".
 confirm = "deny"
 observe = "silent"
 flag = "context"

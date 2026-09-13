@@ -110,12 +110,12 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # copied here (review round 2 C-1).
 #
 # `expandPathCandidates` (`src/adapter/neutral-call.ts`, review round 1
-# L-1, the lead's own finding): a selector suffix or `;`-list riding
+# L-1, a reviewer finding): a selector suffix or `;`-list riding
 # unstripped inside a `path` selector's raw value defeated every
 # `$`-anchored path rule — probes 4/6 only ever tried `~/.ssh/id_rsa`,
 # the one vector the DIRECTORY rule catches regardless of suffix, so the
 # ticket's own original probes never met the trigger the brief named
-# ("only if they DEFEAT the path rules"); the lead's own additional
+# ("only if they DEFEAT the path rules"); a reviewer's additional
 # vectors (`~/.zsh_history:1-5`, `proj/secrets.pem:1-2`, `proj/.envrc;
 # proj/README.md`) did. Fixed for every role="read" row on every
 # harness (a harness-neutral property of the role, not pi-agent-only —
@@ -233,7 +233,7 @@ flag = "silent"
 # liveness failures as fail-closed (ADR-0006 § 7 rule 1) gains nothing
 # from silently allowing a broken envelope through.
 on_malformed = "deny"
-ask_probe = "2026-09-08, pi 0.84.1 (session 01a082be-…, cmux pane) and omp 18.1.10 (session 01a082dd-…, a separate fresh pane) — both real ctx.ui.confirm dialogs, decline blocks/accept runs on both; see the 15c report's probe table and 'Probe 2, in detail' section"
+ask_probe = "2026-09-08, pi 0.84.1 and omp 18.1.10: real ctx.ui.confirm dialogs; decline blocks and accept runs on both"
 
 [harness.protocol.output.deny]
 stdout = '{"block":true,"reason":${reason}}'

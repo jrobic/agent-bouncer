@@ -2,7 +2,7 @@
 // Captures fixtures/protocol/<harness>.json — for every acceptance case,
 // runs `bouncer run [--shadow] [--harness <id>]` against a real binary
 // with `HOME`/the harness's own account-dir env var pointed at a fresh,
-// empty temp directory (baseline only — no workstation overlay in
+// empty temp directory (baseline only — no profile overlay in
 // scope), captures raw stdout (`null` when empty) and the exit code, and
 // writes the case set as one JSON file. This file's OUTPUT is the
 // byte-for-byte conformance contract tests/fixtures-protocol.test.ts

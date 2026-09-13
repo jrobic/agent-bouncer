@@ -1,8 +1,8 @@
 // Pure audit-diff logic (ticket 08, code-only scope): parsing the TS
-// generation's own log lines (command-guard.log etc — schema read from
-// ~/dotfiles/claude/hooks/_shared/lib.ts's logDeny, read-only
-// reference), correlating them against bouncer's shadow-mode log entries,
-// and classifying the three divergence kinds. No filesystem — see
+// generation's own log lines (command-guard.log etc — schema read from a
+// prior guard's shared `logDeny` function, read-only reference),
+// correlating them against bouncer's shadow-mode log entries, and
+// classifying the three divergence kinds. No filesystem — see
 // tests/cli-commands-audit-diff.test.ts for the `runAudit({ diff: true })`
 // command-level tests (real files on disk).
 

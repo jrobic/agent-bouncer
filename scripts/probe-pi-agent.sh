@@ -5,11 +5,10 @@
 # zsh — ADR-0006 fact 5), against this repo's own compiled `dist/bouncer`,
 # under a temporary $PI_CODING_AGENT_DIR. Eleven probes, two columns each
 # — a cell that diverges between `pi` and `omp` is a blocker, resolved
-# before merge (a codec that accepts both shapes, or the ticket comes
-# back to the lead with the measurement, ADR-0006 § 7's own contract).
+# back to the reviewer with the measurement, ADR-0006 § 7's own contract).
 #
-# Auth of the temporary account dir is a HUMAN STEP for probes 1-8 (they
-# need a real, authenticated model turn to decide to call a tool) — this
+# Auth of the temporary account dir is an OPERATOR STEP for probes 1-8 (they
+# need a real, authenticated model turn to decide to call a tool) —
 # script never reads, copies, or links ~/.pi/agent/auth.json or
 # ~/.omp/agent/agent.db itself. `setup` prints the exact command and
 # exits non-zero until auth is provisioned; re-run `setup` (or go
@@ -167,7 +166,7 @@ record() {
 }
 
 # Runs one prompt under a given binary (`pi` or `omp`), headless (`-p`),
-# isolated from every OTHER extension the workstation profile might load
+# isolated from every OTHER extension the active profile might load
 # (`--no-extensions -e <shim>`), with $PI_CODING_AGENT_DIR set for THIS
 # CHILD PROCESS ONLY (ticket 15c's own trap — never export it into this
 # script's own shell).

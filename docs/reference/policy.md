@@ -495,7 +495,7 @@ confirm = "ask"
 observe = "silent"
 flag = "context"
 on_malformed = "allow"
-ask_probe = "2026-08-16, workstation THREAT_MODEL §1: ..."
+ask_probe = "2026-08-16, Claude Code (version unrecorded): an unanswerable ask under --dangerously-skip-permissions is enforced as deny"
 
 [harness.protocol.output.deny]
 stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":${reason}}}'

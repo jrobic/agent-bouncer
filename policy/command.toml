@@ -242,7 +242,7 @@ regex = "\\bdirenv\\s+(?:allow|permit|grant)\\b"
 reason = "direnv grants a project .envrc permission to run outside this session"
 verdict = "confirm"
 
-# Ticket 32: scheduled jobs and services run later with the human's rights.
+# Ticket 32: scheduled jobs and services run later with the operator's rights.
 [[rules.command.bash]]
 id = "persistence-scheduler"
 regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit|kickstart)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start|(?:--user\\s+)?(?:restart|reload|daemon-reload))\\b|(?:^|[|;&\\n]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)|(?:^|[|;&\\n]\\s*)batch\\b"

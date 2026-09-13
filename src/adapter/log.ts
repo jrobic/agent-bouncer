@@ -1,4 +1,4 @@
-// Verdict audit logging. Ported from the workstation hook boilerplate
+// Verdict audit logging. Ported from the legacy hook boilerplate
 // (byte-identical between the two prior generations — nothing to converge,
 // it was always adapter/runtime plumbing) and adapted for the unified
 // binary: one JSONL file per account instead of one per guard, with a

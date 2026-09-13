@@ -50,10 +50,10 @@ const secretChecker = createSecretChecker(loaded.policy.secret, loaded.policy.co
 const { checkPath } = secretChecker;
 
 describe('secret.path: hook-log is restored under the personal overlay', () => {
-  // Real workstation basenames (secret-guard.ts:107's own protection,
+  // Legacy log basenames (secret-guard.ts:107's own protection,
   // <x>-guard.log — see examples/personal-overlay.toml's provenance
   // comment). The original port inverted these to `guard-<x>.log`, a
-  // fictional naming scheme the workstation never wrote, and this file's
+  // fictional naming scheme the legacy implementation never wrote, and this file's
   // own tests validated that fiction until a real `audit --diff` run
   // caught it (0 TS events parsed, hook-log silently dead).
   test('ruleId hook-log: command-guard.log is blocked', () => {
@@ -75,7 +75,7 @@ describe('secret.path: hook-log is restored under the personal overlay', () => {
     expect(checkPath('/proj/hooks/command-guard.log.1')).toBeNull();
   });
 
-  // mcp-write-guard.log is a real workstation log too, but the ORIGINAL
+  // mcp-write-guard.log is a historical log too, but the ORIGINAL
   // secret-guard.ts:107 regex never protected it either — restoring
   // fidelity means leaving this gap in place, not closing it. Widening
   // hook-log to cover it would be a hardening decision, not a parity fix.

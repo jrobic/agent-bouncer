@@ -7,13 +7,12 @@
 // only ever sees strings and already-parsed entries, same discipline as
 // audit.ts itself.
 //
-// TS log entry shape — read from
-// ~/dotfiles/claude/hooks/_shared/lib.ts's logDeny (READ-ONLY
-// reference, never modified): `{timestamp, session_id, tool_name,
+// TS log entry shape — read from a prior guard's shared `logDeny` function
+// (READ-ONLY reference, never modified): `{timestamp, session_id, tool_name,
 // decision: "deny"|"ask", rule_id, target}`. No `family` field (each of
 // the four guard files IS its own family), no `mode` field (the TS
 // generation has no shadow concept), no `kind`-discriminated header/
-// warning lines (logDeny is the only writer over there) — simpler than
+// warning lines (logDeny is the only writer there) — simpler than
 // bouncer's own log by construction.
 //
 // Correlation is a HEURISTIC, not an exact match — there is no id shared
@@ -529,7 +528,7 @@ const SECTIONS: readonly [DiffDivergenceKind, string][] = [
  * cluster naming rule ids from BOTH sides, a count, and — when the shape
  * matches a pre-triaged family — an `[expected: ...]` tag citing the
  * ticket. The tag is informational, never a filter: every divergence still
- * appears, tagged or not, so the human triage step this exists to support
+ * appears, tagged or not, so the reviewer triage step this supports
  * always sees the full picture.
  */
 export function renderDiffReport(clusters: readonly DiffCluster[], options: DiffReportOptions): string {

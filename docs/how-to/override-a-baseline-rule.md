@@ -166,4 +166,4 @@ hard seal. A stronger sealed rule is a backlog idea, not built here.
 - `bouncer rules list` shows the override or relaxation, with its reason.
 
 ---
-Source: src/policy/lint.ts, src/policy/load.ts, src/policy/schema.ts, src/cli-commands.ts, .scratch/bouncer/spec.md (Implementation Decisions § Overlay powers)
+Source: src/policy/lint.ts, src/policy/load.ts, src/policy/schema.ts, src/cli-commands.ts

@@ -172,12 +172,12 @@ describe('filterSessionEntries', () => {
 
 describe('normalizeTarget', () => {
   test('collapses a home-directory prefix to ~', () => {
-    expect(normalizeTarget('/Users/jrobic/project/.env')).toBe('~/project/.env');
+    expect(normalizeTarget('/Users/user/project/.env')).toBe('~/project/.env');
     expect(normalizeTarget('/home/alice/.ssh/config')).toBe('~/.ssh/config');
   });
 
   test('collapses a bare home directory with no trailing path', () => {
-    expect(normalizeTarget('/Users/jrobic')).toBe('~');
+    expect(normalizeTarget('/Users/user')).toBe('~');
   });
 
   test('collapses a commit-hash-shaped token', () => {
@@ -424,7 +424,7 @@ describe('renderSuggestions', () => {
 
   test('emits a [[override]] relax snippet for a resolvable regex-rule id', () => {
     const clusters = clusterEntries([
-      entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/jrobic/project/.env' }),
+      entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/user/project/.env' }),
     ]);
     const text = renderSuggestions(clusters, resolvable, { days: 30 });
     expect(text).toContain('[[override]]');
@@ -456,7 +456,7 @@ describe('renderSuggestions', () => {
     const toolName = 'mcp__chrome-devtools__click';
     const clusters = clusterEntries([
       entry({ target: 'git push origin main' }),
-      entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/jrobic/project/.env' }),
+      entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/user/project/.env' }),
       entry({ ruleId: 'mcp-write', family: 'mcp-write', verdict: 'confirm', target: toolName }),
     ]);
     const text = renderSuggestions(clusters, resolvable, { days: 30 });

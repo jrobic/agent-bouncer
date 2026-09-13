@@ -736,8 +736,8 @@ describe('command-rules: quoted separators don\'t fabricate segments (tokenizer 
 
   // The privilege family gets the same tokenizer guarantee as the git
   // family above: a `;` (or any other separator) sitting inside a quoted
-  // argument must not fabricate a command segment. The workstation
-  // generation's regex-only sudo matcher had exactly this false positive —
+  // argument must not fabricate a command segment. The legacy regex-only
+  // sudo matcher had exactly this false positive —
   // `echo '; sudo apt'` denied as `sudo` because the regex matched the
   // literal separator-then-tool substring regardless of quoting. This
   // engine's structural tokenizer sees the whole quoted string as one
@@ -959,7 +959,7 @@ describe('command-rules: the curl file upload stays caught in its long form', ()
   });
 });
 
-// Workstation delta: the documented bypasses of the previous generation's
+// Legacy delta: the documented bypasses of the previous generation's
 // looser (non-tokenizing) sudo regex and rm-rf matcher. Verified against
 // this engine's stricter tokenizer — every one of them is still a
 // deliberate, documented gap (not a regression): a defense against

@@ -28,10 +28,9 @@
 // readdir proved present has no license to silently vanish.
 //
 // Migration guard (ADR-0001 § Rejection, ticket 21): this module also owns
-// the ONE realpath check that has nothing to do with a broken file — the
-// interim per-profile symlink (dotfiles ADR-0004) that used to make
-// the common layer reachable before this native read existed. See
-// migrationGuardWarning below.
+// the one realpath check that has nothing to do with a broken file — the
+// interim per-profile symlink that used to make the common layer reachable
+// before this native read existed. See migrationGuardWarning below.
 //
 // Declaration-driven routing (ADR-0006 § 8) is a two-phase resolution, not
 // one read: which directory the PROFILE layer lives under depends on the
@@ -69,14 +68,14 @@ export interface HarnessLoadResult extends LoadResult {
 // homedir() — Bun resolves homedir() once at process boot (from the OS,
 // not from `process.env.HOME`) and never re-reads it, so a test that
 // reassigns `process.env.HOME` mid-process (tests/setup.ts sets a
-// throwaway one globally; this machine's own dev account genuinely has a
-// ~/.agents/bouncer/) would silently keep resolving to the REAL home. A
+// throwaway one globally; the process user's real home may carry an
+// installed common layer) would silently keep resolving to the REAL home. A
 // non-empty HOME wins verbatim; homedir() is only the fallback for the
 // (rare, but real outside test contexts) case where HOME itself is
 // unset. GUARD FOR TEST AUTHORS: an empty OR deleted `process.env.HOME`
-// both fall through to this SAME homedir() branch — this machine's own
-// real home, not a safe default. A test must always REASSIGN `HOME` to
-// another throwaway string in its own cleanup, exactly like
+// both fall through to this SAME homedir() branch — the process user's real
+// home may carry an installed common layer, not a safe default. A test must
+// always REASSIGN `HOME` to another throwaway string in its own cleanup, exactly like
 // tests/setup.ts's global preload does; never `delete process.env.HOME`
 // or set it to `''` to "reset" it.
 export function commonRoot(): string {
@@ -184,12 +183,12 @@ async function tryRealpath(path: string): Promise<string | undefined> {
   }
 }
 
-// ADR-0001 § Rejection, migration guard: the interim per-profile symlink
-// (dotfiles ADR-0004) pointed `<configDir>/bouncer/policy.d` AT
-// `~/.agents/bouncer/policy.d` directly, before this module's native
-// common-layer read existed — the SAME mount also shows up as the
-// profile ROOT itself being the link (`<configDir>/bouncer` -> the
-// common root, no `policy.d` segment at all). Either shape loads the
+// ADR-0001 § Rejection, migration guard: an interim per-profile symlink
+// pointed `<configDir>/bouncer/policy.d` at `~/.agents/bouncer/policy.d`
+// directly, before this module's native common-layer read existed — the SAME
+// mount also shows up as the profile ROOT itself being the link
+// (`<configDir>/bouncer` -> the common root, no `policy.d` segment at all).
+// Either shape loads the
 // same files TWICE — once as "common", once as "profile" through the
 // link, under a different qualified name each time (`profile:policy.toml
 // shadows common:policy.toml`) — identical effective policy, lying

@@ -1,8 +1,8 @@
 # Example personal policy overlay (ticket 13: baseline universality
 # triage). What it is: the rules ticket 13 moved OUT of the embedded
-# baseline because they encode one author's workflow/machine history, not
-# a hazard every bouncer consumer should inherit — see policy/secret.toml
-# and policy/command.toml, git blame/log at the rules' old positions, for
+# baseline because they encode legacy guard log basenames and observed
+# historical traffic, not a hazard every bouncer consumer should inherit — see
+# policy/secret.toml and policy/command.toml, git blame/log at the rules' old positions, for
 # the "why this moved" reasoning.
 #
 # How to install: never automatic. Copy this file into
@@ -18,13 +18,13 @@
 
 [[rules.secret.path]]
 id = "hook-log"
-# Basenames match the workstation's real hook log files, one-for-one with
+# Basenames preserve legacy guard log basenames, one-for-one with
 # the TS generation's own protection at secret-guard.ts:107
 # (`(?:secret-guard|command-guard|transcript-backup)\.log$`) — restored
 # after a transcription inversion (`guard-<x>` instead of `<x>-guard`)
 # shipped in the original port and went undetected until audit --diff
-# ran against real traffic. `mcp-write-guard.log` is a real workstation
-# log too but was never covered by the original regex either — left out
+# ran against observed historical traffic. `mcp-write-guard.log` is a
+# historical log too but was never covered by the original regex either — left out
 # here for fidelity, not an oversight; widening coverage to it would be a
 # hardening decision, tracked separately, not a parity restoration.
 regex = "(^|/)(?:secret-guard|command-guard|transcript-backup)\\.log$"

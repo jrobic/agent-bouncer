@@ -204,4 +204,4 @@ traffic, and only then cut over to real enforcement.
 ---
 Source: policy/harness/codex.toml, src/adapter/codecs/input/apply-patch.ts,
 src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/canary.ts,
-src/adapter/doctor.ts, src/cli-commands.ts, src/cli.ts, .scratch/bouncer/reports/15b-report.md
+src/adapter/doctor.ts, src/cli-commands.ts, src/cli.ts

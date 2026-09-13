@@ -43,7 +43,7 @@ export interface Dispatcher {
 // call can legitimately trigger more than one family at once: `git config
 // credential.helper store` is both an unsafe git subcommand (command
 // family, confirm) AND a credential leak (secret family, block). The
-// workstation ran these as independent, separately-registered hooks, and
+// Legacy hooks ran these as independent, separately-registered hooks, and
 // Claude Code denies a tool call if ANY registered hook denies it — the
 // strictest verdict wins regardless of which hook happened to run first.
 // Unifying six families into one dispatch must preserve that property:

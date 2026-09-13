@@ -8,7 +8,7 @@
 // `~/.claude`); a different `--harness <id>` now resolves against THAT
 // harness's own declaration instead.
 //
-// Workstation delta folded into the engine convergence: the catalog
+// Legacy behavior folded into the engine convergence: the catalog
 // generation this repository otherwise ports verbatim always wrote its log
 // beside the hook script, one file shared by every account running that
 // script. This module resolves the log path from the active account's

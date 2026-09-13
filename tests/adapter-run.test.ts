@@ -166,7 +166,7 @@ describe('run: UserPromptSubmit, the prompt family', () => {
 });
 
 // Ticket 08 (shadow mode, code-only scope — the live traffic run and the
-// cutover itself are the lead's phases): `run --shadow` evaluates
+// cutover phase): `run --shadow` evaluates
 // everything exactly as normal — same dispatch, same logging — but must
 // NEVER write anything to stdout, on ANY event shape (deny, ask,
 // UserPromptSubmit's flag/additionalContext, SessionStart's scream), and

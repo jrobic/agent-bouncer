@@ -15,11 +15,10 @@ Claude Code account directory (`CLAUDE_CONFIG_DIR`, default `~/.claude`). The
 engine (`src/policy/load.ts`) receives one flat list of files and has no
 notion of where they come from.
 
-Two profiles run the binary on this workstation. Since 2026-09-03 they share
-their rules through a directory symlink, `<configDir>/bouncer/policy.d` →
-`~/.agents/bouncer/policy.d` (dotfiles ADR-0004, an explicitly interim
-mount). The loader does not know the link exists. Three properties of the
-current loader shape that mount:
+Two profiles shared rules through a configuration repository behind symlinks:
+`<configDir>/bouncer/policy.d` → `~/.agents/bouncer/policy.d` (an explicitly
+interim mount). The loader does not know the link exists. Three properties of
+the current loader shape that mount:
 
 - Two overlay files targeting the same thing (a git `sub`, a `[[relax]]`
   list + value, an `[[override]]` rule, a regex `id`) reject the whole set —
@@ -55,8 +54,8 @@ common layer itself, and the per-profile symlinks disappear.
   policy.
 - The engine stays I/O-free and path-agnostic.
 - No per-project layer in this change. A policy read from a repository is
-  supplied by the repository — attack surface, separate decision
-  (`.scratch/backlog.md`, cascade entry).
+  supplied by that repository — attack surface, deferred to a separate
+  decision.
 
 ## Options considered
 
@@ -89,12 +88,12 @@ profile says where the common layer is.
 is what makes the layer "common" rather than "Claude's"; `~/.agents/` is
 the multi-harness root already in use for everything else shared.
 
-**Cons**: an absent directory is an empty layer, silently — the same
-silence ADR-0004 § 8 paid for with the interim link. Mitigation: every
-output names the layer's state (`common: 4 files` / `common: absent`), and
-the workstation's own doctor (dotfiles, `rules lint | grep -q overlay:`)
-keeps failing loudly when the common files are not loaded. `~/.agents/`
-becomes a product convention, documented as such.
+**Cons**: an absent directory is an empty layer, silently — the same failure
+mode an interim per-profile symlink, since removed, carried. Mitigation: every
+output names the layer's state (`common: 4 files` / `common: absent`), and an
+operator-level configuration check (`rules lint | grep -q overlay:`) can fail
+loudly when expected common files are not loaded. `~/.agents/` becomes a
+product convention, documented as such.
 
 **Effort**: low for discovery; the real work is the layering (shared by
 every option).
@@ -178,8 +177,8 @@ was taken each time.
   [common:policy.d/100-personal.toml]`, `[profile:policy.toml]`; any entry
   that shadows one carries `shadows common:<file>`.
 - `rules lint`: `lint: OK (overlay: common/policy.d/100-personal.toml, …,
-  profile/policy.d/500-x.toml)` — the `overlay:` token stays, the
-  dotfiles doctor greps it.
+  profile/policy.d/500-x.toml)` — the `overlay:` token stays, and an
+  operator-level configuration check greps it.
 - `doctor`: `policy — overlay active (51 effective rules; common: 4 files,
   profile: 0 files)`.
 - A readability pass on these formats is a backlog item; they are shaped
@@ -193,7 +192,7 @@ was taken each time.
   its place only with a layer the user does not own — the per-project
   layer, excluded here.
 - **Per-project layer**, **`[[revoke]]`**, **provenance UX pass** —
-  `.scratch/backlog.md`.
+  deferred.
 
 ## Consequences
 
@@ -213,8 +212,9 @@ was taken each time.
 - `~/.agents/bouncer/` is now a product convention. Documented in
   `docs/reference/policy.md`; a deployment that wants another root has no
   knob until someone needs one (option 3).
-- An absent common layer is silent by design; on this workstation the
-  dotfiles doctor, not `bouncer`, is what notices.
+- An absent common layer is silent by design; an operator-level
+  configuration check, not `bouncer`, detects an expected common layer
+  missing.
 - "Same target in two layers" changes meaning from *error* to *the profile
   wins*. Provenance is what keeps that debuggable — it is not optional.
 
@@ -222,7 +222,7 @@ was taken each time.
 
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Common root deleted or `~/.agents` link broken → relaxes and `hook-log` vanish silently | Medium | Medium | `common: absent` in every output; dotfiles doctor `grep -q overlay:`; ADR-0004 § 8 already accepts this trade for the interim, and the native read makes the failure rarer than a per-profile link |
+| Common root deleted or `~/.agents` link broken → relaxes and `hook-log` vanish silently | Medium | Medium | `common: absent` in every output; an operator-level configuration check greps `overlay:`; the interim per-profile symlink, since removed, had the same failure mode, and the native read makes it rarer |
 | Precedence hides a common hardening behind a profile relax | Low | High | `shadows common:` provenance on every such entry; ticket 19's `bouncer-policy` asks on every edit of either layer; sealed rules when a non-owned layer exists |
 | Double load during migration reads as "profile shadows everything" | High, transient | Low | realpath guard: profile layer skipped, doctor fails until the link is removed |
 | Partial rejection leaves an inconsistent set (profile override of a dropped common rule) | Low | Medium | override resolution runs after the common layer is settled; unresolvable → profile layer rejected → baseline (fail-closed) |
@@ -230,7 +230,7 @@ was taken each time.
 
 ## Implementation plan
 
-Tickets under `.scratch/bouncer/issues/` (split by the `to-tickets` pass).
+Implementation work was split into tickets after the design pass.
 
 ### Phase 1 — engine: named layers
 - [x] `loadPolicyFromLayers(layers)` next to `loadPolicyFromOverlayFiles`
@@ -256,12 +256,12 @@ Tickets under `.scratch/bouncer/issues/` (split by the `to-tickets` pass).
 ### Phase 3 — ship (lead, announced step by step)
 - [x] Rebuild grouped with ticket 16; reinstall `~/.local/bin/bouncer`
       (backup `bouncer.<sha>.bak`).
-- [x] Both profiles: `rm` the `policy.d` link (an absent local `policy.d`
+- [x] Both profiles: remove the `policy.d` link (an absent local `policy.d`
       is an empty layer); purge `policy.d.pre-mount.bak/` and
       `policy.toml.pre-19.bak`.
-- [x] dotfiles, as a proposed patch for its lead: drop the `symlink`
-      manifest entry (keep `binary` and the `command` lint check); amend
-      ADR-0004 (option 4 delivered, § 3 and § 7).
+- [x] A configuration-repository patch removed the `symlink` manifest entry
+      (kept `binary` and the `command` lint check); ADR-0004 records the
+      delivered option 4, § 3 and § 7.
 - [x] Proof: `doctor` ×2 green with `common: 4 files, profile: 0 files`,
       51 effective rules, 5 relaxations, `rules list` provenance
       `[common:…]` on every overlay entry.
@@ -276,15 +276,15 @@ Tickets under `.scratch/bouncer/issues/` (split by the `to-tickets` pass).
 
 ## References
 
-- dotfiles `docs/adr/0004-bouncer-policy-overlays-partages.md` —
-  interim mount, § 7 target constraints, § 8 broken-link verdict.
+- Historical measurement: an interim per-profile symlink, since removed, had
+  the same absence and broken-link failure mode.
 - `src/adapter/policy.ts`, `src/adapter/log-path.ts`, `src/policy/load.ts`.
 - `docs/reference/policy.md` § Merge order, § Cross-file conflicts,
   § Provenance.
 - Tickets 12 (policy file layout), 13 (baseline universality), 15
   (multi-harness adapters), 19 (policy self-protection).
-- `.scratch/backlog.md` — cascade entry (per-project, sealed rules),
-  `[[revoke]]`, provenance UX pass.
+- Deferred: per-project layer, sealed rules, `[[revoke]]`, and provenance UX
+  pass.
 
 ---
 

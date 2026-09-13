@@ -588,7 +588,7 @@ async function runAuditDiff(options: AuditOptions, harness: HarnessDeclaration):
 /**
  * `bouncer audit` / `bouncer audit --suggest` — the proactive tuning loop
  * (ticket 10): clusters this account's deny/ask and conditional-allow log
- * entries over the last `--days` days and either prints the human report
+ * entries over the last `--days` days and either prints the prose report
  * (frequent friction + dead conditional rules) or, with `--suggest`,
  * candidate `[[relax]]`/`[[override]]` TOML snippets. Reads the log file
  * and the current policy off disk — the clustering/rendering itself is

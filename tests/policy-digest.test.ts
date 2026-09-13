@@ -40,17 +40,43 @@ describe('policyDigest', () => {
     expect(policyDigest(withChangedRegex, [], [])).not.toBe(baseline);
   });
 
-  test('hashes active override, relaxation, and harness behavior but not their prose or provenance', () => {
+  test('hashes active overrides, relaxations, and harness behavior but not prose, provenance, or ask evidence', () => {
     const baseline = policyDigest(BASELINE.rules, [], []);
     const firstHarness = BASELINE.rules.harness[0]!;
+    const protocol = firstHarness.protocol;
+
+    expect(protocol).toBeDefined();
+    if (protocol === undefined) throw new Error('baseline harness must declare a protocol');
+
     const withChangedWitness = {
       ...BASELINE.rules,
       harness: [{ ...firstHarness, witness: '~/.another-config' }, ...BASELINE.rules.harness.slice(1)],
+    };
+    const withChangedAskProbe = {
+      ...BASELINE.rules,
+      harness: [
+        { ...firstHarness, protocol: { ...protocol, output: { ...protocol.output, ask_probe: 'Different probe evidence' } } },
+        ...BASELINE.rules.harness.slice(1),
+      ],
+    };
+    const withChangedTransport = {
+      ...BASELINE.rules,
+      harness: [{ ...firstHarness, protocol: { ...protocol, transport: 'different-transport' } }, ...BASELINE.rules.harness.slice(1)],
+    };
+    const withChangedConfirm = {
+      ...BASELINE.rules,
+      harness: [
+        { ...firstHarness, protocol: { ...protocol, output: { ...protocol.output, confirm: 'deny' as const } } },
+        ...BASELINE.rules.harness.slice(1),
+      ],
     };
 
     expect(policyDigest(BASELINE.rules, [ACTIVE_OVERRIDE], [])).not.toBe(baseline);
     expect(policyDigest(BASELINE.rules, [], [ACTIVE_RELAXATION])).not.toBe(baseline);
     expect(policyDigest(withChangedWitness, [], [])).not.toBe(baseline);
+    expect(policyDigest(withChangedAskProbe, [], [])).toBe(baseline);
+    expect(policyDigest(withChangedTransport, [], [])).not.toBe(baseline);
+    expect(policyDigest(withChangedConfirm, [], [])).not.toBe(baseline);
     expect(policyDigest(BASELINE.rules, [{ ...ACTIVE_OVERRIDE, reason: 'Different prose' }], [])).toBe(
       policyDigest(BASELINE.rules, [ACTIVE_OVERRIDE], []),
     );

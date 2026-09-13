@@ -14,7 +14,7 @@
 // acceptable modification" the 15b brief names for this test, since it
 // already iterated nothing before (one fixed path). Each case gets its
 // own throwaway HOME/<harness's own config-dir env var> (baseline only,
-// no workstation overlay) — same isolation discipline as the capture
+// no profile overlay) — same isolation discipline as the capture
 // script itself. The SessionStart cases need a real settings/hooks file
 // on disk; its SHAPE (not its exact binary path — see below) is what the
 // capture script wrote, reconstructed here from the same

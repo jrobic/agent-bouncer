@@ -229,11 +229,11 @@ export async function readCodexHooksForDoctor(
   };
 }
 
-// "PreToolUse" -> "pre_tool_use" — verified against real trust keys in
-// `~/.codex/config.toml` on this workstation (2026-09-07): `pre_tool_use`,
-// `user_prompt_submit`, `session_start`, `post_tool_use`, and six more
-// events this codec never declares, all the same snake_case-of-CamelCase
-// shape.
+// "PreToolUse" -> "pre_tool_use" — the 2026-09-07 compatibility probe
+// observed `pre_tool_use`, `user_prompt_submit`, `session_start`,
+// `post_tool_use`, and six more events this codec never declares, all the
+// same snake_case-of-CamelCase shape.
+
 function eventSnakeCase(eventName: string): string {
   return eventName.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 }

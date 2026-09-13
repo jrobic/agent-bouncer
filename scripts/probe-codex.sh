@@ -23,7 +23,7 @@
 #
 # Never export CODEX_HOME in your interactive shell rc — this script sets
 # it only for the child `codex`/`bouncer` processes it spawns (ticket 15b
-# trap: `codex exec` inherits the workstation `~/.codex` otherwise).
+# trap: `codex exec` inherits the local `~/.codex` otherwise).
 
 set -euo pipefail
 
@@ -89,7 +89,7 @@ EOF
   # A minimal config.toml — Codex fills in the rest (model, approvals)
   # from its own defaults; nothing here is load-bearing for the probes
   # themselves, only the file's mere presence. This repo never writes to
-  # the WORKSTATION's ~/.codex/config.toml (a protected write, ticket
+  # the active ~/.codex/config.toml (a protected write, ticket
   # 15b's own trap) — only this temp CODEX_HOME's own copy.
   cat > "$PROBE_HOME/config.toml" <<'EOF'
 # Minimal probe config.toml (scripts/probe-codex.sh).
@@ -300,7 +300,7 @@ probe_10() {
 cmd_probes() {
   require_probe_home
   if [ ! -f "$PROBE_HOME/auth.json" ]; then
-    log "auth.json missing at $PROBE_HOME/auth.json — run '$0 setup' and complete the human auth step first."
+    log "auth.json missing at $PROBE_HOME/auth.json — run '$0 setup' and complete operator authentication first."
     exit 1
   fi
   : > "$RESULTS_FILE"

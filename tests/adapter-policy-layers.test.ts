@@ -10,9 +10,8 @@
 // Ticket-13 lesson, doubled here: BOTH `CLAUDE_CONFIG_DIR` (the profile
 // root) AND `HOME` (the common root, src/adapter/policy.ts's commonRoot())
 // must point at throwaway directories, explicitly verified non-empty
-// before use — this workstation's own dev account has a REAL
-// ~/.agents/bouncer/ (dotfiles' shared common layer), and an
-// unverified, accidentally-unset override for either falls through to it.
+// before use — an installed shared common layer is a real policy source,
+// and an accidentally-unset override for either falls through to it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';

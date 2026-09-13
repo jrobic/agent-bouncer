@@ -27,38 +27,37 @@ Measured on the installed binary (`903b052`, then `3c80f2b`, both
 profiles): `echo x > ~/.claude/settings.json`, `Write(~/.claude.json)`,
 `Edit(~/.claude/settings.json)`, `yq -i '.a=1' ~/.claude/settings.json`,
 `cat > ~/.zshrc`, `claude mcp add x -- npx y` are all **allow**. The
-workstation threat model lists this as its one documented hole ("not
+configuration's documented threat model lists this as its one hole ("not
 covered: a write through Bash"), and papers over the tool side with a
 declarative `ask: Edit(<configDir>/settings.json)` that covers the `Edit`
 tool and nothing else.
 
-Two facts about the workstation shape the design:
+Two facts about a configuration repository shape the design:
 
 - `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `~/.claude/hooks/` and
-  `~/.claude/agents/` are symlinks into `~/dotfiles/claude/`.
+  `~/.claude/agents/` are symlinks into a configuration repository.
   `canonicalizePath` (`src/adapter/paths.ts`) already resolves native tool
-  paths through `realpath`, so the engine sees
-  `…/dotfiles/claude/settings.json` — a path no regex written for
-  `.claude/settings.json` matches. The Bash token scan is synchronous and
-  resolves nothing.
+  paths through `realpath`, so the engine sees the configuration-repository
+  target — a path no baseline regex written for `.claude/settings.json`
+  matches. The Bash token scan is synchronous and resolves nothing.
 - Ticket 19 put `bouncer`'s own policy files in `secret.path` with verdict
   `confirm` (`bouncer-policy`, `(^|/)bouncer/(policy\.toml|policy\.d)(/|$)`),
-  so reading the installed policy asks too. Every dev session of this
-  chantier reads `policy/*.toml`; `bouncer rules list` prints the same
-  rules without naming a path. The read-side ask defends nothing.
+  so reading the installed policy asks too. Every development session reads
+  `policy/*.toml`; `bouncer rules list` prints the
+  same rules without naming a path. The read-side ask defends nothing.
 
 ### Problem
 
 Guard the *write* to a short list of files — harness configuration,
 persistence files, `bouncer`'s own policy — through every write surface
 `bouncer` sees, while leaving the *read* free, without loosening the
-`secret` family and without a second grammar the workstation has to keep
-in step.
+`secret` family and without a second grammar the operator has to keep in
+step.
 
 ### Constraints
 
 - Baseline universality (ticket 13): a baseline row must be true for any
-  Claude Code user; workstation-specific paths go to the overlay.
+  Claude Code user; operator-specific paths go to the overlay.
 - Per-tool argument policy lives in engine code with fixtures, not in the
   policy file (ticket 26, `SEARCH_PATTERN_ARGUMENT_POLICIES`); the policy
   file carries rows, `[[override]]` carries local exceptions.
@@ -123,13 +122,13 @@ except`.
 
 ### E — Symlinks
 
-**E1: realpath only.** Rejected on the workstation fact above: the
+**E1: realpath only.** Rejected on the measured symlink fact above: the
 resolved path of `~/.claude/settings.json` matches no baseline regex, so
 the table would be inert on the normal path.
 
 **E2: a second row on the link target.** Rejected as the mechanism: it
-moves a baseline concern into every overlay and misses links the human
-did not think of.
+moves a baseline concern into every configuration repository and misses
+links the human did not think of.
 
 **E3: two readings — raw path and `canonicalizePath` result — strictest
 wins, on native tools and on Bash tokens.** Chosen. Covers "write through
@@ -148,7 +147,7 @@ chantier.
 same reasoning, twice the rows.
 
 **F3: absorb — the row moves to `protected_write`, id kept.** Chosen.
-Write asks, read is free. No `[[override]]` in the workstation layers
+Write asks, read is free. No `[[override]]` in the installed configuration
 names the id (checked 2026-09-04), so keeping it costs nothing and keeps
 the audit log continuous.
 
@@ -232,11 +231,10 @@ re-explore what the session closed. Direct ADR.
    confirms `claude mcp (add|remove)`, `claude plugin
    (install|enable|disable|uninstall)`, `claude config set`.
 
-6. **Overlay (dotfiles, Phase 2).** Rows on the repository behind the
-   symlinks (`~/dotfiles/claude/(settings\.json|hooks/|CLAUDE\.md)`,
-   `~/dotfiles/agents/bouncer/`), the statusline scripts,
-   `RTK.md`, `~/.agents/` — in the common layer. At the same time the
-   declarative `ask: Edit(<configDir>/settings.json)` and its siblings
+6. **Overlay (configuration repository, Phase 2).** Rows in the
+   configuration repository behind the symlinks, the statusline scripts,
+   `RTK.md`, and `~/.agents/` belong in the common layer. At the same time
+   the declarative `ask: Edit(<configDir>/settings.json)` and its siblings
    leave `settings.json`.
 
 7. **Interplay.** Strictest-wins with `secret.path` when both match
@@ -268,8 +266,8 @@ for the visible one; evaluating both lets the baseline stay universal.
 - Writing `settings.json`, `.claude.json`, a hook, a LaunchAgent plist, a
   shell rc file, or `bouncer`'s policy asks on every surface `bouncer`
   sees — tools, Bash structure, Bash fallback — and reading them is free.
-- The workstation's last declarative `ask` on file edits can go; the
-  threat model's "not covered: a write through Bash" line goes with it.
+- The last declarative `ask` on file edits can go; the threat model's
+  "not covered: a write through Bash" line goes with it.
 - Reading the installed policy no longer prompts.
 
 ### Negative
@@ -290,7 +288,7 @@ for the visible one; evaluating both lets the baseline stay universal.
 | A write form neither structural nor caught by the fallback (head is a known reader but writes — `tee` is structural, `sed` without `-i` prints) | Low | Medium | readers are read-only heads by construction; `git` is subcommand-gated; fixture per reader head with a write attempt |
 | `harness-global-config` regex catching a project file named `.claude.json` | Low | Low | `confirm`, not `block`; `except` on the row if a real case appears |
 | Realpath cost on every Bash token | Low | Low | resolve only tokens that match a row on the raw reading OR whose parent is a known symlinked dir; measure `check` wall time before/after |
-| Agent edits the repository file behind the symlink | Medium on this workstation | High | Phase 2 overlay row; until then the `Edit(settings.json)` declarative ask stays |
+| Agent edits the configuration-repository file behind the symlink | Medium on this configuration | High | Phase 2 overlay row; until then the `Edit(settings.json)` declarative ask stays |
 
 ## Implementation plan
 
@@ -312,11 +310,11 @@ for the visible one; evaluating both lets the baseline stay universal.
       output changes.
 - [ ] Rebuild, atomic install, `doctor` ×2, provenance memory.
 
-### Phase 2 — workstation (dotfiles lead, gated there)
+### Phase 2 — the config repository (gated there)
 - [ ] Overlay rows for the config repository, statusline scripts,
-      `RTK.md`, `~/.agents/` in the common layer.
+  `RTK.md`, `~/.agents/` in the common layer.
 - [ ] `ask: Edit(<configDir>/settings.json)` and siblings removed from
-      both `settings.json`; THREAT_MODEL line updated.
+  both `settings.json`; the documented write-through-Bash coverage-gap note updated.
 - [ ] One day of `bouncer audit --days 1 --sessions-only` on both profiles: count
       `protected-write` fallback prompts, extend the readers set by fixture
       if a legitimate read repeats.
@@ -334,8 +332,6 @@ for the visible one; evaluating both lets the baseline stay universal.
 
 ## References
 
-- `.scratch/bouncer/issues/34-protected-write-design.md` (ticket, the
-  grilling rounds of 2026-09-04), `35-protected-write-build.md` (build).
 - `src/adapter/dispatch.ts` (`NATIVE_FILE_PATH_FIELD`, `secretPathHit`),
   `src/adapter/paths.ts` (`canonicalizePath`), `src/secret-rules.ts`
   (`BASH_PATH_TOKEN`, `globPathReadings`), `src/command-rules.ts`
@@ -344,7 +340,6 @@ for the visible one; evaluating both lets the baseline stay universal.
   is reserved for acts that are human-only), ADR-0003 (fail-closed
   doctrine); tickets 13 (baseline universality), 19 (`bouncer-policy`
   row), 26/27/28 (token readings), 32 (`persistence-scheduler`).
-- `.scratch/rules-candidates.md` § B (origin of the candidates).
 
 ---
 

@@ -12,12 +12,12 @@
 //
 // Ticket 20 (ADR-0001): src/adapter/policy.ts's commonRoot() reads
 // ~/.agents/bouncer/ straight off the home directory, with NO env var to
-// override per-test the way CLAUDE_CONFIG_DIR does — this machine's own
-// dev account genuinely has one (dotfiles, several active rules), so
-// without a throwaway HOME every test reaching loadCurrentPolicy()/run()
-// would silently pick up real personal policy. Same discipline as above,
-// same lesson (ticket 13): a test that needs to exercise the common layer
-// itself sets its OWN throwaway HOME (save/restore), same pattern
+// override per-test the way CLAUDE_CONFIG_DIR does — a development account
+// can genuinely have an installed shared common layer, so without a
+// throwaway HOME every test reaching loadCurrentPolicy()/run() would
+// silently pick up real personal policy. Same discipline as above, same
+// lesson (ticket 13): a test that needs to exercise the common layer itself
+// sets its OWN throwaway HOME (save/restore), same pattern
 // adapter-log-path.test.ts uses for CLAUDE_CONFIG_DIR.
 //
 // Ticket 39: directory creation itself (including these two throwaways)

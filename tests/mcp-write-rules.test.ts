@@ -135,8 +135,8 @@ describe('mcp-write-rules: an MCP write asks, on any server', () => {
     expect(checkMcpWrite('mcp__memory__delete_observations')?.verdict).toBe('confirm');
   });
 
-  test('atlassianUserInfo, allowed by the workstation\'s tenant allowlist, now asks', () => {
-    // The workstation guard carried a fifth read prefix, `atlassianUserInfo`,
+  test('atlassianUserInfo, historically allowed by a tenant allowlist, now asks', () => {
+    // A legacy guard carried a fifth read prefix, `atlassianUserInfo`,
     // scoped to one tenant. It does not survive into the generic trunk — a
     // tenant-scoped allowlist belongs in a sidecar, not in the trunk.
     expect(checkMcpWrite('mcp__atlassian__atlassianUserInfo')?.ruleId).toBe('mcp-write');

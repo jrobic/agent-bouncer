@@ -30,7 +30,7 @@ which 18 `Read(**/…)` globs duplicate what the `secret` family already
 guards through Read/Edit/Grep/Glob and the Bash path-token scan. Those 18
 globs are the measured source of the auto-mode classifier's prompts on
 `grep -r` and `cd && rg` (permission engine, not the classifier), and are
-being removed on the workstation.
+being removed from the configuration repository.
 
 ### Problem
 
@@ -64,9 +64,9 @@ Leave the 18 `Read(**/…)` globs as the backstop.
 **Pros**: nothing to build; a deny rule needs no process to run.
 
 **Cons**: it is the measured cause of the classifier prompts the
-workstation wants gone; it duplicates the `secret` family with a second
-grammar (globs) that drifts; it covers Read only, not Bash, Grep, Glob,
-Edit, MCP.
+configuration repository removes; it duplicates the `secret` family with a
+second grammar (globs) that drifts; it covers Read only, not Bash, Grep,
+Glob, Edit, MCP.
 
 **Effort**: none. Rejected as the sole layer; kept, reduced, as layer 3.
 
@@ -116,9 +116,9 @@ corrupt settings file, 0 healthy — measured 2026-09-04).
 **Pros**: the only layer that survives a wiped `hooks` block.
 
 **Cons**: covers the next session, not the one in progress; lives in the
-workstation's shell config, not in this repository.
+configuration repository's shell config, not in this repository.
 
-**Effort**: low. Adopted as layer 2, owned by dotfiles.
+**Effort**: low. Adopted as layer 2, gated there.
 
 ## Decision
 
@@ -144,13 +144,13 @@ Three layers, each covering what the one above cannot:
    it. The canary is not shadow-aware: it judges runnability, never a tool
    call, so it stays enforcing while the main entry observes; `doctor` says
    so in the check message.
-2. **Launcher (dotfiles)** — the `claude` shell function guarded by
-   `bouncer doctor`; covers the next session against a wiped or edited
-   `hooks` block. `ask: Edit(~/.claude/settings.json)` (ticket 01) covers
-   the agent editing the wiring.
-3. **Declarative layer, reduced (dotfiles)** — `Read(~/.ssh/**)`,
-   `Read(~/.gnupg/**)`, `Read(~/.aws/**)` stay in `permissions.deny`; the
-   18 `Read(**/…)` globs go.
+2. **Launcher (configuration repository)** — the `claude` shell function
+   guarded by `bouncer doctor`; covers the next session against a wiped or
+   edited `hooks` block. `ask: Edit(~/.claude/settings.json)` (ticket 01)
+   covers the agent editing the wiring.
+3. **Declarative layer, reduced (configuration repository)** —
+   `Read(~/.ssh/**)`, `Read(~/.gnupg/**)`, `Read(~/.aws/**)` stay in
+   `permissions.deny`; the 18 `Read(**/…)` globs go.
 
 ### Justification
 
@@ -177,9 +177,9 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 ### Negative
 
 - Two processes per guarded tool call instead of one.
-- `doctor` exits 1 on every profile until the canary entry is pasted in —
-  true on both workstation profiles right after the 2026-09-04 install; the
-  `SessionStart` scream names it meanwhile.
+- `doctor` exits 1 on every configured profile until the canary entry is
+  pasted in — true after the 2026-09-04 install; the `SessionStart` scream
+  names it meanwhile.
 - An unreadable config directory now denies every tool call (canary) where
   `run` alone would have enforced the baseline. Accepted: fail-closed, and
   the case is nearly impossible in practice since Claude Code reads
@@ -192,7 +192,7 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 | Canary entry removed or edited by the agent | Low | High | ticket 01's `ask` on `Edit(~/.claude/settings.json)`; layer 2 refuses the next launch; `doctor` names the missing entry |
 | Half-written binary during a reinstall denies every call for a moment | Medium, transient | Low | install atomically (`cp` to `bouncer.new`, `mv -f`), as the provenance memory prescribes — the deny is the intended behaviour, the window is the thing to shrink |
 | A hook timeout leaves the call to proceed | Unknown (undocumented) | Medium | outside any hook's reach; `ping` does the minimum; measured cost keeps both entries far under any plausible timeout |
-| `doctor` red on every session blamed on bouncer | High until layer 2 lands | Low | the check message names the fix (`--print-canary`); tracked as the dotfiles follow-up of ticket 25 |
+| `doctor` red on every session blamed on bouncer | High until layer 2 lands | Low | the check message names the fix (`--print-canary`); tracked as a configuration-repository follow-up of ticket 25 |
 
 ## Implementation plan
 
@@ -209,7 +209,7 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
       `docs/how-to/wire-into-claude-code.md` step 4, seven `[pass]` lines.
 - [x] Shipped in the grouped reinstall of 2026-09-04 (`903b052`).
 
-### Phase 2 — workstation (dotfiles lead, gated there)
+### Phase 2 — the config repository (gated there)
 - [ ] Canary entry pasted into both profiles' `settings.json`; `doctor` ×2
       seven `[pass]`.
 - [ ] `claude` shell function guarded by `bouncer doctor`.
@@ -226,9 +226,6 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 
 ## References
 
-- `.scratch/bouncer/issues/25-liveness-canary-fail-closed.md` (ticket,
-  hooks-reference findings, measurements),
-  `.scratch/bouncer/reports/25-report.md` (review round).
 - `src/adapter/canary.ts`, `src/adapter/doctor.ts`, `src/cli-commands.ts`,
   `src/adapter/run.ts` (`withDispatcherLikeRun`).
 - `docs/reference/cli.md` § `ping`, § `doctor`;
@@ -244,4 +241,4 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 
 | Date | Action | By |
 |---|---|---|
-| 2026-09-04 | Created, Accepted — design session decision; layer 1 shipped the same day, layers 2–3 pending on the workstation | Jonathan Robic |
+| 2026-09-04 | Created, Accepted — design session decision; layer 1 shipped the same day, layers 2–3 pending in the config repository | Jonathan Robic |

@@ -333,7 +333,7 @@ export function renderReport(
 //
 // Every suggestion carries an auto-filled `reason` citing the audit
 // evidence (count, shape, window) so the OUTPUT ITSELF is valid TOML that
-// `rules lint` accepts as-is (AC3) — "fill in a reason" is the human's
+// `rules lint` accepts as-is (AC3) — "fill in a reason" is the operator's
 // review step, not a requirement for the snippet to parse. A rule id with
 // no policy lever (rm-rf-dangerous, sudo, an invalid mcp-write tool name,
 // and any `git-conditional-*` id — none of these are resolvable via
