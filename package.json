@@ -1,6 +1,6 @@
 {
   "name": "@jrobic/agent-bouncer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The bouncer for your coding agent's tool calls — a single guard binary with declarative TOML policy",
   "private": true,
   "type": "module",

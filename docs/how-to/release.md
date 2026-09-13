@@ -12,55 +12,29 @@ chosen destination, and verify the current profile against that executable.
 ## Steps
 
 1. Choose the version bump before building. Use a patch version for policy rows,
-   fixtures, or documentation; use a minor version for engine, adapter, CLI, or
-   audit-log format changes. Do not create a major version before the public
-   release.
+   fixtures, documentation, build tooling, or scripts; use a minor version for
+   engine, adapter, CLI, or audit-log format changes. Do not create a major
+   version before the public release.
 
-2. Build from the repository root:
-
-   ```sh
-   bun run build
-   ```
-
-   The build records the committed short SHA, whether the tree is dirty, and the
-   UTC build date in `dist/bouncer`. It also writes `dist/bouncer.sha256`.
-
-3. Verify the executable and checksum:
+2. From the repository root, run:
 
    ```sh
-   ./dist/bouncer --version
-   shasum -a 256 -c dist/bouncer.sha256
+   scripts/install.sh --tag
    ```
 
-   A release build should identify a clean SHA. A `-dirty` suffix is factual but
-   should not be installed as a release.
+   The script builds `dist/bouncer`, verifies `dist/bouncer.sha256`, rejects a
+   dirty artifact unless `--allow-dirty` is explicit, retains one backup of an
+   existing destination, atomically installs the verified executable, creates
+   the annotated local `v<version>` tag, and runs `doctor` for the current
+   profile. It never pushes a tag.
 
-4. Install the checked executable at the chosen destination:
+   The default destination is `$HOME/.local/bin/bouncer`. Pass `--dest <path>`
+   for another destination, or `--from <dir>` to install an already-built
+   artifact containing `bouncer` and `bouncer.sha256`.
 
-   ```sh
-   install -m 0755 dist/bouncer /path/to/destination/bouncer
-   /path/to/destination/bouncer --version --json
-   ```
-
-   Preserve the JSON output with the release record when the destination is
-   managed outside this repository.
-
-5. Create the local tag for the version chosen in step 1. Tags are local release
-   markers; do not push one as part of this procedure.
-
-   ```sh
-   git tag v<version>
-   ```
-
-6. Start a session in the current profile, then run:
-
-   ```sh
-   bouncer doctor
-   ```
-
-   The `binary` line should be `[pass]` and name the installed build plus the
-   effective policy digest. `[warn] binary` means the process is a source or
-   dirty build; it is usable for development but not a verified release.
+   With `--tag`, the script refuses a dirty tree, an existing `v<version>` tag,
+   or an artifact whose build SHA differs from `HEAD`. `--from` accepts the
+   `dist/` output produced by `bun run build`.
 
 ## Verify
 
@@ -69,6 +43,9 @@ chosen destination, and verify the current profile against that executable.
   date.
 - `bouncer doctor` reports `[pass] binary` for the installed executable.
 
+  A `[warn] binary` means the executable is a source or dirty build. It remains
+  usable for development, but is not a verified release.
+
 ---
-Source: package.json, scripts/build.ts, src/build-info.ts, src/adapter/doctor.ts,
-docs/reference/cli.md
+Source: package.json, scripts/build.ts, scripts/install.sh, src/build-info.ts,
+src/adapter/doctor.ts, docs/reference/cli.md
