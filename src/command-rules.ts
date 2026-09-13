@@ -438,6 +438,7 @@ export type ShellToken =
     hasLiteralizingSyntax: boolean;
     hasQuotedWhitespace: boolean;
     hasUnterminatedQuote: boolean;
+    commandSubstitutions?: readonly SourceRange[];
   }>;
 
 type CommandPrefix = Readonly<{
@@ -609,167 +610,188 @@ export function tokenizeShellSegments(
 ): TokenizedShell {
   const segments: ShellToken[][] = [];
   const heredocBodies: SourceRange[] = [];
-  let tokens: ShellToken[] = [];
-  let token = '';
-  let tokenStart = 0;
-  let tokenStarted = false;
-  let tokenHasLiteralizingSyntax = false;
-  let tokenHasQuotedWhitespace = false;
-  let fragments: ShellExpansionFragment[] = [];
-  let fragment = '';
-  let fragmentEnvironment = true;
-  let fragmentBrace = true;
-  let quote: '"' | '\'' | null = null;
-  let comment = false;
   let hasUnquotedShellOperator = false;
+  const scan = (start: number, rangeEnd: number): void => {
+    let tokens: ShellToken[] = [];
+    let token = '';
+    let tokenStart = 0;
+    let tokenStarted = false;
+    let tokenHasLiteralizingSyntax = false;
+    let tokenHasQuotedWhitespace = false;
+    let tokenCommandSubstitutions: SourceRange[] | undefined;
+    let fragments: ShellExpansionFragment[] = [];
+    let fragment = '';
+    let fragmentEnvironment = true;
+    let fragmentBrace = true;
+    let quote: '"' | '\'' | null = null;
+    let comment = false;
 
-  const flushFragment = (): void => {
-    if (!fragment) return;
-    fragments.push({ value: fragment, environment: fragmentEnvironment, brace: fragmentBrace });
-    fragment = '';
-  };
-  const append = (value: string): void => {
-    token += value;
-    fragment += value;
-  };
-  const appendLiteral = (value: string): void => {
-    flushFragment();
-    token += value;
-    fragments.push({ value, environment: false, brace: false });
-  };
-  const setFragmentSyntax = (environment: boolean, brace: boolean): void => {
-    flushFragment();
-    fragmentEnvironment = environment;
-    fragmentBrace = brace;
-  };
+    const flushFragment = (): void => {
+      if (!fragment) return;
+      fragments.push({ value: fragment, environment: fragmentEnvironment, brace: fragmentBrace });
+      fragment = '';
+    };
+    const append = (value: string): void => {
+      token += value;
+      fragment += value;
+    };
+    const appendLiteral = (value: string): void => {
+      flushFragment();
+      token += value;
+      fragments.push({ value, environment: false, brace: false });
+    };
+    const setFragmentSyntax = (environment: boolean, brace: boolean): void => {
+      flushFragment();
+      fragmentEnvironment = environment;
+      fragmentBrace = brace;
+    };
 
-  const flushToken = (end: number): void => {
-    if (!tokenStarted) return;
-    flushFragment();
-    const expansion = options?.pathCandidates === true && (token.includes('$') || token.includes('{'))
-      ? expandPathTokenCandidates(fragments, witnesses)
-      : undefined;
-    const candidates = expansion?.candidates;
-    tokens.push({
-      value: token,
-      kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
-      start: tokenStart,
-      end,
-      hasLiteralizingSyntax: tokenHasLiteralizingSyntax,
-      hasQuotedWhitespace: tokenHasQuotedWhitespace,
-      hasUnterminatedQuote: quote !== null,
-      ...(candidates === undefined || (candidates.length === 1 && candidates[0] === token)
-        ? {}
-        : { pathCandidates: candidates }),
-      ...(expansion?.braceExpansionExceeded === true ? { braceExpansionExceeded: true } : {}),
-    });
-    token = '';
-    tokenStart = 0;
-    tokenStarted = false;
-    tokenHasLiteralizingSyntax = false;
-    tokenHasQuotedWhitespace = false;
-    fragments = [];
-    fragment = '';
-    fragmentEnvironment = true;
-    fragmentBrace = true;
-  };
-  const flushSegment = (end: number): ShellToken[] => {
-    flushToken(end);
-    const segment = tokens;
-    if (segment.length > 0) segments.push(segment);
-    tokens = [];
-    return segment;
-  };
-  const finishLine = (end: number): void => {
-    const segment = flushSegment(end);
-    if (isInsideHeredocBody(end, heredocBodies)) return;
+    const flushToken = (end: number): void => {
+      if (!tokenStarted) return;
+      flushFragment();
+      const expansion = options?.pathCandidates === true && (token.includes('$') || token.includes('{'))
+        ? expandPathTokenCandidates(fragments, witnesses)
+        : undefined;
+      const candidates = expansion?.candidates;
+      tokens.push({
+        value: token,
+        kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
+        start: tokenStart,
+        end,
+        hasLiteralizingSyntax: tokenHasLiteralizingSyntax,
+        hasQuotedWhitespace: tokenHasQuotedWhitespace,
+        hasUnterminatedQuote: quote !== null,
+        ...(tokenCommandSubstitutions === undefined ? {} : { commandSubstitutions: tokenCommandSubstitutions }),
+        ...(candidates === undefined || (candidates.length === 1 && candidates[0] === token)
+          ? {}
+          : { pathCandidates: candidates }),
+        ...(expansion?.braceExpansionExceeded === true ? { braceExpansionExceeded: true } : {}),
+      });
+      token = '';
+      tokenStart = 0;
+      tokenStarted = false;
+      tokenHasLiteralizingSyntax = false;
+      tokenHasQuotedWhitespace = false;
+      tokenCommandSubstitutions = undefined;
+      fragments = [];
+      fragment = '';
+      fragmentEnvironment = true;
+      fragmentBrace = true;
+    };
+    const flushSegment = (end: number): ShellToken[] => {
+      flushToken(end);
+      const segment = tokens;
+      if (segment.length > 0) segments.push(segment);
+      tokens = [];
+      return segment;
+    };
+    const finishLine = (end: number): void => {
+      const segment = flushSegment(end);
+      if (isInsideHeredocBody(end, heredocBodies)) return;
 
-    const delimiters = heredocDelimiters(cmd, segment);
-    if (delimiters === null || delimiters.length === 0) return;
-    const bodies = consumeHeredocBodies(cmd, end + 1, delimiters);
-    if (bodies !== null) heredocBodies.push(...bodies);
-  };
+      const delimiters = heredocDelimiters(cmd, segment);
+      if (delimiters === null || delimiters.length === 0) return;
+      const bodies = consumeHeredocBodies(cmd, end + 1, delimiters);
+      if (bodies !== null) heredocBodies.push(...bodies);
+    };
 
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i]!;
-    if (comment) {
-      if (ch === '\n') {
-        comment = false;
-        finishLine(i);
-      }
-      continue;
-    }
-
-    if (quote !== null) {
-      if (ch === '\\' && quote === '"') {
-        const escaped = cmd[i + 1];
-        if (escaped !== undefined && /[$`"\\\n]/.test(escaped)) {
-          if (escaped !== '\n') appendLiteral(escaped);
-          i++;
-        } else {
-          append('\\');
+    for (let i = start; i < rangeEnd; i++) {
+      const ch = cmd[i]!;
+      if (comment) {
+        if (ch === '\n') {
+          comment = false;
+          finishLine(i);
         }
         continue;
       }
-      if (ch === quote) {
-        setFragmentSyntax(true, true);
-        quote = null;
-        continue;
-      }
-      if (/\s/.test(ch)) tokenHasQuotedWhitespace = true;
-      append(ch);
-      continue;
-    }
 
-    if (ch === '\\') {
-      const escaped = cmd[i + 1];
-      if (escaped === '\n') {
-        i++;
+      if (quote !== '\'' && ch === '$' && cmd[i + 1] === '(' && cmd[i + 2] !== '(') {
+        const substitutionEnd = commandSubstitutionEnd(cmd, i + 2);
+        if (substitutionEnd !== null && substitutionEnd < rangeEnd) {
+          hasUnquotedShellOperator = true;
+          if (!tokenStarted) tokenStart = i;
+          tokenStarted = true;
+          tokenCommandSubstitutions ??= [];
+          tokenCommandSubstitutions.push({ start: i, end: substitutionEnd + 1 });
+          scan(i + 2, substitutionEnd);
+          appendLiteral(cmd.slice(i, substitutionEnd + 1));
+          i = substitutionEnd;
+          continue;
+        }
+      }
+
+      if (quote !== null) {
+        if (ch === '\\' && quote === '"') {
+          const escaped = cmd[i + 1];
+          if (escaped !== undefined && /[$`"\\\n]/.test(escaped)) {
+            if (escaped !== '\n') appendLiteral(escaped);
+            i++;
+          } else {
+            append('\\');
+          }
+          continue;
+        }
+        if (ch === quote) {
+          setFragmentSyntax(true, true);
+          quote = null;
+          continue;
+        }
+        if (/\s/.test(ch)) tokenHasQuotedWhitespace = true;
+        append(ch);
+        continue;
+      }
+
+      if (ch === '\\') {
+        const escaped = cmd[i + 1];
+        if (escaped === '\n') {
+          i++;
+          continue;
+        }
+        if (!tokenStarted) tokenStart = i;
+        tokenStarted = true;
+        tokenHasLiteralizingSyntax = true;
+        if (escaped === undefined) appendLiteral('\\');
+        else {
+          appendLiteral(escaped);
+          i++;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === '\'') {
+        setFragmentSyntax(ch === '"', false);
+        quote = ch;
+        if (!tokenStarted) tokenStart = i;
+        tokenStarted = true;
+        tokenHasLiteralizingSyntax = true;
+        continue;
+      }
+      if (';&|<>(){}'.includes(ch) || ch === '`') hasUnquotedShellOperator = true;
+      if (ch === '#' && !tokenStarted) {
+        comment = true;
+        continue;
+      }
+      if (/\s/.test(ch) && ch !== '\n') {
+        flushToken(i);
+        continue;
+      }
+      if (
+        /[;&]/.test(ch)
+        || (ch === '|' && !(tokenStarted && !tokenHasLiteralizingSyntax && /^\d*>\|?$/.test(token)))
+      ) {
+        flushSegment(i);
+        continue;
+      }
+      if (ch === '\n') {
+        finishLine(i);
         continue;
       }
       if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
-      tokenHasLiteralizingSyntax = true;
-      if (escaped === undefined) appendLiteral('\\');
-      else {
-        appendLiteral(escaped);
-        i++;
-      }
-      continue;
+      append(ch);
     }
-    if (ch === '"' || ch === '\'') {
-      setFragmentSyntax(ch === '"', false);
-      quote = ch;
-      if (!tokenStarted) tokenStart = i;
-      tokenStarted = true;
-      tokenHasLiteralizingSyntax = true;
-      continue;
-    }
-    if (';&|<>(){}'.includes(ch) || ch === '`') hasUnquotedShellOperator = true;
-    if (ch === '#' && !tokenStarted) {
-      comment = true;
-      continue;
-    }
-    if (/\s/.test(ch) && ch !== '\n') {
-      flushToken(i);
-      continue;
-    }
-    if (
-      /[;&]/.test(ch)
-      || (ch === '|' && !(tokenStarted && !tokenHasLiteralizingSyntax && /^\d*>\|?$/.test(token)))
-    ) {
-      flushSegment(i);
-      continue;
-    }
-    if (ch === '\n') {
-      finishLine(i);
-      continue;
-    }
-    if (!tokenStarted) tokenStart = i;
-    tokenStarted = true;
-    append(ch);
-  }
-  flushSegment(cmd.length);
+    flushSegment(rangeEnd);
+  };
+  scan(0, cmd.length);
   return { segments, heredocBodies, hasUnquotedShellOperator };
 }
 
@@ -1073,6 +1095,18 @@ function retainsQuotedTokenScan(
   return command === 'eval' || (command !== undefined && Object.hasOwn(SHELL_INTERPRETER_COMMANDS, command));
 }
 
+function literalTokenRanges(token: ShellToken): readonly SourceRange[] {
+  if (token.commandSubstitutions === undefined) return [token];
+  const ranges: SourceRange[] = [];
+  let start = token.start;
+  for (const substitution of token.commandSubstitutions) {
+    if (start < substitution.start) ranges.push({ start, end: substitution.start });
+    start = substitution.end;
+  }
+  if (start < token.end) ranges.push({ start, end: token.end });
+  return ranges;
+}
+
 // Masks declared search-pattern arguments plus quoted prose and heredoc
 // bodies that cannot name a path before a path-token scan.
 export function maskSearchPatternArguments(
@@ -1088,7 +1122,7 @@ export function maskSearchPatternArguments(
     const prefix = consumeCommandPrefixes(tokens);
     if (!retainsQuotedTokenScan(tokens, prefix)) {
       const quotedProse = tokens.filter((token) => token.hasQuotedWhitespace && !token.hasUnterminatedQuote);
-      excluded.push(...nonPathTokenRanges(cmd, quotedProse, pathToken));
+      excluded.push(...nonPathTokenRanges(cmd, quotedProse.flatMap(literalTokenRanges), pathToken));
     }
 
     if (prefix.ambiguous) continue;
@@ -1100,7 +1134,7 @@ export function maskSearchPatternArguments(
     if (policy === undefined) continue;
     if (maskedHeads !== undefined && !Object.hasOwn(maskedHeads, tool)) continue;
     const patternTokens = excludedSearchPatternTokens(tokens.slice(prefix.index + 1), policy);
-    if (patternTokens !== null) excluded.push(...patternTokens);
+    if (patternTokens !== null) excluded.push(...patternTokens.flatMap(literalTokenRanges));
   }
 
   if (excluded.length === 0) return cmd;

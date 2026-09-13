@@ -334,6 +334,14 @@ describe('secret-rules: checkSecretBash quoted prose and heredoc bodies', () => 
   test('ruleId secret-dir: quoted prose masks path tokens independently', () => {
     expect(checkSecretBash('git commit -m "rotate secrets and/or keys"')).toBeNull();
   });
+
+  test('substitutions do not turn surrounding prose into a secret read', () => {
+    expect(checkSecretBash('echo "do not read .env $(printf ok)"')).toBeNull();
+    expect(checkSecretBash('echo "do not read .env $(cat .env)"')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'bash-dotenv',
+    });
+  });
 });
 
 describe('secret-rules: sops and age decryption', () => {

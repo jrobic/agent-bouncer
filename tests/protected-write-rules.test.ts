@@ -230,6 +230,42 @@ describe('protected-write rules: Bash mechanisms', () => {
     await expect(checker.checkBashWrites('git diff ~/.zshrc')).resolves.toBeNull();
   });
 
+  test('command substitution preserves the reader head in a roster polling loop', async () => {
+    const command = 'CURSOR=$(jq -r .cursor .scratch/bouncer/cmux-roster.json); '
+      + 'while ! tail -n +"$CURSOR" .scratch/bouncer/team-state.ndjson '
+      + '| jq -cR \'fromjson? | select(.role == "dev45") '
+      + '| select((.state // .kind) == "done" or (.state // .kind) == "ask" or (.state // .kind) == "blocked")\' '
+      + '| grep -m1 .; do sleep 3; done';
+    await expect(checker.checkBashWrites(command)).resolves.toBeNull();
+  });
+
+  test('nested quoted substitutions remain reads without evaluating jq parentheses as shell syntax', async () => {
+    await expect(checker.checkBashWrites(
+      'VALUE="$(printf \'%s\' "$(jq -r \'.cursor | sub(")"; "")\' roster.json)")"',
+    )).resolves.toBeNull();
+  });
+
+  test.each([
+    ['nested write', 'echo "$(printf \'%s\' "$(touch ~/.cursor/hooks.json)")"'],
+    ['outer redirect', 'jq "$(printf .)" roster.json > ~/.cursor/hooks.json'],
+    ['outer copy destination', 'cp "$(printf /tmp/source)" ~/.cursor/hooks.json'],
+  ])('command substitution preserves the %s', async (_name, command) => {
+    await expect(checker.checkBashWrites(command)).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-cursor-hooks',
+    });
+  });
+
+  test.each([
+    ['quoted prose', 'echo "result: $(code .cursor)"'],
+    ['search pattern', 'grep "$(code .cursor)" file'],
+  ])('a substitution executing inside %s is not masked as inert text', async (_name, command) => {
+    await expect(checker.checkBashWrites(command)).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-cursor-config-dir',
+    });
+  });
+
   test('fallback reasons name the unrecognized command head', async () => {
     const probes = [
       ['yq', 'yq -i \'.x = "y"\' ~/.zshrc'],

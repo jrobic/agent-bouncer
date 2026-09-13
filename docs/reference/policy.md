@@ -369,6 +369,14 @@ arguments (`diff`, `show`, `log`, `blame`, `status`, `ls-files`, `cat-file`,
 `grep`, `commit`, `add`, `push`, `fetch`, `rev-parse`, `branch`, `tag`, and
 `remote`) also stay free. `checkout` and `restore` still confirm.
 
+Active `$()` command substitutions are scanned separately from the enclosing
+command, including inside double quotes and nested substitutions.
+`CURSOR=$(jq -r .cursor roster.json)` remains a read; writes inside the
+substitution and targets after it are still checked. Single-quoted or escaped
+`$()` text stays literal. Search-pattern and prose masking excludes only the
+literal portions of an argument, not the commands it executes. Substitution
+output is never evaluated.
+
 Search-pattern masking is opt-in only for `grep`/`egrep`/`fgrep`, `rg`, `ag`,
 and `ack`; a head that can write through its pattern argument is never opted
 in. Path-bearing quoted strings and shell command strings under an unknown

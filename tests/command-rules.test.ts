@@ -776,6 +776,13 @@ describe('command-rules: quoted separators don\'t fabricate segments (tokenizer 
   });
 });
 
+test('command substitutions are checked as executions, not when quoted or escaped as literal text', () => {
+  expect(checkGit('echo "$(git push)"')).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  expect(checkBash('echo "$(sudo id)"')).toMatchObject({ verdict: 'block', ruleId: 'sudo' });
+  expect(checkGit('echo \'$(git push)\'')).toBeNull();
+  expect(checkGit('echo "\\$(git push)"')).toBeNull();
+});
+
 describe('command-rules: clobber redirect tokenization', () => {
   test('a clobber redirect leaves the preceding Git status subcommand intact', () => {
     expect(extractGitSubcommand('git status >| out')?.sub).toBe('status');
