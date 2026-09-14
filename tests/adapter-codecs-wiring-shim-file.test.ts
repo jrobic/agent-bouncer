@@ -6,17 +6,39 @@
 // a proof of what `bouncer doctor --harness pi-agent` actually reports.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runDoctorChecks } from '../src/adapter/doctor.ts';
 import { renderShim } from '../src/adapter/shim.ts';
-import { runHarnessShim, runPrintCanary } from '../src/cli-commands.ts';
+import { runPrintCanary } from '../src/cli-commands.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
 import { tmpDir } from './tmp.ts';
 
 const PI_AGENT_HARNESS: HarnessDeclaration = BASELINE.rules.harness.find((h) => h.id === 'pi-agent')!;
+
+const PROJECT_ROOT = join(import.meta.dir, '..');
+
+type SourceCliResult = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+async function printShimWithBin(bouncerPath: string): Promise<SourceCliResult> {
+  const child = Bun.spawn(['bun', 'run', 'src/cli.ts', 'harness', 'shim', 'pi-agent', '--bin', bouncerPath], {
+    cwd: PROJECT_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { exitCode, stdout, stderr };
+}
 
 function cleanLoadResult(): LoadResult {
   return {
@@ -77,9 +99,10 @@ describe('shim-file wiring: a stable symlink baked through --bin', () => {
       const targetPath = await writeExecutableBouncer(agentDir);
       const stablePath = join(agentDir, 'bouncer');
       await symlink(targetPath, stablePath);
-      const printed = runHarnessShim('pi-agent', stablePath);
-      expect(printed).toMatchObject({ ok: true });
-      await writeShimFile(agentDir, printed.text);
+      const printed = await printShimWithBin(stablePath);
+      expect(printed).toMatchObject({ exitCode: 0, stderr: '' });
+      expect(printed.stdout).toContain(`const BOUNCER = process.env.BOUNCER_BIN ?? ${JSON.stringify(stablePath)};`);
+      await writeShimFile(agentDir, printed.stdout);
       process.env.PI_CODING_AGENT_DIR = agentDir;
 
       const resolvedReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
@@ -89,7 +112,8 @@ describe('shim-file wiring: a stable symlink baked through --bin', () => {
         message: `${stablePath} is executable`,
       });
 
-      await unlink(stablePath);
+      await unlink(targetPath);
+      expect((await lstat(stablePath)).isSymbolicLink()).toBe(true);
 
       const brokenReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
       expect(brokenReport.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
