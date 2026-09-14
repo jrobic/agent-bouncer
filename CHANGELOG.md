@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-14
+
+### Fixed
+
+- The published Homebrew formula declared its caveats as a block, which
+  Homebrew rejects (`brew install jrobic/tap/bouncer` failed on 1.1.0). The
+  formula now defines `caveats` as a method, and the release workflow installs
+  and tests the rendered formula on the runner before pushing it to the tap.
+
 ## [1.1.0] - 2026-09-14
 
 ### Added
@@ -76,7 +85,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/jrobic/agent-bouncer/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/jrobic/agent-bouncer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jrobic/agent-bouncer/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/jrobic/agent-bouncer/compare/v0.1.1...v0.2.0
