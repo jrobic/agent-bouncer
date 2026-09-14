@@ -27,9 +27,15 @@ brew install jrobic/tap/bouncer
 
 Homebrew's stable executable is `$(brew --prefix)/bin/bouncer`; never wire a
 versioned Cellar path. The printed extension otherwise bakes a path that
-vanishes on upgrade. Export `BOUNCER_BIN=$(brew --prefix)/bin/bouncer` in the
-shell that starts pi or omp, or reprint the extension after every Homebrew
-upgrade.
+vanishes on upgrade. Print it with that stable path baked in:
+
+```sh
+bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
+```
+
+Alternatively, export `BOUNCER_BIN=$(brew --prefix)/bin/bouncer` in the shell
+that starts pi or omp (the extension honours it at runtime), or reprint the
+extension after every Homebrew upgrade.
 
 ## Steps
 

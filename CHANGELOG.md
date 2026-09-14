@@ -6,13 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-14
+
 ### Added
 
-- Added the Homebrew tap for `brew install jrobic/tap/bouncer`.
+- Homebrew tap: `brew install jrobic/tap/bouncer` on macOS Apple Silicon and
+  Linux x64; the release workflow publishes the formula on every tag.
+- `bouncer harness shim <id> --bin <path>` bakes a chosen absolute binary path
+  into the printed pi/omp extension (a stable symlink such as
+  `$(brew --prefix)/bin/bouncer`) instead of the process's real path.
 
 ### Changed
 
-- Release artefacts are now `.tar.gz` archives with SHA-256 checksums.
+- Release artefacts are `bouncer-<version>-<target>.tar.gz` archives with a
+  `.sha256` checksum each, instead of bare binaries.
 
 ## [1.0.0] - 2026-09-14
 
@@ -69,7 +76,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/jrobic/agent-bouncer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jrobic/agent-bouncer/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/jrobic/agent-bouncer/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jrobic/agent-bouncer/compare/v0.1.0...v0.1.1
