@@ -50,7 +50,16 @@ they have no verdict transport yet.
 
 ## Install and wire
 
-From a checkout with Bun and dependencies installed:
+On macOS Apple Silicon or Linux x64, install the current release from Homebrew:
+
+```sh
+brew install jrobic/tap/bouncer
+```
+
+Homebrew supports macOS Apple Silicon and Linux x64. On other platforms, build
+from the checkout instead.
+
+Or build from a checkout with Bun and dependencies installed:
 
 ```sh
 bun run build
@@ -155,7 +164,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-Version 1.0.0. Binaries for Linux x64 and macOS arm64 with SHA-256 checksums
-are attached to each [GitHub Release](https://github.com/jrobic/agent-bouncer/releases);
-building from a checkout works too (`scripts/install.sh`). See
-[Release](docs/how-to/release.md).
+Version 1.0.0. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
+installs macOS Apple Silicon and Linux x64 releases; GitHub Releases attach
+matching `.tar.gz` archives and SHA-256 checksums. Building from a checkout
+also works (`scripts/install.sh`). See [Release](docs/how-to/release.md).

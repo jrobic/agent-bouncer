@@ -33,11 +33,12 @@ jobs:
           ./dist/bouncer --version
           ./dist/bouncer --version | grep -q "^bouncer ${GITHUB_REF_NAME#v} ("
           ! ./dist/bouncer --version | grep -q -- '-dirty'
-      - name: Name the artefact after the version and target
+      - name: Package the versioned artefact and checksum
         run: |
           mkdir -p out
-          NAME="bouncer-${GITHUB_REF_NAME#v}-${{ matrix.target }}"
-          cp dist/bouncer "out/$NAME"
+          NAME="bouncer-${GITHUB_REF_NAME#v}-${{ matrix.target }}.tar.gz"
+          tar -czf "out/$NAME" -C dist bouncer
+          tar -tvzf "out/$NAME"
           (cd out && shasum -a 256 "$NAME" > "$NAME.sha256")
       - uses: actions/upload-artifact@v4
         with:
@@ -58,7 +59,7 @@ jobs:
           merge-multiple: true
       - name: Release notes are the CHANGELOG section of this version
         run: scripts/changelog-section.sh "${GITHUB_REF_NAME#v}" > notes.md
-      - name: Create the GitHub Release with both binaries and their checksums
+      - name: Create the GitHub Release with both archives and their checksums
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -67,3 +68,44 @@ jobs:
             --title "bouncer $GITHUB_REF_NAME" \
             --notes-file notes.md \
             --verify-tag
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Render and publish the Homebrew formula
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          [ -n "$TOKEN" ] || { printf '%s\n' 'HOMEBREW_TAP_TOKEN is required' >&2; exit 1; }
+          git clone "https://x-access-token:${TOKEN}@github.com/jrobic/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          scripts/brew-formula.sh \
+            --name bouncer \
+            --repo jrobic/agent-bouncer \
+            --version "${GITHUB_REF_NAME#v}" \
+            --desc "Guard coding-agent tool calls with declarative policy" \
+            --homepage https://github.com/jrobic/agent-bouncer \
+            --license MIT \
+            --assets out \
+            --caveats-file scripts/homebrew-caveats.txt \
+            --target darwin-arm64 \
+            --target linux-x64 > tap/Formula/bouncer.rb
+          ruby -c tap/Formula/bouncer.rb
+          git -C tap config user.name "github-actions[bot]"
+          git -C tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C tap add Formula/bouncer.rb
+          if git -C tap diff --cached --quiet; then
+            echo "formula unchanged"
+          else
+            git -C tap commit -m "bouncer ${GITHUB_REF_NAME#v}"
+            git -C tap pull --rebase
+            git -C tap push
+          fi

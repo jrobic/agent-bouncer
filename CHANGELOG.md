@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Added the Homebrew tap for `brew install jrobic/tap/bouncer`.
+
+### Changed
+
+- Release artefacts are now `.tar.gz` archives with SHA-256 checksums.
+
 ## [1.0.0] - 2026-09-14
 
 First public release.

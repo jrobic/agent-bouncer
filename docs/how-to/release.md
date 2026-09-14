@@ -48,17 +48,26 @@ publish the tagged version as a GitHub Release.
 
    The `Release` workflow (`.github/workflows/release.yml`) builds the tagged
    commit on Linux x64 and macOS arm64, verifies each checksum, checks that
-   every artefact reports the tagged version without `-dirty`, and creates the
-   GitHub Release `v<version>` with `bouncer-<version>-<target>` and its
-   `.sha256` for both targets. The release body is the `CHANGELOG.md` section
+   every artefact reports the tagged version without `-dirty`, and packages
+   each executable as `bouncer-<version>-<target>.tar.gz` with its `.sha256`.
+   It creates the GitHub Release from those archives, then the `homebrew` job
+   renders the tap formula from the downloaded checksums and pushes it to
+   `jrobic/homebrew-tap`. The job fails when `HOMEBREW_TAP_TOKEN` is empty; it
+   never skips the tap update. The release body is the `CHANGELOG.md` section
    of that version (`scripts/changelog-section.sh <version>`); the workflow
    fails before publishing when that section is missing or empty.
+
+   Verify the tap after the workflow completes:
+
+   ```sh
+   brew update && brew info jrobic/tap/bouncer
+   ```
 
 ## Verify
 
 - `shasum -a 256 -c dist/bouncer.sha256` reports `dist/bouncer: OK`.
-- The GitHub Release `v<version>` lists two binaries and two `.sha256` files;
-  a downloaded pair passes `shasum -a 256 -c`.
+- The GitHub Release `v<version>` lists two `.tar.gz` archives and two
+  `.sha256` files; a downloaded archive and checksum pass `shasum -a 256 -c`.
 - `bouncer --version --json` reports the expected version, clean SHA, and build
   date.
 - `bouncer doctor` reports `[pass] binary` for the installed executable.
@@ -68,5 +77,6 @@ publish the tagged version as a GitHub Release.
 
 ---
 Source: package.json, scripts/build.ts, scripts/install.sh,
-scripts/changelog-section.sh, .github/workflows/release.yml, src/build-info.ts,
-src/adapter/doctor.ts, docs/reference/cli.md
+scripts/changelog-section.sh, scripts/brew-formula.sh,
+.github/workflows/release.yml, src/build-info.ts, src/adapter/doctor.ts,
+docs/reference/cli.md

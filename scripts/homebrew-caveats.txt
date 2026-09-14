@@ -1,0 +1,6 @@
+bouncer is installed at ${PREFIX}/bin/bouncer. Wire that path,
+never the Cellar path, into your harness (`bouncer doctor` checks it).
+pi/omp users: the printed extension bakes the absolute binary path; under
+Homebrew that path changes on upgrade. Export
+BOUNCER_BIN=${PREFIX}/bin/bouncer in your shell, or reprint the
+extension after each upgrade (`bouncer harness shim pi-agent`).

@@ -35,6 +35,18 @@ Every command below is written as bare `bouncer`, assuming it resolves on
 `PATH`. Before that's set up, substitute `./dist/bouncer` or the absolute
 path from step 1.
 
+## Homebrew
+
+On macOS Apple Silicon or Linux x64, install bouncer with:
+
+```sh
+brew install jrobic/tap/bouncer
+```
+
+Homebrew's stable executable is `$(brew --prefix)/bin/bouncer`. Use that path
+in hook commands, never a versioned Cellar path; the latter disappears on a
+Homebrew upgrade.
+
 ## Steps
 
 1. Build the binary from the repository root:
