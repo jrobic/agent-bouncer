@@ -80,7 +80,7 @@ jobs:
         with:
           path: out
           merge-multiple: true
-      - name: Render and publish the Homebrew formula
+      - name: Clone the tap and render the Homebrew formula
         env:
           TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -99,6 +99,17 @@ jobs:
             --target darwin-arm64 \
             --target linux-x64 > tap/Formula/bouncer.rb
           ruby -c tap/Formula/bouncer.rb
+      - name: The rendered formula installs and passes its test on this runner
+        env:
+          HOMEBREW_DEVELOPER: '1'
+        run: |
+          brew tap-new --no-git jrobic/verify
+          cp tap/Formula/bouncer.rb "$(brew --repository jrobic/verify)/Formula/bouncer.rb"
+          brew install jrobic/verify/bouncer
+          brew test jrobic/verify/bouncer
+          "$(brew --prefix)/bin/bouncer" --version | grep -q "^bouncer ${GITHUB_REF_NAME#v} ("
+      - name: Publish the formula to the tap
+        run: |
           git -C tap config user.name "github-actions[bot]"
           git -C tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C tap add Formula/bouncer.rb

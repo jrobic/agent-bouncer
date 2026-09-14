@@ -186,7 +186,7 @@ printf '%s\n' '  end'
 printf '\n'
 
 if [ -n "$caveats_file" ]; then
-  printf '%s\n' '  caveats do'
+  printf '%s\n' '  def caveats'
   printf '%s\n' '    <<~EOS'
   while IFS= read -r caveat_line || [ -n "$caveat_line" ]; do
     escaped_caveat=$(ruby_string "$caveat_line")

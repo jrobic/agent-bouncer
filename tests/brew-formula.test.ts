@@ -131,7 +131,7 @@ class Bouncer < Formula
     bin.install "bouncer"
   end
 
-  caveats do
+  def caveats
     <<~EOS
       bouncer is installed at #{HOMEBREW_PREFIX}/bin/bouncer. Wire that path,
       never the Cellar path, into your harness (\`bouncer doctor\` checks it).
