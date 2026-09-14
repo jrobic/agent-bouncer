@@ -17,6 +17,20 @@ as is. It carries **no policy** — `policy/harness/pi-agent.toml` is the one
 file that knows both pi-agent's own extension API and bouncer's abstract
 verdict vocabulary.
 
+## Homebrew
+
+On macOS Apple Silicon or Linux x64, install bouncer with:
+
+```sh
+brew install jrobic/tap/bouncer
+```
+
+Homebrew's stable executable is `$(brew --prefix)/bin/bouncer`; never wire a
+versioned Cellar path. The printed extension otherwise bakes a path that
+vanishes on upgrade. Export `BOUNCER_BIN=$(brew --prefix)/bin/bouncer` in the
+shell that starts pi or omp, or reprint the extension after every Homebrew
+upgrade.
+
 ## Steps
 
 1. Build the binary from the repository root:
