@@ -79,9 +79,9 @@ digest; the checksum verifies the compiled artifact before installation.
 Example values for a compiled binary; `sha` and `date` vary by build:
 ```console
 $ bouncer --version
-bouncer 1.1.2 (example build SHA, built example UTC time) baseline 0b41bf352a2a
+bouncer 1.2.0 (example build SHA, built example UTC time) baseline 0b41bf352a2a
 $ bouncer --version --json
-{"name":"bouncer","version":"1.1.2","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
+{"name":"bouncer","version":"1.2.0","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
 $ shasum -a 256 -c dist/bouncer.sha256
 dist/bouncer: OK
 ```
@@ -158,7 +158,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-Version 1.1.2. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
+Version 1.2.0. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
 installs macOS Apple Silicon and Linux x64 releases; GitHub Releases attach
 matching `.tar.gz` archives and SHA-256 checksums. Building from a checkout
 also works. See [Install](docs/how-to/install.md) and [Release](docs/how-to/release.md).
