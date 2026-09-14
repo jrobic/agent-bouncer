@@ -14,9 +14,11 @@ publish the tagged version as a GitHub Release.
 
 1. Choose the version bump before building. Use a patch version for policy rows,
    fixtures, documentation, build tooling, or scripts; use a minor version for
-   engine, adapter, CLI, or audit-log format changes. Do not create a major
-   version before the public release.
-   Add the `CHANGELOG.md` entry under the new version and move completed `Unreleased` items into it.
+   engine, adapter, CLI, or audit-log format changes; use a major version when
+   a documented contract breaks (CLI grammar, policy TOML schema, audit-log
+   shape, hook wiring).
+   Add the `CHANGELOG.md` entry under the new version and move completed
+   `Unreleased` items into it.
 
 2. From the repository root, run:
 

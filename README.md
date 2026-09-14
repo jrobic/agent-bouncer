@@ -77,9 +77,9 @@ digest; the checksum verifies the compiled artifact before installation.
 Example values for a compiled binary; `sha` and `date` vary by build:
 ```console
 $ bouncer --version
-bouncer 0.2.0 (example build SHA, built example UTC time) baseline 0b41bf352a2a
+bouncer 1.0.0 (example build SHA, built example UTC time) baseline 0b41bf352a2a
 $ bouncer --version --json
-{"name":"bouncer","version":"0.2.0","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
+{"name":"bouncer","version":"1.0.0","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
 $ shasum -a 256 -c dist/bouncer.sha256
 dist/bouncer: OK
 ```
@@ -155,5 +155,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-Version 0.2.0. Build and install from a checkout (`scripts/install.sh`); no
-packaged binary is published yet. See [Release](docs/how-to/release.md).
+Version 1.0.0. Binaries for Linux x64 and macOS arm64 with SHA-256 checksums
+are attached to each [GitHub Release](https://github.com/jrobic/agent-bouncer/releases);
+building from a checkout works too (`scripts/install.sh`). See
+[Release](docs/how-to/release.md).
