@@ -103,6 +103,11 @@ jobs:
         env:
           HOMEBREW_DEVELOPER: '1'
         run: |
+          # ubuntu runner images ship Homebrew at /home/linuxbrew but leave it off PATH.
+          if ! command -v brew >/dev/null 2>&1; then
+            [ -x /home/linuxbrew/.linuxbrew/bin/brew ] || { printf '%s\n' 'Homebrew is not installed on this runner' >&2; exit 1; }
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
           brew tap-new --no-git jrobic/verify
           cp tap/Formula/bouncer.rb "$(brew --repository jrobic/verify)/Formula/bouncer.rb"
           brew install jrobic/verify/bouncer
