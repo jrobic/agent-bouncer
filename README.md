@@ -30,7 +30,7 @@ allow
 ![Terminal recording of bouncer decisions](docs/assets/readme/demo.gif)
 
 *Terminal recording: a deny, an ask, a blocked secret read, an allow, and
-`doctor` on a wired profile; recorded at `03b00f3`.*
+`doctor` on a wired profile; recorded at `8d2d88c`.*
 
 ## Harnesses
 
