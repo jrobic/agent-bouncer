@@ -51,11 +51,13 @@ publish the tagged version as a GitHub Release.
    every artefact reports the tagged version without `-dirty`, and packages
    each executable as `bouncer-<version>-<target>.tar.gz` with its `.sha256`.
    It creates the GitHub Release from those archives, then the `homebrew` job
-   renders the tap formula from the downloaded checksums and pushes it to
-   `jrobic/homebrew-tap`. The job fails when `HOMEBREW_TAP_TOKEN` is empty; it
-   never skips the tap update. The release body is the `CHANGELOG.md` section
-   of that version (`scripts/changelog-section.sh <version>`); the workflow
-   fails before publishing when that section is missing or empty.
+   renders the tap formula from the downloaded checksums, installs it from a
+   throwaway tap on the runner (`brew install`, `brew test`, `--version` equals
+   the tag) and only then pushes it to `jrobic/homebrew-tap`. The job fails
+   when `HOMEBREW_TAP_TOKEN` is empty; it never skips the tap update. The
+   release body is the `CHANGELOG.md` section of that version
+   (`scripts/changelog-section.sh <version>`); the workflow fails before
+   publishing when that section is missing or empty.
 
    Verify the tap after the workflow completes:
 
