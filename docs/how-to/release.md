@@ -55,7 +55,7 @@ Homebrew update.
    brew update && brew info jrobic/tap/bouncer
    ```
 
-4. Update your own machine:
+4. [Update your own machine](install.md#homebrew):
 
    ```sh
    brew upgrade jrobic/tap/bouncer

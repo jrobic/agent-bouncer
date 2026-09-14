@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { access, chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpDir } from './tmp.ts';
 
@@ -16,6 +16,7 @@ type CommandResult = {
 type ArtifactOptions = {
   readonly checksum?: 'invalid';
   readonly dirty?: boolean;
+  readonly markerPath?: string;
   readonly manifestPath?: string;
   readonly sha: string;
   readonly version?: string;
@@ -69,10 +70,12 @@ async function writeArtifact(options: ArtifactOptions): Promise<string> {
     policy: { baseline: 'fixture' },
   });
 
+  const markerWrite = options.markerPath === undefined ? '' : `: > '${options.markerPath}'\n`;
+
   await writeFile(
     binary,
     `#!/usr/bin/env bash
-if [ "${'$'}{1:-}" = "--version" ]; then
+${markerWrite}if [ "${'$'}{1:-}" = "--version" ]; then
   if [ "${'$'}{2:-}" = "--json" ]; then
     printf '%s\\n' '${versionJson}'
     exit 0
@@ -97,6 +100,15 @@ exit 64
   return artifactDir;
 }
 
+async function exists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function runTagRelease(repo: string, artifactDir: string, args: readonly string[] = []): Promise<CommandResult> {
   return run(['/bin/bash', 'scripts/tag-release.sh', ...args], {
     cwd: repo,
@@ -104,8 +116,8 @@ function runTagRelease(repo: string, artifactDir: string, args: readonly string[
   });
 }
 
-async function expectNoTag(repo: string, version = '9.9.9'): Promise<void> {
-  expect(await git(repo, 'tag', '--list', `v${version}`)).toBe('');
+async function expectNoTags(repo: string): Promise<void> {
+  expect(await git(repo, 'tag', '--list')).toBe('');
 }
 
 describe('scripts/tag-release.sh', () => {
@@ -129,7 +141,19 @@ describe('scripts/tag-release.sh', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('a release tag never comes from a dirty tree');
-    await expectNoTag(repo);
+    await expectNoTags(repo);
+  });
+
+  test('refuses a dirty working tree without creating a tag', async () => {
+    const { head, repo } = await createRepository();
+    const artifactDir = await writeArtifact({ sha: head });
+    await writeFile(join(repo, 'untracked.txt'), 'dirty tree', 'utf8');
+
+    const result = await runTagRelease(repo, artifactDir);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('the working tree is dirty');
+    await expectNoTags(repo);
   });
 
   test('refuses an artifact that was not built from HEAD without creating a tag', async () => {
@@ -140,31 +164,35 @@ describe('scripts/tag-release.sh', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('does not match HEAD');
-    await expectNoTag(repo);
+    await expectNoTags(repo);
   });
 
   test('refuses an existing release tag without replacing it', async () => {
     const { head, repo } = await createRepository();
     const artifactDir = await writeArtifact({ sha: head });
     await git(repo, 'tag', '-a', 'v9.9.9', '-m', 'existing release tag');
-    const existingTag = await git(repo, 'rev-parse', 'v9.9.9^{}');
+    const existingTagOid = await git(repo, 'rev-parse', 'v9.9.9');
+    const existingTagList = await git(repo, 'tag', '--list');
 
     const result = await runTagRelease(repo, artifactDir);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('tag v9.9.9 already exists');
-    expect(await git(repo, 'rev-parse', 'v9.9.9^{}')).toBe(existingTag);
+    expect(await git(repo, 'tag', '--list')).toBe(existingTagList);
+    expect(await git(repo, 'rev-parse', 'v9.9.9')).toBe(existingTagOid);
   });
 
   test('refuses a checksum mismatch before creating a tag', async () => {
     const { head, repo } = await createRepository();
-    const artifactDir = await writeArtifact({ checksum: 'invalid', sha: head });
+    const marker = join(tmpDir('bouncer-tag-release-marker-'), 'artifact-executed');
+    const artifactDir = await writeArtifact({ checksum: 'invalid', markerPath: marker, sha: head });
 
     const result = await runTagRelease(repo, artifactDir);
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('artifact checksum verification failed');
-    await expectNoTag(repo);
+    await expectNoTags(repo);
+    expect(await exists(marker)).toBe(false);
   });
 
   test('shows usage and exits 0 for both help flags', async () => {
@@ -187,6 +215,6 @@ describe('scripts/tag-release.sh', () => {
     const result = await runTagRelease(repo, artifactDir, ['--unknown']);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain('Usage: scripts/tag-release.sh');
+    await expectNoTags(repo);
   });
 });

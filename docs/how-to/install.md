@@ -1,68 +1,84 @@
 # Install bouncer
 
-Goal: install a verified `bouncer` binary and wire a stable executable path into
-your coding-agent harness.
+Goal: install a verified `bouncer` binary, preserve a stable executable path,
+and wire that path into a coding-agent harness.
 
 ## Prerequisites
 
-- Homebrew on macOS Apple Silicon or Linux x64, or a checkout on a platform Bun
-  supports.
-- A harness wiring destination. See the relevant wiring how-to before changing
-  its configuration.
+- [Homebrew](https://brew.sh/) for the published macOS Apple Silicon or Linux
+  x64 release.
+- [Bun](https://bun.sh/) to build from a checkout on any platform Bun supports.
+- One harness configuration to wire. The harness-specific how-tos define the
+  configuration each harness needs.
 
-## Steps
+## Homebrew
 
-1. On macOS Apple Silicon or Linux x64, install the published release with
-   Homebrew:
+Homebrew publishes releases for macOS Apple Silicon and Linux x64. Install the
+current release, then keep its prefix path rather than a versioned Cellar path:
 
-   ```sh
-   brew install jrobic/tap/bouncer
-   ```
+```sh
+brew install jrobic/tap/bouncer
+export BOUNCER_BIN="$(brew --prefix)/bin/bouncer"
+"$BOUNCER_BIN" --version
+```
 
-2. Use Homebrew's stable prefix path when wiring the binary. Never wire a
-   versioned Cellar path: Homebrew replaces it on upgrade.
+Upgrade the installed release when a newer one is available:
 
-   ```sh
-   "$(brew --prefix)/bin/bouncer" --version
-   ```
+```sh
+brew upgrade jrobic/tap/bouncer
+```
 
-3. For pi-agent or omp, print the extension with that stable path baked in:
+## From a checkout
 
-   ```sh
-   bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer" > ~/.omp/agent/extensions/bouncer.ts
-   ```
+On another platform, build and verify the binary from a checkout:
 
-   You can instead export `BOUNCER_BIN` for the process that starts pi-agent or
-   omp.
+```sh
+git clone https://github.com/jrobic/agent-bouncer.git
+cd agent-bouncer
+bun install
+bun run build
+shasum -a 256 -c dist/bouncer.sha256
+export BOUNCER_BIN="$PWD/dist/bouncer"
+"$BOUNCER_BIN" --version
+```
 
-4. Upgrade the installed release when a newer one is available:
+`BOUNCER_BIN` is the absolute path to the verified `dist/bouncer` binary. Copy
+that binary with `install -m 0755` only if the copied location is the path you
+will wire instead.
 
-   ```sh
-   brew upgrade jrobic/tap/bouncer
-   ```
+## Wire the binary
 
-5. On another platform, build from a checkout instead:
+Choose the relevant harness guide for its configuration:
 
-   ```sh
-   bun install
-   bun run build
-   shasum -a 256 -c dist/bouncer.sha256
-   ```
+- [Claude Code](wire-into-claude-code.md)
+- [Codex CLI](wire-into-codex.md)
+- [pi-agent and omp](wire-into-pi-agent.md)
 
-   Wire the absolute path of `dist/bouncer`, or copy it to a location you
-   control with `install -m 0755` before wiring that copy.
+For pi-agent or omp, choose its agent directory, create the extensions
+directory, and print the shim with the selected binary path baked in:
+
+```sh
+export PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}"
+mkdir -p "$PI_CODING_AGENT_DIR/extensions"
+"$BOUNCER_BIN" harness shim pi-agent --bin "$BOUNCER_BIN" > "$PI_CODING_AGENT_DIR/extensions/bouncer.ts"
+```
 
 ## Verify
 
+The two installation routes set `BOUNCER_BIN` above. Verify that binary and the
+wiring that invokes it:
+
 ```sh
-bouncer --version
-bouncer doctor
+"$BOUNCER_BIN" --version
+"$BOUNCER_BIN" doctor
+PI_CODING_AGENT_DIR="$PI_CODING_AGENT_DIR" "$BOUNCER_BIN" doctor --harness pi-agent
 ```
 
 The version line identifies the release version, clean build SHA, and policy
-digest. After wiring, `doctor` reports `[pass] binary` for the executable your
-harness starts.
+digest. After wiring, the relevant `doctor` command reports `[pass] binary` for
+the executable the harness starts.
 
 ---
-Source: package.json, scripts/build.ts, docs/how-to/wire-into-claude-code.md,
-docs/how-to/wire-into-codex.md, docs/how-to/wire-into-pi-agent.md
+Source: package.json, scripts/build.ts, scripts/tag-release.sh,
+docs/how-to/wire-into-claude-code.md, docs/how-to/wire-into-codex.md,
+docs/how-to/wire-into-pi-agent.md

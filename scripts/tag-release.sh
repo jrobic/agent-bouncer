@@ -90,6 +90,10 @@ if git rev-parse -q --verify "refs/tags/v$ARTIFACT_VERSION" >/dev/null; then
   fail "tag v$ARTIFACT_VERSION already exists"
 fi
 
+if [ -n "$(git status --porcelain)" ]; then
+  fail 'the working tree is dirty'
+fi
+
 git tag -a "v$ARTIFACT_VERSION" -m "bouncer $ARTIFACT_VERSION"
 printf 'v%s\n' "$ARTIFACT_VERSION"
 "$ARTIFACT" --version
