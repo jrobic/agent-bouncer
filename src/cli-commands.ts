@@ -677,12 +677,16 @@ export async function runHarnessList(): Promise<CommandResult> {
 }
 
 /**
- * `bouncer harness shim <id>` (ADR-0006 § 7, ticket 15c) — prints the
- * embedded shim for an in-process harness (pi-agent today), `BOUNCER`
- * baked to THIS process's own absolute path (`process.execPath`),
- * overridable at the shim's own runtime by `BOUNCER_BIN`. A usage error
- * (never a crash) for a harness with no printable shim — a stdin-json
- * hook harness (claude-code, codex), or an id nothing embeds at all.
+ * `bouncer harness shim <id> [--bin <absolute path>]` (ADR-0006 § 7,
+ * ticket 15c) — prints the embedded shim for an in-process harness
+ * (pi-agent today), `BOUNCER` baked to `bouncerPath`. The CLI defaults
+ * that path to this process's own absolute path (`process.execPath`),
+ * but may preserve a stable symlink path passed through `--bin`.
+ * `BOUNCER_BIN` still overrides it at the shim's own runtime. A usage
+ * error (never a crash) for a harness with no printable shim — a
+ * stdin-json hook harness (claude-code, codex), or an id nothing embeds
+ * at all.
+ *
  * cli.ts writes the returned text to stdout WITHOUT an extra trailing
  * newline: the printed shim already ends in one (an ordinary source
  * file does), and `doctor --harness <id>`'s own `wiring:shim` check
@@ -690,8 +694,8 @@ export async function runHarnessList(): Promise<CommandResult> {
  * redirected this exact output into — a second, `console.log`-added
  * newline would make every install "drift" by construction.
  */
-export function runHarnessShim(harnessId: string): CommandResult {
-  const rendered = renderShim(harnessId, process.execPath);
+export function runHarnessShim(harnessId: string, bouncerPath = process.execPath): CommandResult {
+  const rendered = renderShim(harnessId, bouncerPath);
   if (rendered === undefined) {
     return { text: `bouncer: harness ${JSON.stringify(harnessId)} has no printable shim`, ok: false };
   }

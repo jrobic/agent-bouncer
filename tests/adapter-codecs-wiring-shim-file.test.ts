@@ -6,11 +6,11 @@
 // a proof of what `bouncer doctor --harness pi-agent` actually reports.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runDoctorChecks } from '../src/adapter/doctor.ts';
 import { renderShim } from '../src/adapter/shim.ts';
-import { runPrintCanary } from '../src/cli-commands.ts';
+import { runHarnessShim, runPrintCanary } from '../src/cli-commands.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
@@ -64,6 +64,39 @@ describe('shim-file wiring: identical to the printed shim', () => {
       // shim-file carries no per-event settings shape — no top-level
       // "settings" check exists at all for this wiring codec.
       expect(report.checks.find((c) => c.id === 'settings')).toBeUndefined();
+    } finally {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+  });
+});
+
+describe('shim-file wiring: a stable symlink baked through --bin', () => {
+  test('wiring:shim preserves the symlink spelling while wiring:binary follows its target', async () => {
+    const agentDir = scratchAgentDir();
+    try {
+      const targetPath = await writeExecutableBouncer(agentDir);
+      const stablePath = join(agentDir, 'bouncer');
+      await symlink(targetPath, stablePath);
+      const printed = runHarnessShim('pi-agent', stablePath);
+      expect(printed).toMatchObject({ ok: true });
+      await writeShimFile(agentDir, printed.text);
+      process.env.PI_CODING_AGENT_DIR = agentDir;
+
+      const resolvedReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
+      expect(resolvedReport.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
+      expect(resolvedReport.checks.find((c) => c.id === 'wiring:binary')).toMatchObject({
+        ok: true,
+        message: `${stablePath} is executable`,
+      });
+
+      await unlink(stablePath);
+
+      const brokenReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
+      expect(brokenReport.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
+      expect(brokenReport.checks.find((c) => c.id === 'wiring:binary')).toMatchObject({
+        ok: false,
+        message: `${stablePath} is not executable (or does not exist) — every tool call would fail closed`,
+      });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
     }
