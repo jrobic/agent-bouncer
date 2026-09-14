@@ -6,7 +6,7 @@
 // a proof of what `bouncer doctor --harness pi-agent` actually reports.
 
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runDoctorChecks } from '../src/adapter/doctor.ts';
 import { renderShim } from '../src/adapter/shim.ts';
@@ -17,6 +17,28 @@ import type { HarnessDeclaration } from '../src/policy/schema.ts';
 import { tmpDir } from './tmp.ts';
 
 const PI_AGENT_HARNESS: HarnessDeclaration = BASELINE.rules.harness.find((h) => h.id === 'pi-agent')!;
+
+const PROJECT_ROOT = join(import.meta.dir, '..');
+
+type SourceCliResult = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+async function printShimWithBin(bouncerPath: string): Promise<SourceCliResult> {
+  const child = Bun.spawn(['bun', 'run', 'src/cli.ts', 'harness', 'shim', 'pi-agent', '--bin', bouncerPath], {
+    cwd: PROJECT_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { exitCode, stdout, stderr };
+}
 
 function cleanLoadResult(): LoadResult {
   return {
@@ -64,6 +86,41 @@ describe('shim-file wiring: identical to the printed shim', () => {
       // shim-file carries no per-event settings shape — no top-level
       // "settings" check exists at all for this wiring codec.
       expect(report.checks.find((c) => c.id === 'settings')).toBeUndefined();
+    } finally {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+  });
+});
+
+describe('shim-file wiring: a stable symlink baked through --bin', () => {
+  test('wiring:shim preserves the symlink spelling while wiring:binary follows its target', async () => {
+    const agentDir = scratchAgentDir();
+    try {
+      const targetPath = await writeExecutableBouncer(agentDir);
+      const stablePath = join(agentDir, 'bouncer');
+      await symlink(targetPath, stablePath);
+      const printed = await printShimWithBin(stablePath);
+      expect(printed).toMatchObject({ exitCode: 0, stderr: '' });
+      expect(printed.stdout).toContain(`const BOUNCER = process.env.BOUNCER_BIN ?? ${JSON.stringify(stablePath)};`);
+      await writeShimFile(agentDir, printed.stdout);
+      process.env.PI_CODING_AGENT_DIR = agentDir;
+
+      const resolvedReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
+      expect(resolvedReport.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
+      expect(resolvedReport.checks.find((c) => c.id === 'wiring:binary')).toMatchObject({
+        ok: true,
+        message: `${stablePath} is executable`,
+      });
+
+      await unlink(targetPath);
+      expect((await lstat(stablePath)).isSymbolicLink()).toBe(true);
+
+      const brokenReport = await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS);
+      expect(brokenReport.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
+      expect(brokenReport.checks.find((c) => c.id === 'wiring:binary')).toMatchObject({
+        ok: false,
+        message: `${stablePath} is not executable (or does not exist) — every tool call would fail closed`,
+      });
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
     }

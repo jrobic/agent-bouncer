@@ -10,6 +10,7 @@
 // account's log for rule tuning. `--harness <id>` (default `claude-code`)
 // is accepted by `run`, `check`, `doctor`, and `audit`.
 
+import { isAbsolute } from 'node:path';
 import { HOOK_NAME } from './adapter/constants.ts';
 import { run, type RunOptions, type RunResult } from './adapter/run.ts';
 import { formatVersion, versionInfo } from './build-info.ts';
@@ -137,7 +138,7 @@ async function main(): Promise<void> {
   }
 
   if (command === 'harness') {
-    const [sub, harnessId] = rest;
+    const [sub, harnessId, ...shimArgs] = rest;
     if (sub === 'list') {
       const { text, ok } = await runHarnessList();
       console.log(text);
@@ -148,7 +149,20 @@ async function main(): Promise<void> {
         console.error(`${HOOK_NAME}: harness shim requires an id argument, e.g. harness shim pi-agent`);
         process.exit(1);
       }
-      const { text, ok } = runHarnessShim(harnessId);
+      let bouncerPath = process.execPath;
+      if (shimArgs.length > 0) {
+        const [flag, value] = shimArgs;
+        if (shimArgs.length !== 2 || flag !== '--bin' || value === undefined) {
+          console.error(`${HOOK_NAME}: harness shim --bin accepts exactly one absolute path`);
+          process.exit(1);
+        }
+        if (!isAbsolute(value)) {
+          console.error(`${HOOK_NAME}: harness shim --bin path must be absolute`);
+          process.exit(1);
+        }
+        bouncerPath = value;
+      }
+      const { text, ok } = runHarnessShim(harnessId, bouncerPath);
       // Byte-exact on success (see runHarnessShim's own comment):
       // process.stdout.write, never console.log, so a shell redirect
       // (`> extensions/bouncer.ts`) never gains an extra trailing
@@ -160,7 +174,7 @@ async function main(): Promise<void> {
       else console.log(text);
       process.exit(ok ? 0 : 1);
     }
-    usageError(sub, 'list | shim <id>');
+    usageError(sub, 'list | shim <id> [--bin <absolute path>]');
   }
 
   if (command === 'audit') {

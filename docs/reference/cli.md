@@ -747,18 +747,31 @@ Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7,
 ticket 15c: pi-agent and omp — they share one printed file) — the dumb,
 policy-free extension that forwards the harness's own tool-call/session-
 start event to `bouncer run --harness <id>` and returns bouncer's stdout
-to the harness as is. `BOUNCER` is baked to THIS process's own absolute
-path (`process.execPath`) at print time, overridable at the shim's own
-RUNTIME by the `BOUNCER_BIN` environment variable — always run this
-through the compiled binary you intend to keep installed, never a
-`bun run src/cli.ts` source invocation (that bakes in `bun`'s own path
-instead of a useful one).
+to the harness as is. By default, `BOUNCER` is baked to THIS process's
+absolute path (`process.execPath`) at print time, overridable at the
+shim's own RUNTIME by `BOUNCER_BIN`.
+
+Use `--bin <absolute path>` when the printing binary lives at a
+versioned path such as a Homebrew Cellar release. The literal path is
+baked without `realpath` resolution, so a stable symlink such as
+`/opt/homebrew/bin/bouncer` remains the shim's fallback. `doctor
+--harness pi-agent` re-renders against that installed literal path and
+then checks whether it resolves to an executable.
 
 ```sh
-bouncer harness shim <id>
+bouncer harness shim <id> [--bin <absolute path>]
 ```
 
-**Flags:** none.
+**Flags:**
+
+- `--bin <absolute path>` — bake this literal absolute path instead of
+  `process.execPath`; when present, the flag accepts exactly one value.
+
+Missing values, relative paths, repeated flags, and other extra
+arguments are usage errors. The default remains `process.execPath`;
+always run the command through the compiled binary you intend to keep
+installed, never `bun run src/cli.ts` (that bakes in `bun`'s own path
+instead of a useful one).
 
 **Output:** the shim source, verbatim, with a trailing newline (no extra
 one added on top of it — `doctor --harness <id>`'s own `wiring:shim`
@@ -769,12 +782,15 @@ embedded shim (a stdin-json hook harness, or an undeclared id) is a
 usage error instead:
 
 ```sh
+$ bouncer harness shim pi-agent --bin bouncer
+bouncer: harness shim --bin path must be absolute
 $ bouncer harness shim pi-agent > ~/.pi/agent/extensions/bouncer.ts
 $ bouncer harness shim codex
 bouncer: harness "codex" has no printable shim
 ```
 
-**Exit code:** 0 when a shim was printed; 1 for a harness with none.
+**Exit code:** 0 when a shim was printed; 1 for an invalid `--bin`
+grammar or a harness with no printable shim.
 
 ---
 Source: src/cli.ts, src/build-info.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/digest.ts, src/policy/harness.ts
