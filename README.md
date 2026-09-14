@@ -8,7 +8,7 @@ and prompt-injection signatures.
 ## At a glance
 
 - Guards [Claude Code, Codex, and pi/omp](#harnesses) today.
-- Build with `bun run build && scripts/install.sh`, then follow a [wiring how-to](docs/how-to/wire-into-claude-code.md).
+- Install with `brew install jrobic/tap/bouncer` (or build from a checkout), then follow a wiring how-to.
 - Verify what you run: [`bouncer --version`](#trust), `dist/bouncer.sha256`, and the policy digest.
 
 
@@ -56,15 +56,8 @@ On macOS Apple Silicon or Linux x64, install the current release from Homebrew:
 brew install jrobic/tap/bouncer
 ```
 
-Homebrew supports macOS Apple Silicon and Linux x64. On other platforms, build
-from the checkout instead.
-
-Or build from a checkout with Bun and dependencies installed:
-
-```sh
-bun run build
-scripts/install.sh
-```
+On other platforms, build from a checkout. [Install bouncer](docs/how-to/install.md)
+covers both paths, checksum verification, and the stable path to wire.
 
 Then wire the installed binary into your adapted harness and verify it:
 
@@ -140,7 +133,8 @@ The engine returns a harness response and records guarded verdicts in JSONL.
 
 | I want to... | Read |
 | --- | --- |
-| build, install, and create a local release | [Release](docs/how-to/release.md) |
+| install bouncer | [Install](docs/how-to/install.md) |
+| build and publish a release | [Release](docs/how-to/release.md) |
 | wire bouncer into a Claude Code session | [Wire into Claude Code](docs/how-to/wire-into-claude-code.md) |
 | wire bouncer into Codex CLI | [Wire into Codex CLI](docs/how-to/wire-into-codex.md) |
 | wire bouncer into pi-agent or omp | [Wire into pi-agent and omp](docs/how-to/wire-into-pi-agent.md) |
@@ -167,4 +161,4 @@ MIT — see [LICENSE](LICENSE).
 Version 1.1.2. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
 installs macOS Apple Silicon and Linux x64 releases; GitHub Releases attach
 matching `.tar.gz` archives and SHA-256 checksums. Building from a checkout
-also works (`scripts/install.sh`). See [Release](docs/how-to/release.md).
+also works. See [Install](docs/how-to/install.md) and [Release](docs/how-to/release.md).

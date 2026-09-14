@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `docs/how-to/install.md` describes Homebrew and checkout installation paths.
+
+### Changed
+
+- `scripts/tag-release.sh` is the maintainer's build, checksum, provenance, and
+  local-tag guard.
+
+### Removed
+
+- `scripts/install.sh`, the local installer. Use Homebrew, or run `bun run
+  build` and wire `dist/bouncer`.
+
 ## [1.1.2] - 2026-09-14
 
 ### Fixed
