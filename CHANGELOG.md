@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-14
+
+### Fixed
+
+- The release workflow's Homebrew install gate now puts the runner's
+  preinstalled Homebrew on `PATH`; the 1.1.1 tap update failed before running
+  (`brew: command not found`), so the tap still served the 1.1.0 formula.
+
 ## [1.1.1] - 2026-09-14
 
 ### Fixed
@@ -85,7 +93,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/jrobic/agent-bouncer/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/jrobic/agent-bouncer/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/jrobic/agent-bouncer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jrobic/agent-bouncer/compare/v0.2.0...v1.0.0
