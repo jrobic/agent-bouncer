@@ -1,14 +1,13 @@
-# Build, install and publish a bouncer release
+# Build, tag, and publish a bouncer release
 
-Goal: produce an identifiable executable, verify its checksum, install it at one
-chosen destination, verify the current profile against that executable, and
-publish the tagged version as a GitHub Release.
+Goal: produce an identifiable executable, verify its checksum, create its
+annotated release tag, and publish the tagged version as a GitHub Release and
+Homebrew update.
 
 ## Prerequisites
 
 - A committed version bump in `package.json`.
 - Bun and the repository dependencies installed.
-- The destination path where the executable will be installed.
 
 ## Steps
 
@@ -23,22 +22,13 @@ publish the tagged version as a GitHub Release.
 2. From the repository root, run:
 
    ```sh
-   scripts/install.sh --tag
+   scripts/tag-release.sh
    ```
 
-   The script builds `dist/bouncer`, verifies `dist/bouncer.sha256`, rejects a
-   dirty artifact unless `--allow-dirty` is explicit, retains one backup of an
-   existing destination, atomically installs the verified executable, creates
-   the annotated local `v<version>` tag, and runs `doctor` for the current
-   profile. It never pushes a tag.
-
-   The default destination is `$HOME/.local/bin/bouncer`. Pass `--dest <path>`
-   for another destination, or `--from <dir>` to install an already-built
-   artifact containing `bouncer` and `bouncer.sha256`.
-
-   With `--tag`, the script refuses a dirty tree, an existing `v<version>` tag,
-   or an artifact whose build SHA differs from `HEAD`. `--from` accepts the
-   `dist/` output produced by `bun run build`.
+   The script builds `dist/bouncer`, verifies `dist/bouncer.sha256`, reads the
+   artifact's version metadata, rejects a dirty build, rejects an artifact whose
+   build SHA differs from `HEAD`, rejects an existing `v<version>` tag, and
+   creates the annotated local tag. It never pushes a tag.
 
 3. Publish. Push the tag to the repository:
 
@@ -65,20 +55,25 @@ publish the tagged version as a GitHub Release.
    brew update && brew info jrobic/tap/bouncer
    ```
 
+4. [Update your own machine](install.md#homebrew):
+
+   ```sh
+   brew upgrade jrobic/tap/bouncer
+   bouncer doctor
+   ```
+
 ## Verify
 
 - `shasum -a 256 -c dist/bouncer.sha256` reports `dist/bouncer: OK`.
-- The GitHub Release `v<version>` lists two `.tar.gz` archives and two
-  `.sha256` files; a downloaded archive and checksum pass `shasum -a 256 -c`.
 - `bouncer --version --json` reports the expected version, clean SHA, and build
   date.
-- `bouncer doctor` reports `[pass] binary` for the installed executable.
-
-  A `[warn] binary` means the executable is a source or dirty build. It remains
-  usable for development, but is not a verified release.
+- The GitHub Release `v<version>` lists two `.tar.gz` archives and two
+  `.sha256` files; a downloaded archive and checksum pass `shasum -a 256 -c`.
+- After the Homebrew upgrade, `bouncer doctor` reports `[pass] binary` for the
+  installed executable.
 
 ---
-Source: package.json, scripts/build.ts, scripts/install.sh,
+Source: package.json, scripts/build.ts, scripts/tag-release.sh,
 scripts/changelog-section.sh, scripts/brew-formula.sh,
 .github/workflows/release.yml, src/build-info.ts, src/adapter/doctor.ts,
 docs/reference/cli.md

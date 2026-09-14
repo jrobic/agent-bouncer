@@ -19,38 +19,30 @@ verdict vocabulary.
 
 ## Homebrew
 
-On macOS Apple Silicon or Linux x64, install bouncer with:
-
-```sh
-brew install jrobic/tap/bouncer
-```
-
-Homebrew's stable executable is `$(brew --prefix)/bin/bouncer`; never wire a
-versioned Cellar path. The printed extension otherwise bakes a path that
-vanishes on upgrade. Print it with that stable path baked in:
+Installed with Homebrew? Use the stable `$(brew --prefix)/bin/bouncer` path
+below; see [Install](install.md). Print the extension with:
 
 ```sh
 bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
 ```
 
-Alternatively, export `BOUNCER_BIN=$(brew --prefix)/bin/bouncer` in the shell
-that starts pi or omp (the extension honours it at runtime), or reprint the
-extension after every Homebrew upgrade.
-
 ## Steps
 
-1. Build the binary from the repository root:
+1. Choose the compiled binary to wire:
 
-   ```sh
-   bun run build
-   ```
+   - Installed with Homebrew: use `$(brew --prefix)/bin/bouncer`.
+   - From a checkout: build the binary from the repository root:
 
-   This produces `dist/bouncer`. `bouncer harness shim pi-agent` bakes
-   **this process's own absolute path** (`process.execPath`) into the
-   printed shim's `BOUNCER` constant — always run it through the compiled
-   binary you intend to keep installed, never a `bun run src/cli.ts`
-   source invocation (that would bake in `bun`'s own path instead of a
-   useful one).
+     ```sh
+     bun run build
+     ```
+
+     This produces `dist/bouncer`. `bouncer harness shim pi-agent` bakes
+     **this process's own absolute path** (`process.execPath`) into the
+     printed shim's `BOUNCER` constant — always run it through the compiled
+     binary you intend to keep installed, never a `bun run src/cli.ts`
+     source invocation (that would bake in `bun`'s own path instead of a
+     useful one).
 
 2. Decide the target `$PI_CODING_AGENT_DIR` — `~/.omp/agent` or
    `~/.pi/agent` for your primary account (both share one convention,

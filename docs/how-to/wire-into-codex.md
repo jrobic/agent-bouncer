@@ -37,29 +37,25 @@ path from step 1.
 
 ## Homebrew
 
-On macOS Apple Silicon or Linux x64, install bouncer with:
-
-```sh
-brew install jrobic/tap/bouncer
-```
-
-Homebrew's stable executable is `$(brew --prefix)/bin/bouncer`. Use that path
-in hook commands, never a versioned Cellar path; the latter disappears on a
-Homebrew upgrade.
+Installed with Homebrew? Use the stable `$(brew --prefix)/bin/bouncer` path
+below; see [Install](install.md).
 
 ## Steps
 
-1. Build the binary from the repository root:
+1. Choose the compiled binary to wire:
 
-   ```sh
-   bun run build
-   ```
+   - Installed with Homebrew: use `$(brew --prefix)/bin/bouncer`.
+   - From a checkout: build the binary from the repository root:
 
-   This produces `dist/bouncer`. Resolve its absolute path:
+     ```sh
+     bun run build
+     ```
 
-   ```sh
-   realpath dist/bouncer
-   ```
+     This produces `dist/bouncer`. Resolve its absolute path:
+
+     ```sh
+     realpath dist/bouncer
+     ```
 
 2. Decide the target `$CODEX_HOME` — `~/.codex` for your primary account,
    or a second directory (`CODEX_HOME=/path/to/other`) for a client seat
