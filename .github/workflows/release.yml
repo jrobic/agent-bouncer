@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-latest
+            target: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.x'
+      - run: bun install --frozen-lockfile
+      - run: bun run verify
+      - run: bun run build
+      - run: shasum -a 256 -c dist/bouncer.sha256
+      - name: The artefact identifies the tagged version from a clean tree
+        run: |
+          ./dist/bouncer --version
+          ./dist/bouncer --version | grep -q "^bouncer ${GITHUB_REF_NAME#v} ("
+          ! ./dist/bouncer --version | grep -q -- '-dirty'
+      - name: Name the artefact after the version and target
+        run: |
+          mkdir -p out
+          NAME="bouncer-${GITHUB_REF_NAME#v}-${{ matrix.target }}"
+          cp dist/bouncer "out/$NAME"
+          (cd out && shasum -a 256 "$NAME" > "$NAME.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Release notes are the CHANGELOG section of this version
+        run: scripts/changelog-section.sh "${GITHUB_REF_NAME#v}" > notes.md
+      - name: Create the GitHub Release with both binaries and their checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l out
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --title "bouncer $GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --verify-tag

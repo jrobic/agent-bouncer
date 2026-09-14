@@ -1,7 +1,8 @@
-# Build and install a bouncer release
+# Build, install and publish a bouncer release
 
 Goal: produce an identifiable executable, verify its checksum, install it at one
-chosen destination, and verify the current profile against that executable.
+chosen destination, verify the current profile against that executable, and
+publish the tagged version as a GitHub Release.
 
 ## Prerequisites
 
@@ -37,9 +38,25 @@ chosen destination, and verify the current profile against that executable.
    or an artifact whose build SHA differs from `HEAD`. `--from` accepts the
    `dist/` output produced by `bun run build`.
 
+3. Publish. Push the tag to the repository:
+
+   ```sh
+   git push origin v<version>
+   ```
+
+   The `Release` workflow (`.github/workflows/release.yml`) builds the tagged
+   commit on Linux x64 and macOS arm64, verifies each checksum, checks that
+   every artefact reports the tagged version without `-dirty`, and creates the
+   GitHub Release `v<version>` with `bouncer-<version>-<target>` and its
+   `.sha256` for both targets. The release body is the `CHANGELOG.md` section
+   of that version (`scripts/changelog-section.sh <version>`); the workflow
+   fails before publishing when that section is missing or empty.
+
 ## Verify
 
 - `shasum -a 256 -c dist/bouncer.sha256` reports `dist/bouncer: OK`.
+- The GitHub Release `v<version>` lists two binaries and two `.sha256` files;
+  a downloaded pair passes `shasum -a 256 -c`.
 - `bouncer --version --json` reports the expected version, clean SHA, and build
   date.
 - `bouncer doctor` reports `[pass] binary` for the installed executable.
@@ -48,5 +65,6 @@ chosen destination, and verify the current profile against that executable.
   usable for development, but is not a verified release.
 
 ---
-Source: package.json, scripts/build.ts, scripts/install.sh, src/build-info.ts,
+Source: package.json, scripts/build.ts, scripts/install.sh,
+scripts/changelog-section.sh, .github/workflows/release.yml, src/build-info.ts,
 src/adapter/doctor.ts, docs/reference/cli.md
