@@ -15,6 +15,7 @@ chosen destination, and verify the current profile against that executable.
    fixtures, documentation, build tooling, or scripts; use a minor version for
    engine, adapter, CLI, or audit-log format changes. Do not create a major
    version before the public release.
+   Add the `CHANGELOG.md` entry under the new version and move completed `Unreleased` items into it.
 
 2. From the repository root, run:
 

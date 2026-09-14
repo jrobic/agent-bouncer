@@ -5,6 +5,17 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "author": "Jonathan Robic",
+  "keywords": [
+    "agent",
+    "cli",
+    "policy",
+    "security",
+    "tooling"
+  ],
+  "repository": "git+https://github.com/jrobic/agent-bouncer.git",
+  "homepage": "https://github.com/jrobic/agent-bouncer#readme",
+  "bugs": "https://github.com/jrobic/agent-bouncer/issues",
   "engines": {
     "bun": ">=1.3"
   },

@@ -1,4 +1,5 @@
 # bouncer
+[![Verify](https://github.com/jrobic/agent-bouncer/actions/workflows/verify.yml/badge.svg)](https://github.com/jrobic/agent-bouncer/actions/workflows/verify.yml)
 
 `bouncer` is one standalone binary that guards coding-agent tool calls before
 they run: destructive commands, protected writes, secret reads, MCP writes,
@@ -140,15 +141,13 @@ The engine returns a harness response and records guarded verdicts in JSONL.
 | look up a subcommand's flags, output, or exit code | [CLI reference](docs/reference/cli.md) |
 | look up the TOML policy format | [Policy reference](docs/reference/policy.md) |
 | inspect the audit log's JSONL shape | [Audit log reference](docs/reference/audit-log.md) |
+| report a vulnerability | [Security](SECURITY.md) |
 
 ## Provenance
 
 These guards were initiated and designed by Jonathan Robic, evolved across
 two prior private codebases (a workstation hook set and a catalog
-generation) that this repository unifies. The
-disler/claude-code-hooks-multi-agent-observability repository served as an
-early comparison point on specific aspects (rm -rf detection), not as the
-origin.
+generation) that this repository unifies.
 
 ## License
 

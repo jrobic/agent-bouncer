@@ -1,0 +1,36 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.x'
+      - run: bun install --frozen-lockfile
+      - run: bun run verify
+      - run: bun run build
+      - run: shasum -a 256 -c dist/bouncer.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bouncer-${{ matrix.os }}
+          path: |
+            dist/bouncer
+            dist/bouncer.sha256
