@@ -792,5 +792,37 @@ bouncer: harness "codex" has no printable shim
 **Exit code:** 0 when a shim was printed; 1 for an invalid `--bin`
 grammar or a harness with no printable shim.
 
+## `skill <id>`
+
+Prints an embedded agent skill. The binary and the printed instructions share
+one CLI grammar; redirecting the output installs the exact skill source that
+cites this binary's commands.
+
+```sh
+bouncer skill <id>
+```
+
+**Flags:** none. `policy` is the only id.
+
+**Output:** the selected `SKILL.md`, byte-for-byte, with its own single
+trailing newline. At print time only,
+`bouncer_version: __BOUNCER_VERSION__` becomes the printing binary's package
+version. The source file retains the placeholder, so its repository copy stays
+inspectable and the installed skill can reject an older binary before it
+changes a workstation policy.
+
+Bare `skill`, an unknown id, or extra arguments print a usage error to stderr
+and exit 1; the error names the known id (`policy`). A successful print exits
+0 and uses stdout without adding a newline.
+
+Install the policy skill in a harness's skills directory:
+
+```sh
+mkdir -p <skills-dir>/bouncer-policy && bouncer skill policy > <skills-dir>/bouncer-policy/SKILL.md
+```
+
+Reprint it after every bouncer upgrade.
+
+
 ---
-Source: src/cli.ts, src/build-info.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/digest.ts, src/policy/harness.ts
+Source: src/cli.ts, src/build-info.ts, src/cli-commands.ts, src/adapter/canary.ts, src/adapter/run.ts, src/adapter/doctor.ts, src/adapter/shim.ts, src/adapter/skill.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/warn.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts, src/adapter/audit.ts, src/adapter/audit-diff.ts, src/adapter/policy.ts, src/adapter/log.ts, src/adapter/log-path.ts, src/policy/digest.ts, src/policy/harness.ts

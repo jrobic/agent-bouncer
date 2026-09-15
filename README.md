@@ -69,6 +69,39 @@ Then wire the installed binary into your adapted harness and verify it:
 bouncer doctor
 ```
 
+## Tune the policy with an agent
+
+`bouncer-policy` turns an explicit human request or audit suggestion into a
+reviewed workstation overlay change. It selects the narrowest lever, shows the
+complete TOML and blast radius, and proves the result with lint, provenance,
+and the original verdict.
+
+It has two gates: an explicit in-session `go` before a policy mutation, then
+the `bouncer-policy` protection on that mutation. The latter can deny under a
+harness that cannot ask; the skill then prints the approved block and the
+path-specific command for the human to paste.
+
+```sh
+mkdir -p <skills-dir>/bouncer-policy && bouncer skill policy > <skills-dir>/bouncer-policy/SKILL.md
+```
+
+| Harness | Skills directory | Verification |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills` (shared by every profile) | [Claude Code skills](https://code.claude.com/docs/en/skills) |
+| Codex CLI | `~/.agents/skills` | [OpenAI skills](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) |
+| pi-agent | `~/.pi/agent/skills` | [Pi skills](https://badlogic-pi-mono.mintlify.app/coding-agent/skills#skill-locations) |
+| omp | `~/.omp/profiles/<profile>/agent/skills` | [OMP skill discovery](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/discovery/builtin.ts) |
+On Codex, the description is the only explicit-invocation guard unless the human adds `policy.allow_implicit_invocation: false` to `agents/openai.yaml` beside the skill file.
+For one project only, install the skill in `.claude/skills/bouncer-policy/` in that project.
+
+
+
+Reprint the skill after each bouncer upgrade. The [custom-rule](docs/how-to/add-a-custom-rule.md),
+[override](docs/how-to/override-a-baseline-rule.md), and
+[audit-tuning](docs/how-to/tune-rules-with-audit.md) how-tos remain the
+background reference.
+
+
 ## Trust
 
 `bouncer` identifies both the binary and its embedded policy. The text
@@ -141,6 +174,7 @@ The engine returns a harness response and records guarded verdicts in JSONL.
 | add a rule of my own | [Add a custom rule](docs/how-to/add-a-custom-rule.md) |
 | disable, soften, or safely widen a baseline rule | [Override a baseline rule](docs/how-to/override-a-baseline-rule.md) |
 | find recurring friction and dead rules | [Tune rules with the audit log](docs/how-to/tune-rules-with-audit.md) |
+| tune the policy with an agent | [`bouncer-policy`](skills/bouncer-policy/SKILL.md) |
 | look up a subcommand's flags, output, or exit code | [CLI reference](docs/reference/cli.md) |
 | look up the TOML policy format | [Policy reference](docs/reference/policy.md) |
 | inspect the audit log's JSONL shape | [Audit log reference](docs/reference/audit-log.md) |
