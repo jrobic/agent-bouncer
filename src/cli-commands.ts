@@ -28,6 +28,7 @@ import { buildCommandInputBag, buildNeutralCall } from './adapter/neutral-call.t
 import { loadCurrentPolicy } from './adapter/policy.ts';
 import { withDispatcherLikeRun } from './adapter/run.ts';
 import { renderShim } from './adapter/shim.ts';
+import { renderSkill } from './adapter/skill.ts';
 import { BASELINE } from './policy/baseline.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
@@ -698,6 +699,15 @@ export function runHarnessShim(harnessId: string, bouncerPath = process.execPath
   const rendered = renderShim(harnessId, bouncerPath);
   if (rendered === undefined) {
     return { text: `bouncer: harness ${JSON.stringify(harnessId)} has no printable shim`, ok: false };
+  }
+  return { text: rendered, ok: true };
+}
+
+/** `bouncer skill <id>` — prints an embedded, version-matched agent skill. */
+export function runSkill(id: string, version: string): CommandResult {
+  const rendered = renderSkill(id, version);
+  if (rendered === undefined) {
+    return { text: `bouncer: unknown skill ${JSON.stringify(id)} (expected: policy)`, ok: false };
   }
   return { text: rendered, ok: true };
 }

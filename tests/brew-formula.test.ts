@@ -139,6 +139,7 @@ class Bouncer < Formula
       Homebrew that path changes on upgrade. Export
       BOUNCER_BIN=#{HOMEBREW_PREFIX}/bin/bouncer in your shell, or reprint the
       extension after each upgrade (\`bouncer harness shim pi-agent\`).
+      The bouncer-policy skill is printed by \`bouncer skill policy\`; reprint it after each upgrade.
     EOS
   end
 

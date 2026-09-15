@@ -1,14 +1,9 @@
 #!/usr/bin/env bun
-// bouncer — single guard binary. `run` speaks a harness's declared
-// protocol end to end (stdin JSON, verdict on stdout, silent exit on
-// allow, default `claude-code` — ADR-0006) — this is also how SessionStart
-// reaches `doctor`'s wiring/policy/log check (ticket 07): no separate
-// subcommand for the hook path, the same `run` envelope dispatch routes
-// SessionStart to it. `check`, `rules lint`, `rules list`, `doctor`, and
-// `harness list` are the policy/diagnostic tooling subcommands — dry-run,
-// validate, and inspect without a live session. `audit` clusters the
-// account's log for rule tuning. `--harness <id>` (default `claude-code`)
-// is accepted by `run`, `check`, `doctor`, and `audit`.
+// bouncer — single guard binary. `run` dispatches declared hook envelopes;
+// SessionStart reaches `doctor` through that envelope dispatch, not a separate
+// hook subcommand. `check`, `rules`, `doctor`, and `audit` inspect policy.
+// `harness shim` and `skill` print embedded support files. `--harness <id>`
+// (default `claude-code`) is accepted by `run`, `check`, `doctor`, and `audit`.
 
 import { isAbsolute } from 'node:path';
 import { HOOK_NAME } from './adapter/constants.ts';
@@ -27,6 +22,7 @@ import {
   runPrintCanary,
   runRulesLint,
   runRulesList,
+  runSkill,
 } from './cli-commands.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
@@ -137,6 +133,22 @@ async function main(): Promise<void> {
     usageError(sub, 'lint | list');
   }
 
+  if (command === 'skill') {
+    const [skillId, ...skillArgs] = rest;
+    if (skillId === undefined) {
+      console.error(`${HOOK_NAME}: skill requires an id argument, e.g. skill policy`);
+      process.exit(1);
+    }
+    if (skillArgs.length > 0) {
+      console.error(`${HOOK_NAME}: skill accepts exactly one id argument, e.g. skill policy`);
+      process.exit(1);
+    }
+    const { text, ok } = runSkill(skillId, versionInfo().version);
+    if (ok) process.stdout.write(text);
+    else console.error(text);
+    process.exit(ok ? 0 : 1);
+  }
+
   if (command === 'harness') {
     const [sub, harnessId, ...shimArgs] = rest;
     if (sub === 'list') {
@@ -208,7 +220,7 @@ async function main(): Promise<void> {
     process.exit(ok ? 0 : 1);
   }
 
-  usageError(command, '--version | -V | run | ping | check | rules | harness | audit | doctor');
+  usageError(command, '--version | -V | run | ping | check | rules | harness | skill | audit | doctor');
 }
 
 if (import.meta.main) {
