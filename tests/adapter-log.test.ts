@@ -74,6 +74,61 @@ describe('logVerdict: JSONL entry shape', () => {
   });
 });
 
+describe('run(): target truncation', () => {
+  test('marks a target longer than the audit cap as truncated', async () => {
+    const accountDir = tmpDir('bouncer-log-test-');
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+    const target = `rm -rf / ${'x'.repeat(4_991)}`;
+    const expectedTarget = `rm -rf / ${'x'.repeat(4_084)}...`;
+    expect(target).toHaveLength(5_000);
+
+    await run(JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: target },
+    }));
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect(entry.target).toHaveLength(4_096);
+    expect(entry.target).toBe(expectedTarget);
+    expect(entry.target_truncated).toBe(true);
+  });
+
+  test('preserves a target at the audit cap without a truncation marker', async () => {
+    const accountDir = tmpDir('bouncer-log-test-');
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+    const target = `rm -rf / ${'x'.repeat(4_087)}`;
+    expect(target).toHaveLength(4_096);
+
+    await run(JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: target },
+    }));
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect(entry.target).toBe(target);
+    expect('target_truncated' in entry).toBe(false);
+  });
+
+  test('preserves a short target byte-for-byte', async () => {
+    const accountDir = tmpDir('bouncer-log-test-');
+    process.env.CLAUDE_CONFIG_DIR = accountDir;
+    const target = `rm -rf / ${'x'.repeat(21)}`;
+    expect(target).toHaveLength(30);
+
+    await run(JSON.stringify({
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: target },
+    }));
+
+    const entry = JSON.parse((await readFile(logPathFor(accountDir), 'utf-8')).trim());
+    expect(entry.target).toBe(target);
+    expect('target_truncated' in entry).toBe(false);
+  });
+});
+
 describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
   test('mode: "shadow" is passed through, tagged on the entry', async () => {
     const accountDir = tmpDir('bouncer-log-test-');

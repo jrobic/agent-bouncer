@@ -47,12 +47,15 @@ verbatim, whenever the envelope actually sent one:
 | `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"protected-write"` \| `"prompt"`. |
 | `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"`. |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
-| `target` | string | The command/path/URL/prompt text the rule matched against, truncated to 200 characters (`...` appended when cut). |
+| `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). |
+| `target_truncated` | boolean | OPTIONAL — `true` only when `target` was cut. Entries before 1.4.0 carry no marker; their legacy cut shape is a 200-character target ending in `...`. |
 | `build` | string | `"source"` for source execution; otherwise the short SHA with `-dirty` when the build tree was dirty. |
 | `policy` | string | First 12 hexadecimal characters of the SHA-256 digest of the effective policy that produced this verdict. |
 
-Older verdict entries have neither `build` nor `policy`. `audit`, `audit --diff`,
-and `audit --suggest` ignore both fields, so mixed logs remain readable.
+Entries that predate build provenance have neither `build` nor `policy`;
+`audit`, `audit --diff`, and `audit --suggest` ignore both fields, so mixed
+logs remain readable. Entries written before 1.4.0 have no `target_truncated`;
+a 200-character `target` ending in `...` is their legacy truncation signature.
 
 ## Audit-header entry
 

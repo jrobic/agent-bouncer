@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Audit-log `target_truncated: true` marks entries whose targets were cut.
+
+### Fixed
+
+- Audit-log targets are capped at 4,096 characters instead of 200, retaining
+  matching tokens that previously fell past the old cap.
+
 ## [1.3.0] - 2026-09-16
 
 ### Added

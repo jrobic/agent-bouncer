@@ -7,6 +7,8 @@
 // § 8): every call names the TARGET harness, whose own `env`/`witness`
 // resolves the log file, and every entry gains a `harness: "<id>"` field
 // — an entry without one predates this ADR.
+// Ticket 53 retains 4,096 characters so the matching bash-crypto-key token stays
+// readable; its marker lets ticket 54 skip incomplete replay targets.
 
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -19,13 +21,15 @@ import type { Family, Verdict } from '../types.ts';
 import { HOOK_NAME } from './constants.ts';
 import { hookLogPathFor } from './log-path.ts';
 
-export const MAX_LOG_TARGET_LEN = 200;
+export const MAX_LOG_TARGET_LEN = 4_096;
 export const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5 MB
 
-export function truncateTarget(target: string): string {
-  return target.length > MAX_LOG_TARGET_LEN
-    ? `${target.slice(0, MAX_LOG_TARGET_LEN - 3)}...`
-    : target;
+export function truncateTarget(target: string): { readonly target: string; readonly truncated: boolean; } {
+  if (target.length <= MAX_LOG_TARGET_LEN) return { target, truncated: false };
+  return {
+    target: `${target.slice(0, MAX_LOG_TARGET_LEN - 3)}...`,
+    truncated: true,
+  };
 }
 
 async function rotateIfNeeded(logFile: string): Promise<void> {
@@ -142,6 +146,7 @@ export async function logVerdict(
   const effectivePolicy = loaded?.policy ?? BASELINE.rules;
   const activeOverrides = loaded?.activeOverrides ?? [];
   const activeRelaxations = loaded?.activeRelaxations ?? [];
+  const { target, truncated } = truncateTarget(verdict.target);
 
   await appendLogEntry({
     session_id: context.sessionId,
@@ -150,9 +155,10 @@ export async function logVerdict(
     family,
     verdict: verdict.verdict,
     rule_id: verdict.ruleId,
-    target: truncateTarget(verdict.target),
+    target,
     build: buildIdentity(build),
     policy: policyDigest(effectivePolicy, activeOverrides, activeRelaxations),
+    ...(truncated ? { target_truncated: true } : {}),
     ...(mode !== undefined ? { mode } : {}),
   }, harness, loaded);
 }
