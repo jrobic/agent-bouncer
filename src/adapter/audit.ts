@@ -30,6 +30,7 @@ export interface AuditEntry {
   readonly verdict: VerdictKind;
   readonly ruleId: string;
   readonly target: string;
+  readonly truncated: boolean;
   // Ticket 08: present (always "shadow") only on an entry `run --shadow`
   // produced — src/adapter/log.ts's LogMode. Absent on every entry logged
   // outside a shadow invocation; audit-diff.ts filters on this to compare
@@ -64,6 +65,7 @@ export function parseLogEntries(text: string): AuditEntry[] {
       continue;
     }
     if (!isVerdictLine(raw)) continue;
+    const target = typeof raw.target === 'string' ? raw.target : '';
     entries.push({
       timestamp: typeof raw.timestamp === 'string' ? raw.timestamp : '',
       sessionId: typeof raw.session_id === 'string' ? raw.session_id : null,
@@ -71,7 +73,8 @@ export function parseLogEntries(text: string): AuditEntry[] {
       family: raw.family as string,
       verdict: raw.verdict as VerdictKind,
       ruleId: raw.rule_id as string,
-      target: typeof raw.target === 'string' ? raw.target : '',
+      target,
+      truncated: raw.target_truncated === true || (target.length === 200 && target.endsWith('...')),
       ...(raw.mode === 'shadow' ? { mode: 'shadow' as const } : {}),
     });
   }

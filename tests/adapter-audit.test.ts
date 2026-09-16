@@ -31,6 +31,7 @@ function entry(overrides: Partial<AuditEntry> = {}): AuditEntry {
     verdict: 'confirm',
     ruleId: 'git-protected',
     target: 'git push origin main',
+    truncated: false,
     ...overrides,
   };
 }
@@ -56,6 +57,7 @@ describe('parseLogEntries', () => {
       verdict: 'confirm',
       ruleId: 'git-protected',
       target: 'git push origin main',
+      truncated: false,
     });
   });
 
@@ -138,6 +140,24 @@ describe('parseLogEntries', () => {
     const [parsed] = parseLogEntries(line);
     expect(parsed!.sessionId).toBeNull();
     expect(parsed!.toolName).toBeNull();
+  });
+  test('marks marker entries and legacy cuts as truncated without inferring new unmarked targets', () => {
+    const base = {
+      timestamp: '2026-08-10T12:00:00.000Z',
+      session_id: 'sess-1',
+      tool_name: 'Bash',
+      family: 'command',
+      verdict: 'confirm',
+      rule_id: 'git-protected',
+    };
+    const entries = parseLogEntries([
+      JSON.stringify({ ...base, target: `${'x'.repeat(4_093)}...`, target_truncated: true }),
+      JSON.stringify({ ...base, target: `${'x'.repeat(197)}...` }),
+      JSON.stringify({ ...base, target: 'x'.repeat(200) }),
+      JSON.stringify({ ...base, target: 'x'.repeat(4_096) }),
+    ].join('\n'));
+
+    expect(entries.map((parsed) => parsed.truncated)).toEqual([true, true, false, false]);
   });
 });
 

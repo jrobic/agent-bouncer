@@ -40,6 +40,7 @@ function bouncerEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
     verdict: 'block',
     ruleId: 'rm-rf-dangerous',
     target: 'rm -rf /',
+    truncated: false,
     mode: 'shadow',
     ...overrides,
   };
