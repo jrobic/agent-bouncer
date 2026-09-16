@@ -6,10 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-16
+
 ### Added
 
-- `bouncer skill <id>` prints embedded, version-matched agent skills.
-- `bouncer-policy` guides human-gated workstation policy tuning.
+- `bouncer skill <id>` prints an embedded, version-matched agent skill; `policy`
+  is the first id.
+- The `bouncer-policy` skill: human-gated workstation policy tuning from a
+  request or from `audit --suggest` — narrowest lever first, profile layer by
+  default, two gates, lint/provenance/verdict proofs, strict refusals.
 
 ## [1.2.0] - 2026-09-14
 
@@ -114,7 +119,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/jrobic/agent-bouncer/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/jrobic/agent-bouncer/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/jrobic/agent-bouncer/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/jrobic/agent-bouncer/compare/v1.1.0...v1.1.1
