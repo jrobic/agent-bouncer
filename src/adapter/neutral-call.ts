@@ -89,7 +89,7 @@ export interface NeutralCall {
 // Exact rows win over a trailing-`*` glob row (ADR-0006 § 3) — checked
 // first and independently, so a glob can never shadow an explicit row
 // regardless of object key order.
-function findToolRow(tools: Readonly<Record<string, HarnessToolRow>>, toolName: string): HarnessToolRow | null {
+export function findToolRow(tools: Readonly<Record<string, HarnessToolRow>>, toolName: string): HarnessToolRow | null {
   if (Object.hasOwn(tools, toolName)) return tools[toolName]!;
   for (const [pattern, row] of Object.entries(tools)) {
     if (pattern.endsWith('*') && toolName.startsWith(pattern.slice(0, -1))) return row;

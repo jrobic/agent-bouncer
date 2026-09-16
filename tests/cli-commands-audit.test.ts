@@ -222,13 +222,111 @@ describe('runAudit: report mode', () => {
   });
 });
 
+describe('runAudit: current-policy replay', () => {
+  test('removes a relaxed historical git confirmation from friction and suggestions, then records it as resolved', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(dir, [
+      '[[relax]]',
+      'list = "command.git.safe_subcommands"',
+      'value = "push"',
+      'reason = "test replay relaxation"',
+      '',
+    ].join('\n'));
+    await writeLog(dir, [verdictLine()]);
+
+    const report = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(report.ok).toBe(true);
+    expect(report.text).toContain('Replayed 1 of 1 entries against the current policy');
+    expect(sectionOf(report.text, 'Frequent friction').toLowerCase()).toContain('none');
+    expect(sectionOf(report.text, 'Policy delta (replayed against the current policy)')).toContain(
+      '- [git-protected] 1x on shape "git push <arg> <arg>"',
+    );
+    expect(sectionOf(report.text, 'Policy delta (replayed against the current policy)')).toContain('→ now allow');
+
+    const suggestion = await runAudit({ days: 30, suggest: true, diff: false });
+    expect(suggestion.text).toContain('# 1 hit(s) resolved by the current policy — not suggested');
+    expect(suggestion.text).not.toContain('[[relax]]');
+    expect(loadPolicyFromOverlayText(suggestion.text).warnings).toEqual([]);
+  });
+
+  test('retains a legacy-truncated entry as logged and counts it separately from replay', async () => {
+    const dir = freshAccountDir();
+    await writeLog(dir, [verdictLine({ target: `${'x'.repeat(197)}...` })]);
+
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(ok).toBe(true);
+    expect(text).toContain('Replayed 0 of 1 entries against the current policy');
+    expect(text).toContain('Not replayable: 1 truncated.');
+    expect(sectionOf(text, 'Frequent friction')).toContain('(as logged)');
+  });
+
+  test('reports hardened and drifted command verdicts from the current dispatcher', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(dir, [
+      '[[relax]]',
+      'list = "command.git.safe_subcommands"',
+      'value = "apply"',
+      'reason = "test replay drift"',
+      '',
+    ].join('\n'));
+    await writeLog(dir, [
+      verdictLine({ rule_id: 'historical-confirm', target: 'rm -rf /' }),
+      verdictLine({ verdict: 'observe', rule_id: 'git-conditional-apply', target: 'git apply --check patch.diff' }),
+    ]);
+
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
+    const delta = sectionOf(text, 'Policy delta (replayed against the current policy)');
+    expect(delta).toContain('### hardened');
+    expect(delta).toContain('→ now block [rm-rf-dangerous]');
+    expect(delta).toContain('### drift');
+    expect(delta).toContain('→ now allow');
+    expect(sectionOf(text, 'Frequent friction')).toContain('rm-rf-dangerous');
+    expect(sectionOf(text, 'Conditional rules that fired')).not.toContain('git-conditional-apply');
+  });
+
+  test('keeps a secret-family block after relaxing the command-family match', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(dir, [
+      '[[relax]]',
+      'list = "command.git.safe_subcommands"',
+      'value = "config"',
+      'reason = "test replay strictest reduction"',
+      '',
+    ].join('\n'));
+    await writeLog(dir, [
+      verdictLine({ target: 'git config credential.helper store' }),
+    ]);
+
+    const { text } = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(sectionOf(text, 'Frequent friction')).toContain('bash-git-leak-credential');
+    expect(sectionOf(text, 'Policy delta (replayed against the current policy)')).toContain(
+      '→ now block [bash-git-leak-credential]',
+    );
+  });
+
+  test('falls back to the historical report when the selected harness declares no protocol', async () => {
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: false, harness: 'opencode' });
+    expect(ok).toBe(true);
+    expect(text).toContain('Replay unavailable: harness opencode declares no protocol');
+    expect(text).not.toContain('Policy delta (replayed against the current policy)');
+  });
+
+  test('omits the resolved-hit count when the selected harness has no protocol', async () => {
+    const { text, ok } = await runAudit({ days: 30, suggest: true, diff: false, harness: 'opencode' });
+
+    expect(ok).toBe(true);
+    expect(text).toContain('# Replay unavailable: harness opencode declares no protocol');
+    expect(text).not.toContain('hit(s) resolved by the current policy');
+  });
+});
+
 describe('runAudit: --sessions-only across modes', () => {
   test('filters a mixed log and labels the active filter in every mode', async () => {
     const dir = freshAccountDir();
     const timestamp = new Date().toISOString();
     await writeLog(dir, [
-      verdictLine({ timestamp, session_id: null, rule_id: 'cli-only-rule', target: 'cli-only-target', mode: 'shadow' }),
-      verdictLine({ timestamp, session_id: 'session-1', rule_id: 'session-only-rule', target: 'session-only-target', mode: 'shadow' }),
+      verdictLine({ timestamp, session_id: null, rule_id: 'rm-rf-dangerous', target: 'rm -rf /', mode: 'shadow' }),
+      verdictLine({ timestamp, session_id: 'session-1', rule_id: 'git-protected', target: 'git push origin main', mode: 'shadow' }),
     ]);
 
     const modes = [
@@ -245,8 +343,8 @@ describe('runAudit: --sessions-only across modes', () => {
     );
     for (const { options, header, result: { text, ok } } of filteredResults) {
       expect(ok).toBe(true);
-      expect(text).toContain('session-only-rule');
-      expect(text).not.toContain('cli-only-rule');
+      expect(text).toContain('git-protected');
+      expect(text).not.toContain('rm-rf-dangerous');
       expect(text).toStartWith(options.suggest ? `# ${header}` : header);
       if (options.suggest) expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
     }
@@ -255,7 +353,7 @@ describe('runAudit: --sessions-only across modes', () => {
       modes.map(async ({ options }) => runAudit({ days: options.days, suggest: options.suggest, diff: options.diff })),
     );
     for (const { text } of unfilteredResults) {
-      expect(text).toContain('cli-only-rule');
+      expect(text).toContain('rm-rf-dangerous');
       expect(text.split('\n').slice(0, 3).join('\n')).not.toMatch(/exclud/i);
     }
   });

@@ -36,6 +36,7 @@ function bouncerEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
     timestamp: '2026-08-10T12:00:00.000Z',
     sessionId: 'sess-1',
     toolName: 'Bash',
+    harness: null,
     family: 'command',
     verdict: 'block',
     ruleId: 'rm-rf-dangerous',

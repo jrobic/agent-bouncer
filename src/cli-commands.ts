@@ -9,8 +9,13 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { clusterDivergences, diffWindowedLogs, parseTsLogEntries, renderDiffReport, TS_GUARD_LOG_FILES } from './adapter/audit-diff.ts';
 import type { TsLogEntry } from './adapter/audit-diff.ts';
+import { replayEntries } from './adapter/audit-replay.ts';
+import type { ReplayExclusion, ReplaySummary } from './adapter/audit-replay.ts';
 import {
+  asLoggedEntry,
   clusterEntries,
+  clusterPolicyDelta,
+  currentViewEntry,
   filterSessionEntries,
   findDeadConditionalRules,
   parseLogEntries,
@@ -18,6 +23,7 @@ import {
   renderSuggestions,
   withinWindow,
 } from './adapter/audit.ts';
+import type { AuditEntry, PolicyDeltaEntry } from './adapter/audit.ts';
 import { wiringCodecFor } from './adapter/codecs/wiring/registry.ts';
 import { DEFAULT_HARNESS_ID, HOOK_NAME } from './adapter/constants.ts';
 import { degradePreToolUseVerdict } from './adapter/degrade.ts';
@@ -402,6 +408,29 @@ function sessionFilterHeader(entryCount: number, excludedCliEntryCount: number, 
   const prefix = label === undefined ? '' : `${label}: `;
   return `${prefix}${entryCount} entries, ${excludedCliEntryCount} CLI entries excluded`;
 }
+
+const REPLAY_EXCLUSION_ORDER: readonly ReplayExclusion[] = [
+  'truncated',
+  'write-secret',
+  'prompt',
+  'unknown-tool',
+  'other-harness',
+];
+
+const REPLAY_EXCLUSION_LABEL: Readonly<Record<ReplayExclusion, string>> = {
+  truncated: 'truncated',
+  'write-secret': 'write-secret',
+  prompt: 'prompt',
+  'unknown-tool': 'unknown tool',
+  'other-harness': 'other harness',
+};
+
+function replayHeader(summary: ReplaySummary, entryCount: number): string {
+  const excluded = REPLAY_EXCLUSION_ORDER
+    .flatMap((kind) => summary.exclusions[kind] === 0 ? [] : [`${summary.exclusions[kind]} ${REPLAY_EXCLUSION_LABEL[kind]}`]);
+  const suffix = excluded.length === 0 ? '' : ` Not replayable: ${excluded.join(', ')}.`;
+  return `Replayed ${summary.replayedCount} of ${entryCount} entries against the current policy — verdicts only, nothing is executed.${suffix}`;
+}
 const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set([
   '--suggest',
   '--days',
@@ -623,14 +652,46 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
   const windowEntries = withinWindow(parseLogEntries(logText), options.days);
   const sessionFilteredEntries = options.sessionsOnly ? filterSessionEntries(windowEntries) : null;
   const entries = sessionFilteredEntries?.entries ?? windowEntries;
-  const clusters = clusterEntries(entries);
   const filterHeader = sessionFilteredEntries === null
     ? []
     : [sessionFilterHeader(sessionFilteredEntries.entries.length, sessionFilteredEntries.excludedCliEntryCount)];
+  const replay = harness.protocol === undefined
+    ? null
+    : await replayEntries(entries, harness.id, harness.protocol, createDispatcher(loaded.policy));
+  const currentEntries: AuditEntry[] = [];
+  const deltaEntries: PolicyDeltaEntry[] = [];
+  if (replay !== null) {
+    for (const [index, result] of replay.results.entries()) {
+      const entry = entries[index]!;
+      if ('excluded' in result) {
+        currentEntries.push(asLoggedEntry(entry));
+        continue;
+      }
+      const current = currentViewEntry(entry, result.replayed);
+      if (current !== null) currentEntries.push(current);
+      if (result.transition !== null) {
+        deltaEntries.push({ historical: entry, replayed: result.replayed, transition: result.transition });
+      }
+    }
+  }
+  const clusters = replay === null ? clusterEntries(entries) : clusterEntries(currentEntries);
+  const replayHeaders = replay === null
+    ? [`Replay unavailable: harness ${harness.id} declares no protocol`]
+    : [
+      replayHeader(replay, entries.length),
+      'Allowed traffic is never logged: hardening of the policy cannot be measured here.',
+    ];
+  const resolvedCount = replay?.results.filter(
+    (result) => 'replayed' in result && result.transition === 'resolved',
+  ).length ?? 0;
 
   if (options.suggest) {
     const resolvable = resolvableRuleIds(loaded.policy);
-    const text = renderSuggestions(clusters, resolvable, { days: options.days });
+    const text = renderSuggestions(clusters, resolvable, {
+      days: options.days,
+      headerLines: replayHeaders,
+      ...(replay === null ? {} : { resolvedCount }),
+    });
     // `#`-commented: renderSuggestions's output is TOML meant to be pasted
     // straight into an overlay (AC3) — a bare `warning: ...` line ahead of
     // it would not parse as TOML and would corrupt that contract.
@@ -642,7 +703,11 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
     clusters.filter((c) => c.verdict === 'observe').map((c) => c.ruleId),
   );
   const deadRuleIds = findDeadConditionalRules(loaded.policy, firedObserveRuleIds);
-  const text = renderReport(clusters, deadRuleIds, { days: options.days });
+  const text = renderReport(clusters, deadRuleIds, {
+    days: options.days,
+    headerLines: replayHeaders,
+    ...(replay === null ? {} : { deltaClusters: clusterPolicyDelta(deltaEntries) }),
+  });
   const warningLines = logWarning !== null ? [`warning: ${logWarning}`] : [];
   return { text: [...warningLines, ...filterHeader, text].join('\n'), ok: true };
 }

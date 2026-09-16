@@ -5,8 +5,11 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  asLoggedEntry,
   clusterEntries,
+  clusterPolicyDelta,
   conditionalRuleIdsOf,
+  currentViewEntry,
   filterSessionEntries,
   findDeadConditionalRules,
   normalizeTarget,
@@ -27,6 +30,7 @@ function entry(overrides: Partial<AuditEntry> = {}): AuditEntry {
     timestamp: '2026-08-10T12:00:00.000Z',
     sessionId: 'sess-1',
     toolName: 'Bash',
+    harness: null,
     family: 'command',
     verdict: 'confirm',
     ruleId: 'git-protected',
@@ -42,6 +46,7 @@ describe('parseLogEntries', () => {
       timestamp: '2026-08-10T12:00:00.000Z',
       session_id: 'sess-1',
       tool_name: 'Bash',
+      harness: 'claude-code',
       family: 'command',
       verdict: 'confirm',
       rule_id: 'git-protected',
@@ -53,6 +58,7 @@ describe('parseLogEntries', () => {
       timestamp: '2026-08-10T12:00:00.000Z',
       sessionId: 'sess-1',
       toolName: 'Bash',
+      harness: 'claude-code',
       family: 'command',
       verdict: 'confirm',
       ruleId: 'git-protected',
@@ -140,6 +146,7 @@ describe('parseLogEntries', () => {
     const [parsed] = parseLogEntries(line);
     expect(parsed!.sessionId).toBeNull();
     expect(parsed!.toolName).toBeNull();
+    expect(parsed!.harness).toBeNull();
   });
   test('marks marker entries and legacy cuts as truncated without inferring new unmarked targets', () => {
     const base = {
@@ -403,6 +410,15 @@ describe('renderReport', () => {
     expect(firedHeading).toBeLessThan(dead);
   });
 
+  test('marks an as-logged conditional rule in its fired section', () => {
+    const clusters = clusterEntries([
+      asLoggedEntry(entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' })),
+    ]);
+    const report = renderReport(clusters, [], { days: 30 });
+
+    expect(sectionOf(report, 'Conditional rules that fired')).toContain('git-conditional-apply (as logged) fired 1x');
+  });
+
   test('a conditional rule that never fired says so explicitly rather than omitting the section', () => {
     const report = renderReport([], [], { days: 30 });
     expect(sectionOf(report, 'Conditional rules that fired').toLowerCase()).toContain('none');
@@ -463,6 +479,17 @@ describe('renderSuggestions', () => {
     expect(text).toContain('# rm-rf-dangerous');
   });
 
+  test('marks as-logged no-lever comments and generated reasons', () => {
+    const clusters = clusterEntries([
+      asLoggedEntry(entry()),
+      asLoggedEntry(entry({ ruleId: 'rm-rf-dangerous', verdict: 'block', target: 'rm -rf /some/dir' })),
+    ]);
+    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+
+    expect(text).toContain('rule \\"git-protected\\" (as logged) fired');
+    expect(text).toContain('# rm-rf-dangerous (as logged): no policy lever available');
+  });
+
   test('dedupes repeated relax suggestions for the same subcommand across shapes', () => {
     const clusters = clusterEntries([
       entry({ target: 'git push origin main' }),
@@ -514,5 +541,83 @@ describe('renderSuggestions', () => {
     expect(text).toContain('#');
     const result = loadPolicyFromOverlayText(text);
     expect(result.warnings).toEqual([]);
+  });
+});
+
+describe('current-policy audit view', () => {
+  test('keeps replayed and as-logged clusters separate for the same historical rule and shape', () => {
+    const historical = entry();
+    const current = currentViewEntry(historical, {
+      family: 'command',
+      verdict: { verdict: 'confirm', ruleId: 'git-protected', reason: 'protected', target: historical.target },
+    });
+    expect(current).not.toBeNull();
+
+    const clusters = clusterEntries([asLoggedEntry(historical), current!]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters.map((cluster) => cluster.asLogged)).toEqual([true, false]);
+    const report = renderReport(clusters, [], { days: 30 });
+    expect(sectionOf(report, 'Frequent friction')).toContain('(as logged)');
+    expect(currentViewEntry(historical, { verdict: 'allow' })).toBeNull();
+  });
+
+  test('renders replay headers and every policy-delta group in report order', () => {
+    const deltas = clusterPolicyDelta([
+      {
+        historical: entry(),
+        replayed: { verdict: 'allow' },
+        transition: 'resolved',
+      },
+      {
+        historical: entry({ ruleId: 'old-branch-rule', target: 'git branch -d release' }),
+        replayed: {
+          family: 'command',
+          verdict: { verdict: 'block', ruleId: 'git-protected', reason: 'protected', target: 'git branch -d release' },
+        },
+        transition: 'hardened',
+      },
+    ]);
+    const report = renderReport([], [], {
+      days: 30,
+      headerLines: [
+        'Replayed 2 of 2 entries against the current policy — verdicts only, nothing is executed.',
+        'Allowed traffic is never logged: hardening of the policy cannot be measured here.',
+      ],
+      deltaClusters: deltas,
+    });
+
+    expect(report).toContain('Replayed 2 of 2 entries against the current policy');
+    const delta = sectionOf(report, 'Policy delta (replayed against the current policy)');
+    expect(delta).toContain('### resolved');
+    expect(delta).toContain('- [git-protected] 1x on shape "git push <arg> <arg>"');
+    expect(delta).toContain('→ now allow');
+    expect(delta).toContain('### hardened');
+    expect(delta).toContain('→ now block [git-protected]');
+    expect(delta).toContain('### softened\n(none)');
+    expect(delta).toContain('### drift\n(none)');
+    expect(report.indexOf('## Frequent friction')).toBeLessThan(report.indexOf('## Policy delta'));
+    expect(report.indexOf('## Policy delta')).toBeLessThan(report.indexOf('## Conditional rules that fired'));
+  });
+
+  test('comments replay headers and the resolved-hit count in TOML suggestions', () => {
+    const text = renderSuggestions([], resolvableRuleIds(BASELINE_POLICY), {
+      days: 30,
+      headerLines: ['Replayed 1 of 1 entries against the current policy — verdicts only, nothing is executed.'],
+      resolvedCount: 1,
+    });
+
+    expect(text).toContain('# Replayed 1 of 1 entries against the current policy');
+    expect(text).toContain('# 1 hit(s) resolved by the current policy — not suggested');
+    expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
+  });
+
+  test('comments a zero resolved-hit count after replay', () => {
+    const text = renderSuggestions([], resolvableRuleIds(BASELINE_POLICY), {
+      days: 30,
+      headerLines: ['Replayed 1 of 1 entries against the current policy — verdicts only, nothing is executed.'],
+      resolvedCount: 0,
+    });
+
+    expect(text).toContain('# 0 hit(s) resolved by the current policy — not suggested');
   });
 });

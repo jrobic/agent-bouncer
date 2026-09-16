@@ -601,14 +601,15 @@ runnability. A passing `wiring:canary` line says so explicitly; never append
 
 ## `audit`
 
-Clusters the account's log entries over a time window into a friction
-report, or (`--suggest`) candidate overlay snippets — see
-`docs/how-to/tune-rules-with-audit.md`. `--sessions-only` removes
-CLI-originated entries before either aggregation; it remains opt-in so a
-complete audit can retain direct checks and `run < file` probes. `--diff`
-(ticket 08) is a third, mutually exclusive mode: compares bouncer's
-`--shadow` log entries against the TS generation's own guard logs over the
-same window.
+Replays each eligible log entry against the current policy in-process, then
+clusters the current verdicts into a friction report or (`--suggest`)
+candidate overlay snippets — see `docs/how-to/tune-rules-with-audit.md`.
+There is no replay flag: ordinary `audit` and `audit --suggest` replay;
+`--diff` remains a separate, mutually exclusive mode and never replays.
+`--sessions-only` removes CLI-originated entries before replay and
+aggregation; it remains opt-in so a complete audit can retain direct checks
+and `run < file` probes. `--diff` (ticket 08) compares bouncer's `--shadow`
+log entries against the TS generation's own guard logs over the same window.
 
 ```sh
 bouncer audit [--days <n>] [--sessions-only] [--suggest] [--harness <id>]
@@ -644,12 +645,18 @@ Any other token (a typo'd flag, a stray positional, `--ts-logs` without
 `--diff`, `--diff` together with `--suggest`) is a usage error — never
 silently ignored.
 
-**Output (report/suggest):** free-form (report) or TOML-commented
-(suggest) — see the how-to page for real examples of both. A missing log
+**Output (report/suggest):** when the selected harness declares a protocol,
+the report begins with a replay header stating how many entries were
+re-judged, non-replayable categories, and that no tool is executed; the next
+line states that allowed traffic is not logged, so hardening cannot be
+measured. `--suggest` comments both lines and reports historical hits already
+resolved by the current policy. Non-replayable clusters are labelled `(as
+logged)`. A harness with no protocol declaration returns the historical report
+plus `Replay unavailable: harness <id> declares no protocol`. A missing log
 file is treated as an empty one; an existing-but-unreadable log prepends
-`warning: audit log unreadable: <message>` (report mode) or
-`# warning: audit log unreadable: <message>` (suggest mode, kept as a
-TOML comment so the rest of the output stays parseable).
+`warning: audit log unreadable: <message>` (report mode) or `# warning: audit
+log unreadable: <message>` (suggest mode, kept as a TOML comment so the rest
+of the output stays parseable).
 
 **Output (`--diff`):** free-form prose, same rendering discipline as the
 plain report. A volumes line, then three sections, always printed even

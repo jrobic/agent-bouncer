@@ -32,7 +32,7 @@ Route the explicit argument:
 
 1. Run both `bouncer audit --days 7 --sessions-only --suggest` and `bouncer audit --days 7 --sessions-only`. Use a different window only when the human specifies one.
 2. Present one line per suggested block: rule, count, lever, blast radius, and a keep-or-skip recommendation. The human chooses which blocks to retain.
-3. Act only on **Frequent friction**. Mention **Dead conditional rules** as a baseline signal for a repository pull request; do not change them here.
+3. Act only on **Frequent friction**. **Policy delta** is informational — never act on it. Mention **Dead conditional rules** as a baseline signal for a repository pull request; do not change them here.
 4. Refuse blocks without a policy lever, including `rm-rf-dangerous`, `sudo`, and unguided `git-protected` friction. Propose a safer workflow or command form.
 5. Before a proposal, follow **Inspect active rules** for each retained block.
 
@@ -152,6 +152,9 @@ A rejected layer disables every relaxation in that layer for live sessions. For 
 ## Known limits
 
 This skill does not provide `rules apply`, `check --tool <name>`, `audit --suggest --json`, `rules lint --harness <id>`, `rules list --harness <id>`, `doctor wiring:skill`, a per-harness `skills_dir`, or a rollback command. The `check` subcommand covers command strings only.
+
+`(as logged)` clusters were not re-judged (truncated before 1.4.0,
+`write-secret`, unknown tool).
 
 If the harness denies any `bouncer` command line — the check, the lint, the list — ask the human to run that exact line in a terminal (or the harness's shell escape) and paste its output; never bypass; never claim a proof you did not collect.
 

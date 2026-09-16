@@ -19,6 +19,7 @@
 import { extractGitSubcommand } from '../command-rules.ts';
 import type { RelaxableList, RulesPolicy } from '../policy/schema.ts';
 import type { VerdictKind } from '../types.ts';
+import type { PolicyTransition, ReplayedVerdict } from './audit-replay.ts';
 
 // ─── parsing ───────────────────────────────────────────────────────────
 
@@ -26,11 +27,13 @@ export interface AuditEntry {
   readonly timestamp: string;
   readonly sessionId: string | null;
   readonly toolName: string | null;
+  readonly harness: string | null;
   readonly family: string;
   readonly verdict: VerdictKind;
   readonly ruleId: string;
   readonly target: string;
   readonly truncated: boolean;
+  readonly asLogged?: boolean;
   // Ticket 08: present (always "shadow") only on an entry `run --shadow`
   // produced — src/adapter/log.ts's LogMode. Absent on every entry logged
   // outside a shadow invocation; audit-diff.ts filters on this to compare
@@ -70,6 +73,7 @@ export function parseLogEntries(text: string): AuditEntry[] {
       timestamp: typeof raw.timestamp === 'string' ? raw.timestamp : '',
       sessionId: typeof raw.session_id === 'string' ? raw.session_id : null,
       toolName: typeof raw.tool_name === 'string' ? raw.tool_name : null,
+      harness: typeof raw.harness === 'string' ? raw.harness : null,
       family: raw.family as string,
       verdict: raw.verdict as VerdictKind,
       ruleId: raw.rule_id as string,
@@ -179,35 +183,42 @@ export interface Cluster {
   readonly family: string;
   readonly verdict: VerdictKind;
   readonly shape: string;
+  readonly asLogged: boolean;
   readonly count: number;
   readonly lastSeen: string;
   readonly exampleTargets: readonly string[];
 }
 
+interface RankedCluster {
+  readonly count: number;
+  readonly lastSeen: string;
+}
+
 const MAX_EXAMPLE_TARGETS = 3;
 
-function byFrequencyThenRecency(a: Cluster, b: Cluster): number {
+function byFrequencyThenRecency(a: RankedCluster, b: RankedCluster): number {
   if (b.count !== a.count) return b.count - a.count;
   return Date.parse(b.lastSeen) - Date.parse(a.lastSeen);
 }
 
-/** Groups entries by rule id x normalized target shape, sorted by
- * frequency (desc) then recency (desc) — the report's own sort order, so
- * every caller sees the same ranking. */
+interface BuildingCluster {
+  ruleId: string;
+  family: string;
+  verdict: VerdictKind;
+  shape: string;
+  asLogged: boolean;
+  count: number;
+  lastSeen: string;
+  exampleTargets: string[];
+}
+
+/** Groups entries by rule id, shape, and whether a verdict remained as logged. */
 export function clusterEntries(entries: readonly AuditEntry[]): Cluster[] {
-  interface Building {
-    ruleId: string;
-    family: string;
-    verdict: VerdictKind;
-    shape: string;
-    count: number;
-    lastSeen: string;
-    exampleTargets: string[];
-  }
-  const byKey = new Map<string, Building>();
+  const byKey = new Map<string, BuildingCluster>();
   for (const e of entries) {
     const shape = normalizeTarget(e.target);
-    const key = `${e.ruleId} ${shape}`;
+    const asLogged = e.asLogged === true;
+    const key = `${asLogged}\u0000${e.ruleId}\u0000${shape}`;
     const existing = byKey.get(key);
     if (existing) {
       existing.count += 1;
@@ -221,9 +232,79 @@ export function clusterEntries(entries: readonly AuditEntry[]): Cluster[] {
         family: e.family,
         verdict: e.verdict,
         shape,
+        asLogged,
         count: 1,
         lastSeen: e.timestamp,
         exampleTargets: [e.target],
+      });
+    }
+  }
+  return [...byKey.values()].toSorted(byFrequencyThenRecency);
+}
+
+export function asLoggedEntry(entry: AuditEntry): AuditEntry {
+  return { ...entry, asLogged: true };
+}
+
+export function currentViewEntry(entry: AuditEntry, replayed: ReplayedVerdict): AuditEntry | null {
+  if (replayed.verdict === 'allow') return null;
+  return {
+    ...entry,
+    family: replayed.family,
+    verdict: replayed.verdict.verdict,
+    ruleId: replayed.verdict.ruleId,
+    asLogged: false,
+  };
+}
+
+export interface PolicyDeltaEntry {
+  readonly historical: AuditEntry;
+  readonly replayed: ReplayedVerdict;
+  readonly transition: PolicyTransition;
+}
+
+export interface PolicyDeltaCluster extends RankedCluster {
+  readonly historicalRuleId: string;
+  readonly shape: string;
+  readonly transition: PolicyTransition;
+  readonly replayed: ReplayedVerdict;
+  readonly exampleTargets: readonly string[];
+}
+
+interface BuildingPolicyDelta {
+  historicalRuleId: string;
+  shape: string;
+  transition: PolicyTransition;
+  replayed: ReplayedVerdict;
+  count: number;
+  lastSeen: string;
+  exampleTargets: string[];
+}
+
+/** Groups policy changes by their historical rule, target shape, and transition. */
+export function clusterPolicyDelta(entries: readonly PolicyDeltaEntry[]): PolicyDeltaCluster[] {
+  const byKey = new Map<string, BuildingPolicyDelta>();
+  for (const entry of entries) {
+    const shape = normalizeTarget(entry.historical.target);
+    const key = `${entry.historical.ruleId}\u0000${shape}\u0000${entry.transition}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (Date.parse(entry.historical.timestamp) > Date.parse(existing.lastSeen)) {
+        existing.lastSeen = entry.historical.timestamp;
+      }
+      if (existing.exampleTargets.length < MAX_EXAMPLE_TARGETS && !existing.exampleTargets.includes(entry.historical.target)) {
+        existing.exampleTargets.push(entry.historical.target);
+      }
+    } else {
+      byKey.set(key, {
+        historicalRuleId: entry.historical.ruleId,
+        shape,
+        transition: entry.transition,
+        replayed: entry.replayed,
+        count: 1,
+        lastSeen: entry.historical.timestamp,
+        exampleTargets: [entry.historical.target],
       });
     }
   }
@@ -265,16 +346,25 @@ export function findDeadConditionalRules(
 
 export interface AuditReportOptions {
   readonly days: number;
+  readonly headerLines?: readonly string[];
+  readonly deltaClusters?: readonly PolicyDeltaCluster[];
+  readonly resolvedCount?: number;
 }
 
-const FRICTION_VERDICTS: ReadonlySet<VerdictKind> = new Set(['block', 'confirm']);
+const FRICTION_VERDICTS: Readonly<Record<VerdictKind, boolean>> = {
+  block: true,
+  confirm: true,
+  flag: false,
+  observe: false,
+};
+const POLICY_TRANSITIONS: readonly PolicyTransition[] = ['resolved', 'softened', 'hardened', 'drift'];
 
 // clusterEntries already returns its result sorted by frequency (desc) then
 // recency (desc) — a plain .filter() preserves that relative order (filter
 // never reorders), so re-sorting the filtered subset here would be sorting
 // an already-sorted list. No .sort() call needed or present.
 function frictionClustersOf(clusters: readonly Cluster[]): Cluster[] {
-  return clusters.filter((c) => FRICTION_VERDICTS.has(c.verdict));
+  return clusters.filter((c) => FRICTION_VERDICTS[c.verdict]);
 }
 
 function firedConditionalClustersOf(clusters: readonly Cluster[]): Cluster[] {
@@ -287,12 +377,6 @@ function firedConditionalClustersOf(clusters: readonly Cluster[]): Cluster[] {
  * greppable contract (`^summary`, `^rule`, ... prefixes another tool can
  * script against); this one is not, and its wording may change between
  * versions without that counting as a breaking change.
- *
- * Three sections, in order: frequent friction (deny/ask clusters — allow-
- * list candidates), conditional rules that fired (an observe-verdict
- * cluster — a declarative git-conditional table entry earning its keep,
- * Story 10), and dead conditional rules (declared but never fired in the
- * window — an allow rule with nothing to allow).
  */
 export function renderReport(
   clusters: readonly Cluster[],
@@ -303,23 +387,48 @@ export function renderReport(
   const fired = firedConditionalClustersOf(clusters);
   const lines: string[] = [];
   lines.push(`bouncer audit — last ${options.days} day(s)`);
+  lines.push(...(options.headerLines ?? []));
   lines.push('');
   lines.push('## Frequent friction (deny/ask — allowlist candidates?)');
   if (friction.length === 0) {
     lines.push('(none — no deny/ask entries in this window)');
   } else {
     for (const c of friction) {
-      lines.push(`- [${c.ruleId}] fired ${c.count}x on shape "${c.shape}" (last: ${c.lastSeen}) — allowlist candidate?`);
+      const asLogged = c.asLogged ? ' (as logged)' : '';
+      lines.push(`- [${c.ruleId}]${asLogged} fired ${c.count}x on shape "${c.shape}" (last: ${c.lastSeen}) — allowlist candidate?`);
       for (const example of c.exampleTargets) lines.push(`    e.g. ${example}`);
     }
   }
   lines.push('');
+  if (options.deltaClusters !== undefined) {
+    lines.push('## Policy delta (replayed against the current policy)');
+    for (const transition of POLICY_TRANSITIONS) {
+      const deltas = options.deltaClusters.filter((cluster) => cluster.transition === transition);
+      lines.push(`### ${transition}`);
+      if (deltas.length === 0) {
+        lines.push('(none)');
+      } else {
+        for (const delta of deltas) {
+          const now = delta.replayed.verdict === 'allow'
+            ? 'allow'
+            : `${delta.replayed.verdict.verdict} [${delta.replayed.verdict.ruleId}]`;
+          lines.push(
+            `- [${delta.historicalRuleId}] ${delta.count}x on shape "${delta.shape}" `
+              + `(last: ${delta.lastSeen}) → now ${now}`,
+          );
+          for (const example of delta.exampleTargets) lines.push(`    e.g. ${example}`);
+        }
+      }
+    }
+    lines.push('');
+  }
   lines.push('## Conditional rules that fired (earning their keep)');
   if (fired.length === 0) {
     lines.push('(none — no conditional-allow entries in this window)');
   } else {
     for (const c of fired) {
-      lines.push(`- ${c.ruleId} fired ${c.count}x (last: ${c.lastSeen})`);
+      const asLogged = c.asLogged ? ' (as logged)' : '';
+      lines.push(`- ${c.ruleId}${asLogged} fired ${c.count}x (last: ${c.lastSeen})`);
     }
   }
   lines.push('');
@@ -403,7 +512,8 @@ function tomlString(value: string): string {
 }
 
 function reasonFor(cluster: Cluster, days: number): string {
-  return `audit: rule "${cluster.ruleId}" fired ${cluster.count}x on shape ${cluster.shape} `
+  const asLogged = cluster.asLogged ? ' (as logged)' : '';
+  return `audit: rule "${cluster.ruleId}"${asLogged} fired ${cluster.count}x on shape ${cluster.shape} `
     + `in the last ${days}d — review before keeping`;
 }
 
@@ -440,6 +550,10 @@ export function renderSuggestions(
 ): string {
   const lines: string[] = [
     `# bouncer audit --suggest — candidate policy overlay snippets, last ${options.days} day(s)`,
+    ...(options.headerLines ?? []).map((header) => `# ${header}`),
+    ...(options.resolvedCount === undefined
+      ? []
+      : [`# ${options.resolvedCount} hit(s) resolved by the current policy — not suggested`]),
     '# Generated, never applied automatically — review each reason, then copy what you',
     '# want into your policy.toml overlay and re-run `bouncer rules lint`.',
     '',
@@ -458,8 +572,9 @@ export function renderSuggestions(
     const action = suggestionFor(cluster, resolvableIds);
 
     if (action.kind === 'none') {
+      const asLogged = cluster.asLogged ? ' (as logged)' : '';
       lines.push(
-        `# ${cluster.ruleId}: no policy lever available for automatic relaxation `
+        `# ${cluster.ruleId}${asLogged}: no policy lever available for automatic relaxation `
           + `(fired ${cluster.count}x, last ${cluster.lastSeen}) — review manually`,
       );
       lines.push('');
