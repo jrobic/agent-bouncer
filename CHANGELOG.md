@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `bouncer skill <id>` prints embedded, version-matched agent skills.
+- `bouncer-policy` guides human-gated workstation policy tuning.
+
 ## [1.2.0] - 2026-09-14
 
 ### Added
