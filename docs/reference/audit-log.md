@@ -40,7 +40,7 @@ verbatim, whenever the envelope actually sent one:
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | string | ISO 8601, set when the line is written. |
-| `harness` | string | The target harness's own declaration id (e.g. `"claude-code"`). |
+| `harness` | string | The target harness's own declaration id (e.g. `"claude-code"`). When replay is available, `audit` replays it only under the selected harness; a differing id remains `(as logged)`. |
 | `session_id` | string \| null | From the hook envelope; `null` when absent. |
 | `tool_name` | string \| null | From the hook envelope; `null` when absent. |
 | `permission` | string | OPTIONAL — only present when the harness declares `input.permission` AND the envelope sent a value for it. Logged verbatim, never read for a decision anywhere in this codebase. |
@@ -54,8 +54,10 @@ verbatim, whenever the envelope actually sent one:
 
 Entries that predate build provenance have neither `build` nor `policy`;
 `audit`, `audit --diff`, and `audit --suggest` ignore both fields, so mixed
-logs remain readable. Entries written before 1.4.0 have no `target_truncated`;
-a 200-character `target` ending in `...` is their legacy truncation signature.
+logs remain readable. An entry without `harness` predates ADR-0006 and is
+replayed as the selected harness. Entries written before 1.4.0 have no
+`target_truncated`; a 200-character `target` ending in `...` is their legacy
+truncation signature and remains `(as logged)` during replay.
 
 ## Audit-header entry
 

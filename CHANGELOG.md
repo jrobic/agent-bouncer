@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Audit-log `target_truncated: true` marks entries whose targets were cut.
+- `audit` reports a Policy delta section and replay headers.
+
+### Changed
+
+- `audit` and `audit --suggest` replay the selected window against the current
+  policy before reporting friction or suggestions.
 
 ### Fixed
 

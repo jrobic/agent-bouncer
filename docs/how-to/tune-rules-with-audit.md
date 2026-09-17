@@ -1,8 +1,8 @@
 # Tune rules with audit
 
-Goal: use the audit log to find rules that fire often (allowlist
-candidates) and conditional rules that never fire (dead weight), and turn
-that into policy changes — reviewed by hand, never applied automatically.
+Goal: replay the audit window against the policy in force now, identify
+friction that still exists, and turn only that evidence into reviewed,
+manual policy changes.
 
 ## Steps
 
@@ -16,16 +16,25 @@ that into policy changes — reviewed by hand, never applied automatically.
    aggregation, so post-ship friction reflects hook traffic. Omit it when
    those probes belong in the audit.
 
-   The report has three sections, in order:
-   - **Frequent friction** — deny/ask clusters, most-fired first. Each
-     line names the rule id, a fire count, a normalized command/path
-     shape, and up to three example targets.
+   The title is followed by two replay headers. The first states how many
+   entries were re-judged, which ones could not be, and that audit executes
+   nothing. The second states the coverage limit: allowed traffic is never
+   logged, so hardening cannot be measured from this log.
+
+   The report has four sections, in order:
+   - **Frequent friction** — current deny/ask clusters, most-fired first.
+     Each line names the current rule id, a fire count, a normalized
+     command/path shape, and up to three example targets. A cluster marked
+     `(as logged)` was not replayable and retains its historical verdict.
+   - **Policy delta** — historical block/confirm/observe verdicts that the
+     current policy now resolves, softens, hardens, or lets drift to allow.
+     It is context, never an instruction to change a rule.
    - **Conditional rules that fired** — a declarative git-conditional
      table entry (`docs/reference/policy.md`'s `ask_flags` /
-     `safe_first_arg` / `safe_grammar`) that produced a silent allow at
-     least once. Proof it's earning its keep.
-   - **Dead conditional rules** — declared, never fired in the window. A
-     candidate for removal, not for automatic action.
+     `safe_first_arg` / `safe_grammar`) that produced an observe verdict
+     in the current view. Proof it is earning its keep.
+   - **Dead conditional rules** — declared, never fired in the current
+     view. A candidate for repository review, not automatic action.
 
 2. Generate candidate overlay snippets for the friction section:
 
@@ -33,10 +42,12 @@ that into policy changes — reviewed by hand, never applied automatically.
    bouncer audit --days 7 --sessions-only --suggest
    ```
 
-   Output is TOML, one `[[relax]]` or `[[override]]` block per frequent
-   rule that has a known policy lever, each with an auto-filled `reason`
-   citing the count/shape/window that produced it. A rule with no lever
-   (e.g. `rm-rf-dangerous`, `sudo` — see
+   Output is TOML, one `[[relax]]` or `[[override]]` block per current
+   friction rule that has a known policy lever, each with an auto-filled
+   `reason` citing the count/shape/window that produced it. A
+   `# N hit(s) resolved by the current policy — not suggested` header
+   means those historical hits already disappeared from the current view.
+   A rule with no lever (e.g. `rm-rf-dangerous`, `sudo` — see
    `docs/how-to/override-a-baseline-rule.md`'s non-override-able list)
    gets a `#`-comment instead, telling you to review manually.
 
@@ -60,7 +71,8 @@ that into policy changes — reviewed by hand, never applied automatically.
 
 3. Read every suggestion before touching your overlay. `--suggest` never
    writes to `<configDir>/bouncer/policy.toml` or any other file — it
-   only prints to stdout.
+   only prints to stdout. Do not act on **Policy delta**; it only explains
+   why a historical cluster is absent, softened, hardened, or drifted.
 
 4. Copy the blocks you actually want into your overlay by hand. Uncomment
    a `command.git.safe_subcommands` block only after you've accepted the
