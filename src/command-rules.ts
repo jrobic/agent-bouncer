@@ -38,7 +38,14 @@
 import { BASELINE } from './policy/baseline.ts';
 import { compileRules, firstMatch } from './policy/match.ts';
 import type { CompiledRule } from './policy/match.ts';
-import type { AskFlagsRule, CommandGitPolicy, CommandPolicy, SafeFirstArgRule, SafeGrammarRule } from './policy/schema.ts';
+import type {
+  AskFlagsRule,
+  CommandGitPolicy,
+  CommandPolicy,
+  SafeFirstArgRule,
+  SafeGrammarRule,
+  SafeGrammarToken,
+} from './policy/schema.ts';
 import type { Verdict } from './types.ts';
 
 export function hasRmRf(segment: string): boolean {
@@ -415,6 +422,8 @@ export const GIT_OPTS_WITH_ARG: ReadonlySet<string> = new Set([
   '--exec-path',
 ]);
 
+const GIT_SHA = /^[0-9a-f]{7,64}$/i;
+
 // Canonical structural tokenizer for the git and privilege guards. Quotes
 // and escapes preserve the resulting literal token value, while their
 // contents never gain separator/comment/operator syntax. An unquoted `#`
@@ -428,6 +437,18 @@ type SourceRange = Readonly<{
   end: number;
 }>;
 
+type ShellRedirection = Readonly<{
+  target: string | null;
+  consumesFollowingToken: boolean;
+  output: boolean;
+}>;
+
+type ShellRedirections = Readonly<{
+  arguments: readonly string[];
+  redirections: readonly ShellRedirection[];
+  ambiguous?: true;
+}>;
+
 export type ShellToken =
   & SourceRange
   & Readonly<{
@@ -439,6 +460,7 @@ export type ShellToken =
     hasQuotedWhitespace: boolean;
     hasUnterminatedQuote: boolean;
     commandSubstitutions?: readonly SourceRange[];
+    redirections?: ShellRedirections;
   }>;
 
 type CommandPrefix = Readonly<{
@@ -463,6 +485,164 @@ type HeredocDelimiter = Readonly<{
 
 function namesPath(value: string): boolean {
   return value.includes('/') || value.startsWith('~');
+}
+
+type RedirectionSyntax = Readonly<{
+  start: number;
+  end: number;
+  output: boolean;
+  descriptor: boolean;
+  kind: 'regular' | 'heredoc' | 'process-substitution';
+}>;
+
+type RedirectionSearch = Readonly<{
+  syntax: RedirectionSyntax;
+  substitutionIndex: number;
+}>;
+
+function unquotedRedirectionSyntax(
+  source: string,
+  start: number,
+  tokenStart: number,
+  substitutions: readonly SourceRange[] | undefined,
+  substitutionIndex: number,
+): RedirectionSearch | null {
+  let quote: '"' | '\'' | null = null;
+
+  for (let index = start; index < source.length; index++) {
+    while (
+      substitutions?.[substitutionIndex] !== undefined
+      && substitutions[substitutionIndex]!.end <= tokenStart + index
+    ) substitutionIndex++;
+    const substitution = substitutions?.[substitutionIndex];
+    if (substitution?.start === tokenStart + index) {
+      index = substitution.end - tokenStart - 1;
+      substitutionIndex++;
+      continue;
+    }
+
+    const character = source[index]!;
+    if (quote !== null) {
+      if (character === '\\' && quote === '"') {
+        const escaped = source[index + 1];
+        if (escaped !== undefined && /[$`"\\\n]/.test(escaped)) index++;
+        continue;
+      }
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === '\\') {
+      if (source[index + 1] !== undefined) index++;
+      continue;
+    }
+    if (character === '"' || character === '\'') {
+      quote = character;
+      continue;
+    }
+
+    if (character === '&' && source[index + 1] === '>') {
+      return {
+        syntax: {
+          start: index,
+          end: source[index + 2] === '>' ? index + 3 : index + 2,
+          output: true,
+          descriptor: false,
+          kind: 'regular',
+        },
+        substitutionIndex,
+      };
+    }
+    if (character !== '<' && character !== '>') continue;
+
+    const redirectionStart = /^\d+$/.test(source.slice(0, index)) ? 0 : index;
+    if (character === '<' && source[index + 1] === '(') {
+      return {
+        syntax: { start: redirectionStart, end: index + 2, output: false, descriptor: false, kind: 'process-substitution' },
+        substitutionIndex,
+      };
+    }
+    if (character === '<' && source[index + 1] === '<') {
+      const end = source[index + 2] === '<' || source[index + 2] === '-' ? index + 3 : index + 2;
+      return {
+        syntax: { start: redirectionStart, end, output: false, descriptor: false, kind: 'heredoc' },
+        substitutionIndex,
+      };
+    }
+
+    let end = index + 1;
+    if (character === '>' && source[end] === '>') end++;
+    if (character === '>' && source[end] === '|') end++;
+    const descriptor = source[end] === '&';
+    if (descriptor) end++;
+    return {
+      syntax: { start: redirectionStart, end, output: character === '>', descriptor, kind: 'regular' },
+      substitutionIndex,
+    };
+  }
+
+  return null;
+}
+
+function shellWordValue(source: string): string | null {
+  const tokenized = tokenizeShellSegments(source);
+  if (
+    tokenized.hasUnquotedShellOperator
+    || tokenized.segments.length !== 1
+    || tokenized.segments[0]?.length !== 1
+  ) return null;
+  return tokenized.segments[0]![0]!.value;
+}
+
+function shellRedirections(
+  source: string,
+  tokenStart: number,
+  substitutions: readonly SourceRange[] | undefined,
+): ShellRedirections | null {
+  let cursor = 0;
+  let substitutionIndex = 0;
+  let current = unquotedRedirectionSyntax(source, cursor, tokenStart, substitutions, substitutionIndex);
+  if (current === null) return null;
+  const parsedArguments: string[] = [];
+  const redirections: ShellRedirection[] = [];
+
+  for (;;) {
+    const { syntax } = current;
+    substitutionIndex = current.substitutionIndex;
+    const precedingSource = source.slice(cursor, syntax.start);
+    if (precedingSource) {
+      const argument = shellWordValue(precedingSource);
+      if (argument === null) return { arguments: parsedArguments, redirections, ambiguous: true };
+      parsedArguments.push(argument);
+    }
+    if (syntax.kind === 'process-substitution') {
+      return { arguments: parsedArguments, redirections, ambiguous: true };
+    }
+
+    const next = unquotedRedirectionSyntax(source, syntax.end, tokenStart, substitutions, substitutionIndex);
+    const targetSource = source.slice(syntax.end, next?.syntax.start ?? source.length);
+    if (syntax.kind === 'heredoc') {
+      redirections.push({
+        target: null,
+        consumesFollowingToken: targetSource.length === 0,
+        output: false,
+      });
+    } else if (!targetSource) {
+      if (next !== null) return { arguments: parsedArguments, redirections, ambiguous: true };
+      redirections.push({ target: null, consumesFollowingToken: true, output: syntax.output });
+    } else {
+      const target = shellWordValue(targetSource);
+      if (target === null) return { arguments: parsedArguments, redirections, ambiguous: true };
+      redirections.push({
+        target: syntax.descriptor && /^(?:\d+|-)$/.test(target) ? null : target,
+        consumesFollowingToken: false,
+        output: syntax.output,
+      });
+    }
+
+    if (next === null) return { arguments: parsedArguments, redirections };
+    cursor = next.syntax.start;
+    current = next;
+  }
 }
 
 function heredocDelimiters(cmd: string, tokens: readonly ShellToken[]): readonly HeredocDelimiter[] | null {
@@ -619,6 +799,7 @@ export function tokenizeShellSegments(
     let tokenHasLiteralizingSyntax = false;
     let tokenHasQuotedWhitespace = false;
     let tokenCommandSubstitutions: SourceRange[] | undefined;
+    let unquotedRedirectionOperator: '<' | '>' | null = null;
     let fragments: ShellExpansionFragment[] = [];
     let fragment = '';
     let fragmentEnvironment = true;
@@ -631,19 +812,22 @@ export function tokenizeShellSegments(
       fragments.push({ value: fragment, environment: fragmentEnvironment, brace: fragmentBrace });
       fragment = '';
     };
-    const append = (value: string): void => {
+    const append = (value: string, unquoted = false): void => {
       token += value;
       fragment += value;
+      unquotedRedirectionOperator = unquoted && (value === '<' || value === '>') ? value : null;
     };
     const appendLiteral = (value: string): void => {
       flushFragment();
       token += value;
       fragments.push({ value, environment: false, brace: false });
+      unquotedRedirectionOperator = null;
     };
     const setFragmentSyntax = (environment: boolean, brace: boolean): void => {
       flushFragment();
       fragmentEnvironment = environment;
       fragmentBrace = brace;
+      unquotedRedirectionOperator = null;
     };
 
     const flushToken = (end: number): void => {
@@ -653,6 +837,9 @@ export function tokenizeShellSegments(
         ? expandPathTokenCandidates(fragments, witnesses)
         : undefined;
       const candidates = expansion?.candidates;
+      const redirections = token.includes('>') || token.includes('<')
+        ? shellRedirections(cmd.slice(tokenStart, end), tokenStart, tokenCommandSubstitutions)
+        : null;
       tokens.push({
         value: token,
         kind: token === '!' && !tokenHasLiteralizingSyntax ? 'bang-operator' : 'word',
@@ -662,6 +849,7 @@ export function tokenizeShellSegments(
         hasQuotedWhitespace: tokenHasQuotedWhitespace,
         hasUnterminatedQuote: quote !== null,
         ...(tokenCommandSubstitutions === undefined ? {} : { commandSubstitutions: tokenCommandSubstitutions }),
+        ...(redirections === null ? {} : { redirections }),
         ...(candidates === undefined || (candidates.length === 1 && candidates[0] === token)
           ? {}
           : { pathCandidates: candidates }),
@@ -677,6 +865,7 @@ export function tokenizeShellSegments(
       fragment = '';
       fragmentEnvironment = true;
       fragmentBrace = true;
+      unquotedRedirectionOperator = null;
     };
     const flushSegment = (end: number): ShellToken[] => {
       flushToken(end);
@@ -774,9 +963,12 @@ export function tokenizeShellSegments(
         flushToken(i);
         continue;
       }
+      const descriptorDuplication = ch === '&' && unquotedRedirectionOperator !== null;
+      const combinedOutputRedirection = ch === '&' && cmd[i + 1] === '>';
       if (
-        /[;&]/.test(ch)
-        || (ch === '|' && !(tokenStarted && !tokenHasLiteralizingSyntax && /^\d*>\|?$/.test(token)))
+        ch === ';'
+        || (ch === '&' && !descriptorDuplication && !combinedOutputRedirection)
+        || (ch === '|' && unquotedRedirectionOperator !== '>')
       ) {
         flushSegment(i);
         continue;
@@ -787,7 +979,7 @@ export function tokenizeShellSegments(
       }
       if (!tokenStarted) tokenStart = i;
       tokenStarted = true;
-      append(ch);
+      append(ch, true);
     }
     flushSegment(rangeEnd);
   };
@@ -1005,6 +1197,40 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // command (so `echo git push` is ignored — git is an argument, not the verb).
 type GitCommand = { sub: string; rest: string[]; forceConfirm?: true; };
 
+type RedirectionFilteredTokens = Readonly<{
+  tokens: readonly ShellToken[];
+  forceConfirm: boolean;
+}>;
+
+function withoutShellRedirections(tokens: readonly ShellToken[]): RedirectionFilteredTokens {
+  let filtered: ShellToken[] | undefined;
+  let forceConfirm = false;
+
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    const redirections = token.redirections;
+    if (redirections === undefined) {
+      filtered?.push(token);
+      continue;
+    }
+
+    filtered ??= tokens.slice(0, index);
+    if (redirections.ambiguous) {
+      forceConfirm = true;
+      continue;
+    }
+    for (const argument of redirections.arguments) {
+      filtered.push({ ...token, value: argument });
+    }
+    if (redirections.redirections.some((redirection) => redirection.consumesFollowingToken)) {
+      index++;
+      if (index >= tokens.length || tokens[index]!.redirections !== undefined) forceConfirm = true;
+    }
+  }
+
+  return { tokens: filtered ?? tokens, forceConfirm };
+}
+
 export function extractGitSubcommand(segment: string): GitCommand | null {
   const tokens = tokenizeShellSegments(segment).segments[0] ?? [];
   return extractGitSubcommandFromTokens(tokens);
@@ -1013,24 +1239,25 @@ export function extractGitSubcommand(segment: string): GitCommand | null {
 export function extractGitSubcommandFromTokens(
   tokens: readonly ShellToken[],
 ): GitCommand | null {
-  const prefix = consumeCommandPrefixes(tokens);
+  const filtered = withoutShellRedirections(tokens);
+  const prefix = consumeCommandPrefixes(filtered.tokens);
   let i = prefix.index;
   if (prefix.ambiguous) {
-    i = tokens.findIndex((token, index) => index >= prefix.index && (token.value === 'git' || token.value.endsWith('/git')));
+    i = filtered.tokens.findIndex((token, index) => index >= prefix.index && (token.value === 'git' || token.value.endsWith('/git')));
     if (i === -1) return null;
   }
-  if (i >= tokens.length) return null;
-  const head = tokens[i]!.value;
+  if (i >= filtered.tokens.length) return null;
+  const head = filtered.tokens[i]!.value;
   if (head !== 'git' && !head.endsWith('/git')) return null;
   i++;
-  while (i < tokens.length && tokens[i]!.value.startsWith('-')) {
-    i += GIT_OPTS_WITH_ARG.has(tokens[i]!.value) ? 2 : 1;
+  while (i < filtered.tokens.length && filtered.tokens[i]!.value.startsWith('-')) {
+    i += GIT_OPTS_WITH_ARG.has(filtered.tokens[i]!.value) ? 2 : 1;
   }
-  if (i >= tokens.length) return null;
+  if (i >= filtered.tokens.length) return null;
   return {
-    sub: tokens[i]!.value,
-    rest: tokens.slice(i + 1).map((token) => token.value),
-    ...(prefix.ambiguous ? { forceConfirm: true as const } : {}),
+    sub: filtered.tokens[i]!.value,
+    rest: filtered.tokens.slice(i + 1).map((token) => token.value),
+    ...(prefix.ambiguous || filtered.forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
 
@@ -1260,6 +1487,12 @@ function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
 // `safe_subcommands` and not covered by any declarative entry is the
 // catch-all — push, rebase, reset, clean, bisect, cherry-pick, revert, gc,
 // rm, filter-branch/filter-repo, … — and always needs confirmation.
+
+function safeGrammarTokenMatches(token: SafeGrammarToken, value: string): boolean {
+  if (typeof token !== 'string') return GIT_SHA.test(value);
+  return token === '*' ? !value.startsWith('-') : token === value;
+}
+
 function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: CommandGitPolicy): boolean {
   if (git.safe_subcommands.includes(sub)) return false;
 
@@ -1284,7 +1517,7 @@ function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: Co
   if (safeGrammar) {
     const matches = safeGrammar.sequences.some((seq) => {
       if (seq.length !== rest.length) return false;
-      return seq.every((tok, i) => tok === '*' ? !rest[i]!.startsWith('-') : tok === rest[i]);
+      return seq.every((token, index) => safeGrammarTokenMatches(token, rest[index]!));
     });
     return !matches;
   }

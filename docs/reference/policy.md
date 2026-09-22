@@ -264,12 +264,14 @@ reason = "example only — this duplicates the baseline row verbatim"
 | `reason` | string | conditional — see § [[relax]] below |
 
 **`safe_grammar`** — safe only if the arguments match one exact token
-sequence (`"*"` matches any single non-flag token). Written on its own
-line, `sequences = [ ["--check"] ]` needs a space after the first
-`[` — Bun's TOML parser misreads a bare leading `[[` as an
-array-of-tables header even mid-value (see `policy/command.toml`'s own
-`apply` entry, which avoids it by putting the outer bracket on its own
-line — same for `pull`/`merge` in `examples/personal-overlay.toml`,
+sequence. A string slot is literal except `"*"`, which matches any single
+non-flag token. A typed `{ kind = "sha" }` slot matches one SHA-shaped
+token without granting the wildcard's broader revision-name surface.
+Written on its own line, `sequences = [ ["--check"] ]` needs a space
+after the first `[` — Bun's TOML parser misreads a bare leading `[[` as
+an array-of-tables header even mid-value (see `policy/command.toml`'s
+own `apply` entry, which avoids it by putting the outer bracket on its
+own line — same for `pull`/`merge` in `examples/personal-overlay.toml`,
 ticket 13's tracked example of a `safe_grammar` entry living in a
 personal overlay instead of the baseline). Baseline's own `apply` row;
 same substitution note as `ask_flags` above:
@@ -281,10 +283,33 @@ sequences = [ ["--check"], ["--check", "*"] ]
 reason = "example only — this duplicates the baseline row verbatim"
 ```
 
+An overlay can declare a plain single-SHA cherry-pick form:
+
+```toml
+[[rules.command.git.safe_grammar]]
+sub = "cherry-pick"
+sequences = [
+  [ { kind = "sha" } ],
+]
+```
+
+The SHA constraint is lexical: exactly 7–64 ASCII hexadecimal characters
+(`0-9`, `a-f`, or `A-F`), case-insensitive. It does not read the repository
+or call Git, and does not verify the identifier exists, names a commit, or
+uniquely identifies an object. A hexadecimal-looking branch or other ref is
+indistinguishable from a SHA-shaped token.
+
+Matching uses Git arguments after recognized shell redirections have been
+removed: `2>&1` is not an extra argument, but an option following it still
+is. Quoted or escaped redirection text remains an argument. Redirection
+destinations are still inspected by the path protections; an allowed Git
+form cannot authorize an otherwise protected write. Ambiguous redirection
+syntax requires confirmation instead of silently dropping arguments.
+
 | Field | Type | Required |
 |---|---|---|
 | `sub` | string | yes |
-| `sequences` | string[][] | yes |
+| `sequences` | `Array<Array<string \| { kind = "sha" }>>` | yes |
 | `reason` | string | conditional — see § [[relax]] below |
 
 ## The two algorithm-driven tables

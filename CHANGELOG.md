@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Git `safe_grammar` accepts `{ kind = "sha" }` argument slots for 7–64
+  hexadecimal characters, without resolving Git objects.
+
+### Fixed
+
+- Shell redirections no longer hide following Git options or count as Git
+  arguments; protected write destinations remain checked.
+
 ## [1.4.0] - 2026-09-17
 
 ### Added

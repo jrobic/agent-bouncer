@@ -231,6 +231,13 @@ function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === 'string');
 }
 
+function isSafeGrammarToken(v: unknown): boolean {
+  if (typeof v === 'string') return true;
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const keys = Object.keys(v);
+  return keys.length === 1 && keys[0] === 'kind' && (v as Record<string, unknown>).kind === 'sha';
+}
+
 export function lintAskFlagsShape(entries: readonly unknown[]): LintIssue[] {
   const issues: LintIssue[] = [];
   entries.forEach((raw, i) => {
@@ -305,10 +312,10 @@ export function lintSafeGrammarShape(entries: readonly unknown[]): LintIssue[] {
     if (!isNonEmptyString(e.sub)) {
       issues.push({ message: `command.git.safe_grammar[${i}]: "sub" must be a non-empty string` });
     }
-    if (!Array.isArray(e.sequences) || !e.sequences.every((seq) => isStringArray(seq))) {
+    if (!Array.isArray(e.sequences) || !e.sequences.every((sequence) => Array.isArray(sequence) && sequence.every(isSafeGrammarToken))) {
       issues.push({
         message: `command.git.safe_grammar[${i}] (sub=${JSON.stringify(e.sub)}): `
-          + `"sequences" must be an array of arrays of strings`,
+          + `"sequences" must be an array of string or { kind = "sha" } slots`,
       });
     }
     if (e.reason !== undefined && typeof e.reason !== 'string') {
