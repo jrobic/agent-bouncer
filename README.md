@@ -12,7 +12,6 @@ and prompt-injection signatures.
 - Verify what you run: [`bouncer --version`](#trust), `dist/bouncer.sha256`, and the policy digest.
 
 
-<!-- demo:start -->
 ```console
 $ bouncer check "rm -rf /"
 block [rm-rf-dangerous] rm -rf targeting a dangerous path: / → deny (claude-code)
@@ -25,7 +24,6 @@ confirm [bash-shell-rc] Bash write target protected by shell-rc: Shell startup f
 $ bouncer check "ls -la"
 allow
 ```
-<!-- demo:end -->
 
 ![Terminal recording of bouncer decisions](docs/assets/readme/demo.gif)
 
@@ -108,17 +106,15 @@ background reference.
 line and JSON form expose the version, build provenance, and baseline policy
 digest; the checksum verifies the compiled artifact before installation.
 
-<!-- trust:start -->
 Example values for a compiled binary; `sha` and `date` vary by build:
 ```console
 $ bouncer --version
-bouncer 1.4.0 (example build SHA, built example UTC time) baseline 0b41bf352a2a
+bouncer 1.5.0 (example build SHA, built example UTC time) baseline 0b41bf352a2a
 $ bouncer --version --json
-{"name":"bouncer","version":"1.4.0","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
+{"name":"bouncer","version":"1.5.0","build":{"sha":"example build SHA","dirty":false,"date":"example UTC time"},"policy":{"baseline":"0b41bf352a2a"}}
 $ shasum -a 256 -c dist/bouncer.sha256
 dist/bouncer: OK
 ```
-<!-- trust:end -->
 
 The baseline is compiled into the binary, then local common and profile layers
 are merged in order. A malformed layer is rejected rather than partially
@@ -192,7 +188,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Status
 
-Version 1.4.0. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
+Version 1.5.0. The [Homebrew tap](https://github.com/jrobic/homebrew-tap)
 installs macOS Apple Silicon and Linux x64 releases; GitHub Releases attach
 matching `.tar.gz` archives and SHA-256 checksums. Building from a checkout
 also works. See [Install](docs/how-to/install.md) and [Release](docs/how-to/release.md).

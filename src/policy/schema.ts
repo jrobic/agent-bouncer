@@ -62,12 +62,17 @@ export interface SafeFirstArgRule {
   readonly reason?: string;
 }
 
+export type SafeGrammarToken = string | {
+  readonly kind: 'sha';
+};
+
 export interface SafeGrammarRule {
   readonly sub: string;
   // Each sequence must match `rest` exactly, position by position and in
-  // length; "*" in a slot matches any single token that is not a flag
-  // (does not start with "-").
-  readonly sequences: readonly (readonly string[])[];
+  // length; "*" in a string slot matches any single token that is not a
+  // flag (does not start with "-"). A { kind: "sha" } slot matches an
+  // abbreviated, SHA-1, or SHA-256 lexical identifier.
+  readonly sequences: readonly (readonly SafeGrammarToken[])[];
   // See AskFlagsRule.reason.
   readonly reason?: string;
 }

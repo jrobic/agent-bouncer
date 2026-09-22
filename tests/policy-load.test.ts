@@ -270,6 +270,114 @@ describe('loadPolicyFromOverlayText: a git-conditional entry substituting an alr
   });
 });
 
+describe('loadPolicyFromOverlayText: SHA-constrained safe grammar', () => {
+  test('an inline SHA slot allows a plain cherry-pick with one abbreviated identifier', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      [[rules.command.git.safe_grammar]]
+      sub = "cherry-pick"
+      sequences = [ [ { kind = "sha" } ] ]
+    `);
+    expect(loaded.warnings).toEqual([]);
+    expect(createCommandChecker(loaded.policy.command).checkGit('git cherry-pick a1b2c3d')).toBeNull();
+  });
+
+  test('the SHA slot accepts a 64-character uppercase SHA-256 identifier', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      [[rules.command.git.safe_grammar]]
+      sub = "cherry-pick"
+      sequences = [ [ { kind = "sha" } ] ]
+    `);
+    expect(loaded.warnings).toEqual([]);
+    expect(createCommandChecker(loaded.policy.command).checkGit(`git cherry-pick ${'A'.repeat(64)}`)).toBeNull();
+  });
+
+  test('the SHA slot confirms every non-SHA shape and any extra argument', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      [[rules.command.git.safe_grammar]]
+      sub = "cherry-pick"
+      sequences = [ [ { kind = "sha" } ] ]
+    `);
+    const checker = createCommandChecker(loaded.policy.command);
+    for (
+      const command of [
+        'git cherry-pick',
+        'git cherry-pick abcdef',
+        `git cherry-pick ${'a'.repeat(65)}`,
+        'git cherry-pick deadbeg',
+        'git cherry-pick release',
+        'git cherry-pick develop..HEAD',
+        'git cherry-pick HEAD~1',
+        'git cherry-pick --no-commit deadbee',
+        'git cherry-pick deadbee another',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+    }
+  });
+
+  test('literal and wildcard slots retain their exact, non-flag semantics', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      [[rules.command.git.safe_grammar]]
+      sub = "rebase"
+      sequences = [ ["--continue"], ["--onto", "*"] ]
+    `);
+    const checker = createCommandChecker(loaded.policy.command);
+    expect(checker.checkGit('git rebase --continue')).toBeNull();
+    expect(checker.checkGit('git rebase --onto feature')).toBeNull();
+    expect(checker.checkGit('git rebase --onto --exec')).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+    expect(checker.checkGit('git rebase --continue feature')).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test('invalid SHA slots reject only their profile layer while a valid common SHA rule stays active', () => {
+    const loaded = loadPolicyFromLayers([
+      {
+        name: 'common',
+        files: [{
+          filename: 'policy.toml',
+          text: `
+            [[rules.command.git.safe_grammar]]
+            sub = "cherry-pick"
+            sequences = [ [ { kind = "sha" } ] ]
+          `,
+        }],
+      },
+      {
+        name: 'profile',
+        files: [{
+          filename: 'policy.toml',
+          text: `
+            [[rules.command.git.safe_grammar]]
+            sub = "rebase"
+            sequences = [ [ { kind = "branch" } ] ]
+          `,
+        }],
+      },
+    ]);
+    expect(loaded.layers.find((layer) => layer.name === 'profile')?.rejected?.file).toBe('policy.toml');
+    expect(createCommandChecker(loaded.policy.command).checkGit('git cherry-pick deadbee')).toBeNull();
+  });
+
+  test('unknown SHA slot properties, kinds, and non-string values reject the overlay', () => {
+    for (
+      const slot of [
+        '{ kind = "sha", extra = true }',
+        '{ kind = "revision" }',
+        '{}',
+        '7',
+        '["sha"]',
+      ]
+    ) {
+      const loaded = loadPolicyFromOverlayText(`
+        [[rules.command.git.safe_grammar]]
+        sub = "cherry-pick"
+        sequences = [ [ ${slot} ] ]
+      `);
+      expect(loaded.overlayApplied).toBe(false);
+      expect(loaded.warnings.join(' ')).toContain('sequences');
+    }
+  });
+});
+
 describe('loadPolicyFromOverlayText: the declarative overlay forms are shape-validated (round-3 review, blocking item 1)', () => {
   test('an ask_flags entry missing "flags" fails lint instead of throwing at match time', () => {
     const overlay = `

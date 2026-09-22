@@ -211,10 +211,11 @@ const PROTECTED_WRITE_MASKED_HEADS: Readonly<Record<string, true>> = {
 
 const REDIRECTION_OPERATOR = /^(?:&>>|&>|>>|\d*>\||\d+>>?|>)$/;
 
-type RedirectionOperand = Readonly<{
-  precedingOperand: string | null;
-  target: string | null;
+type RedirectionOperands = Readonly<{
+  precedingOperands: readonly string[];
+  outputTargets: readonly string[];
   consumesFollowingToken: boolean;
+  outputConsumesFollowingToken: boolean;
 }>;
 
 type ParsedWriterOperands = Readonly<{
@@ -274,29 +275,49 @@ function unquotedRedirection(source: string): UnquotedRedirection | null {
   return null;
 }
 
-function redirectionOperand(token: ShellToken, command: string): RedirectionOperand | null {
+function redirectionOperands(token: ShellToken, command: string): RedirectionOperands | null {
+  const parsed = token.redirections;
+  if (parsed !== undefined && !parsed.ambiguous) {
+    return {
+      precedingOperands: parsed.arguments,
+      outputTargets: parsed.redirections.flatMap((redirection) =>
+        redirection.output && redirection.target !== null ? [redirection.target] : []
+      ),
+      consumesFollowingToken: parsed.redirections.some((redirection) => redirection.consumesFollowingToken),
+      outputConsumesFollowingToken: parsed.redirections.some((redirection) => redirection.output && redirection.consumesFollowingToken),
+    };
+  }
+
   const source = command.slice(token.start, token.end);
   if (REDIRECTION_OPERATOR.test(source)) {
-    return { precedingOperand: null, target: null, consumesFollowingToken: true };
+    return {
+      precedingOperands: [],
+      outputTargets: [],
+      consumesFollowingToken: true,
+      outputConsumesFollowingToken: true,
+    };
   }
 
   const redirection = unquotedRedirection(source);
   if (redirection === null) return null;
-  const precedingOperand = tokenizeShellSegments(source.slice(0, redirection.offset)).segments[0]?.[0]?.value ?? null;
-  const target = tokenizeShellSegments(source.slice(redirection.offset + redirection.operator.length)).segments[0]?.[0]?.value ?? '';
+  const precedingOperand = tokenizeShellSegments(source.slice(0, redirection.offset)).segments[0]?.[0]?.value;
+  const target = tokenizeShellSegments(source.slice(redirection.offset + redirection.operator.length)).segments[0]?.[0]?.value;
   return {
-    precedingOperand,
-    target,
+    precedingOperands: precedingOperand === undefined ? [] : [precedingOperand],
+    outputTargets: target === undefined ? [] : [target],
     consumesFollowingToken: false,
+    outputConsumesFollowingToken: false,
   };
 }
 
 function inputRedirectionConsumesFollowingToken(token: ShellToken, command: string): boolean {
+  if (token.redirections !== undefined && !token.redirections.ambiguous) return false;
   const source = command.slice(token.start, token.end);
   return /^\d*<$/.test(source);
 }
 
 function isAttachedInputRedirection(token: ShellToken, command: string): boolean {
+  if (token.redirections !== undefined && !token.redirections.ambiguous) return false;
   const source = command.slice(token.start, token.end);
   return /^\d*</.test(source);
 }
@@ -355,10 +376,10 @@ function parseWriterOperands(
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]!;
     const next = tokens[index + 1];
-    const outputRedirect = redirectionOperand(token, command);
-    if (outputRedirect !== null) {
-      if (outputRedirect.precedingOperand !== null) operands.push(outputRedirect.precedingOperand);
-      if (outputRedirect.consumesFollowingToken) index++;
+    const redirections = redirectionOperands(token, command);
+    if (redirections !== null) {
+      operands.push(...redirections.precedingOperands);
+      if (redirections.consumesFollowingToken) index++;
       continue;
     }
     if (inputRedirectionConsumesFollowingToken(token, command)) {
@@ -435,13 +456,13 @@ function sedTargets(tokens: readonly ShellToken[], command: string, inPlace: boo
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]!;
     const next = tokens[index + 1];
-    const outputRedirect = redirectionOperand(token, command);
-    if (outputRedirect !== null) {
-      if (outputRedirect.precedingOperand !== null) {
-        if (scriptSeen) fileOperands.push(outputRedirect.precedingOperand);
-        else recordScript(outputRedirect.precedingOperand);
+    const redirections = redirectionOperands(token, command);
+    if (redirections !== null) {
+      for (const operand of redirections.precedingOperands) {
+        if (scriptSeen) fileOperands.push(operand);
+        else recordScript(operand);
       }
-      if (outputRedirect.consumesFollowingToken) index++;
+      if (redirections.consumesFollowingToken) index++;
       continue;
     }
     if (inputRedirectionConsumesFollowingToken(token, command)) {
@@ -505,12 +526,10 @@ function hasPerlInPlaceFlag(tokens: readonly ShellToken[]): boolean {
 function redirectTargets(tokens: readonly ShellToken[], command: string): readonly string[] {
   const targets: string[] = [];
   for (let index = 0; index < tokens.length; index++) {
-    const outputRedirect = redirectionOperand(tokens[index]!, command);
-    if (outputRedirect === null) continue;
-    if (outputRedirect.target !== null) {
-      targets.push(outputRedirect.target);
-      continue;
-    }
+    const redirections = redirectionOperands(tokens[index]!, command);
+    if (redirections === null) continue;
+    targets.push(...redirections.outputTargets);
+    if (!redirections.outputConsumesFollowingToken) continue;
 
     const next = tokens[index + 1];
     if (next !== undefined) targets.push(next.value);
@@ -556,9 +575,9 @@ function structuralWriteTargets(tokens: readonly ShellToken[], command: string):
   }
   if (head === 'dd') {
     const targets = operands.flatMap((token) => {
-      const outputRedirect = redirectionOperand(token, command);
-      const value = outputRedirect?.precedingOperand ?? token.value;
-      return value.startsWith('of=') ? [value.slice(3)] : [];
+      const redirections = redirectionOperands(token, command);
+      const values = redirections === null ? [token.value] : redirections.precedingOperands;
+      return values.filter((value) => value.startsWith('of=')).map((value) => value.slice(3));
     });
     return {
       targets: [...redirects, ...targets],

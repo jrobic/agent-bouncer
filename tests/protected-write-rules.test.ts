@@ -287,12 +287,31 @@ describe('protected-write rules: redirection-aware operands', () => {
   test('last-operand writers retain protected destinations before output redirects', async () => {
     const commands = [
       'cp /tmp/x ~/.zshrc 2>/dev/null',
+      'cp /tmp/x ~/.zshrc 2>&1',
       'cp /tmp/x ~/.zshrc > /dev/null',
       'install -m 755 /tmp/x ~/.claude/hooks/h.sh 2>/dev/null',
       'ln -sf /tmp/evil ~/.zshrc >/dev/null',
       'rsync -a /tmp/x ~/.zshrc > log.txt',
     ];
     await Promise.all(commands.map((command) => expect(checker.checkBashWrites(command)).resolves.toMatchObject({ verdict: 'confirm' })));
+  });
+
+  test('descriptor duplication does not consume a following reader operand', async () => {
+    await expect(checker.checkBashWrites('cat 2>&1 ~/.zshrc')).resolves.toBeNull();
+  });
+
+  test('adjacent output redirects retain protected destinations', async () => {
+    await expect(checker.checkBashWrites('echo x 2>&1>~/.zshrc')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-shell-rc',
+    });
+  });
+
+  test('a later adjacent output redirect remains a protected destination', async () => {
+    await expect(checker.checkBashWrites('echo x>/tmp/out&>~/.claude/settings.json')).resolves.toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'bash-harness-settings',
+    });
   });
 
   test('quoted targets attached to an output operator are structural targets', async () => {
@@ -380,6 +399,7 @@ describe('protected-write rules: redirection-aware operands', () => {
       'cat a>/Users/u/.zshrc',
       'echo x>"/Users/u/.zshrc"',
       'echo x 2>| ~/.zshrc',
+      'echo x&>~/.claude/settings.json',
     ];
     await Promise.all(commands.map((command) => expect(checker.checkBashWrites(command)).resolves.toMatchObject({ verdict: 'confirm' })));
     await Promise.all([

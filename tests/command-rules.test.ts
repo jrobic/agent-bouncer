@@ -755,6 +755,14 @@ describe('command-rules: quoted separators don\'t fabricate segments (tokenizer 
     expect(checkGit('git commit -m fix; git push')?.ruleId).toBe('git-protected');
   });
 
+  test.each([
+    'git status & git push',
+    'git status && git push',
+    'git status | git push',
+  ])('ruleId git-protected: %s keeps an unquoted control operator active', (command) => {
+    expect(checkGit(command)?.ruleId).toBe('git-protected');
+  });
+
   test('benign: git commit -m "a && git reset --hard" stays silent (the && is quoted)', () => {
     expect(checkGit('git commit -m "a && git reset --hard"')).toBeNull();
   });
@@ -791,6 +799,155 @@ describe('command-rules: clobber redirect tokenization', () => {
   test('a quoted greater-than and a clobber redirect retain their established behavior', () => {
     expect(checkBash('echo "a>"|cat')).toBeNull();
     expect(checkBash('rm -rf / >| out')?.verdict).toBe('block');
+  });
+});
+
+describe('command-rules: descriptor duplication preserves Git arguments', () => {
+  const checker = createCommandChecker({
+    ...BASELINE.rules.command,
+    git: {
+      ...BASELINE.rules.command.git,
+      safe_grammar: [
+        ...BASELINE.rules.command.git.safe_grammar,
+        { sub: 'cherry-pick', sequences: [['*']] },
+      ],
+    },
+  });
+
+  test('a descriptor duplication stays outside the grammar while later options still ask', () => {
+    expect(checker.checkGit('git cherry-pick a1b2c3d')).toBeNull();
+    expect(checker.checkGit('git cherry-pick a1b2c3d 2>&1')).toBeNull();
+
+    for (
+      const command of [
+        'git cherry-pick a1b2c3d 2>&1 -Xtheirs',
+        'git cherry-pick a1b2c3d 1>&2 -n',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
+  });
+  test('quoted or escaped descriptor text remains a Git argument', () => {
+    for (
+      const command of [
+        'git cherry-pick a1b2c3d \'2>&1\'',
+        'git cherry-pick a1b2c3d 2\\>\\&1',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
+  });
+
+  test('adjacent redirects stay outside the grammar while later options still ask', () => {
+    for (
+      const command of [
+        'git cherry-pick c0ffee1 2>&1>/tmp/out',
+        'git cherry-pick c0ffee1>/tmp/out&>/tmp/all',
+        'git cherry-pick c0ffee1>&1',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toBeNull();
+    }
+
+    for (
+      const command of [
+        'git cherry-pick c0ffee1 2>&1>/tmp/out -Xtheirs',
+        'git cherry-pick c0ffee1>/tmp/out&>/tmp/all -n',
+        'git cherry-pick c0ffee1>&1 -Xtheirs',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
+  });
+
+  test('only an unquoted terminal redirect operator binds descriptor duplication', () => {
+    for (
+      const command of [
+        'git cherry-pick "c0ffee1">&1',
+        'git cherry-pick c0ff\\ee1>&1',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toBeNull();
+    }
+
+    for (
+      const command of [
+        'git cherry-pick "c0ffee1">&1 -Xtheirs',
+        'git cherry-pick c0ff\\ee1>&1 -n',
+        'git cherry-pick "c0ffee1>"& git push',
+        'git cherry-pick c0ffee1\\>& git push',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
+  });
+
+  test('only an unquoted terminal redirect operator binds clobber redirection', () => {
+    for (
+      const command of [
+        'git cherry-pick "c0ffee1">|/tmp/out',
+        'git cherry-pick c0ff\\ee1>|/tmp/out',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toBeNull();
+    }
+
+    for (
+      const command of [
+        'git cherry-pick "c0ffee1">|/tmp/out -n',
+        'git cherry-pick c0ff\\ee1>|/tmp/out -Xtheirs',
+        'git cherry-pick "c0ffee1>"| git push',
+        'git cherry-pick c0ffee1\\>| git push',
+      ]
+    ) {
+      expect(checker.checkGit(command)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
+  });
+});
+
+describe('command-rules: SHA safe grammar slots', () => {
+  const checker = createCommandChecker({
+    ...BASELINE.rules.command,
+    git: {
+      ...BASELINE.rules.command.git,
+      safe_grammar: [
+        ...BASELINE.rules.command.git.safe_grammar,
+        { sub: 'cherry-pick', sequences: [[{ kind: 'sha' }]] },
+      ],
+    },
+  });
+
+  test('only a 7 through 64-character ASCII hexadecimal revision is allowed', () => {
+    expect(checker.checkGit('git cherry-pick a1b2c3d')).toBeNull();
+    expect(checker.checkGit(`git cherry-pick ${'A'.repeat(64)}`)).toBeNull();
+
+    for (
+      const revision of [
+        'a1b2c3',
+        'a1b2c3g',
+        'a'.repeat(65),
+      ]
+    ) {
+      expect(checker.checkGit(`git cherry-pick ${revision}`)).toMatchObject({
+        verdict: 'confirm',
+        ruleId: 'git-protected',
+      });
+    }
   });
 });
 

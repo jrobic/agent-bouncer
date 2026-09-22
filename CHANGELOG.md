@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-22
+
+### Added
+
+- Git `safe_grammar` accepts `{ kind = "sha" }` argument slots for 7–64
+  hexadecimal characters, without resolving Git objects.
+
+### Fixed
+
+- Shell redirections no longer hide following Git options or count as Git
+  arguments; protected write destinations remain checked.
+
 ## [1.4.0] - 2026-09-17
 
 ### Added
@@ -136,7 +148,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/jrobic/agent-bouncer/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/jrobic/agent-bouncer/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/jrobic/agent-bouncer/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/jrobic/agent-bouncer/compare/v1.1.2...v1.2.0
