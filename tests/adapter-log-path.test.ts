@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -22,25 +22,44 @@ import { tmpDir } from './tmp.ts';
 
 const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-code')!;
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+const ORIGINAL_HOME = process.env.HOME;
+
+// `~` is the process's HOME, read at call time (src/adapter/log-path.ts's
+// processHome()) — the one resolver every expansion shares. A fixture path
+// below, not a directory: nothing here touches the file system, and the
+// expected values come from this literal, never from the code under test.
+const FIXTURE_HOME = '/tmp/bouncer-fixture-home';
+
+beforeEach(() => {
+  process.env.HOME = FIXTURE_HOME;
+});
 
 afterEach(() => {
   if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
+  // tests/setup.ts always installs a throwaway HOME: reassigned, never deleted.
+  process.env.HOME = ORIGINAL_HOME!;
 });
 
 describe('configDirFor(claude-code): no override', () => {
   test('resolves to ~/.claude when CLAUDE_CONFIG_DIR is unset', () => {
     delete process.env.CLAUDE_CONFIG_DIR;
-    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(homedir(), '.claude'));
+    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(FIXTURE_HOME, '.claude'));
   });
 
   test('resolves to ~/.claude when CLAUDE_CONFIG_DIR is empty', () => {
     process.env.CLAUDE_CONFIG_DIR = '';
-    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(homedir(), '.claude'));
+    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(FIXTURE_HOME, '.claude'));
   });
 
   test('resolves to ~/.claude when CLAUDE_CONFIG_DIR is blank', () => {
     process.env.CLAUDE_CONFIG_DIR = '   ';
+    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(FIXTURE_HOME, '.claude'));
+  });
+
+  test.each(['', '   '])('a blank HOME (%j) falls back to the OS home directory, never to a relative path', (blank) => {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    process.env.HOME = blank;
     expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(homedir(), '.claude'));
   });
 });
@@ -58,12 +77,12 @@ describe('configDirFor(claude-code): CLAUDE_CONFIG_DIR override (second account 
 
   test('a leading ~ is expanded against the home directory', () => {
     process.env.CLAUDE_CONFIG_DIR = '~/.claude-work';
-    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(homedir(), '.claude-work'));
+    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(FIXTURE_HOME, '.claude-work'));
   });
 
   test('bare ~ expands to the home directory itself', () => {
     process.env.CLAUDE_CONFIG_DIR = '~';
-    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(homedir()));
+    expect(configDirFor(CLAUDE_CODE_HARNESS)).toBe(resolve(FIXTURE_HOME));
   });
 
   test('a relative override resolves against the current working directory', () => {
@@ -76,7 +95,7 @@ describe('hookLogPathFor(claude-code): per-account routing', () => {
   test('nests under configDirFor()/logs/hooks/<hookName>.log', () => {
     delete process.env.CLAUDE_CONFIG_DIR;
     expect(hookLogPathFor(CLAUDE_CODE_HARNESS, 'command-guard')).toBe(
-      join(resolve(homedir(), '.claude'), 'logs', 'hooks', 'command-guard.log'),
+      join(resolve(FIXTURE_HOME, '.claude'), 'logs', 'hooks', 'command-guard.log'),
     );
   });
 

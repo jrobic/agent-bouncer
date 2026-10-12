@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `doctor --harness pi-agent` reports omp profiles (`~/.omp/profiles/*/agent`)
+  that miss the shim or carry a stale one. omp loads no extension from
+  `~/.omp/agent` in a profiled session, so such a profile runs without
+  bouncer: one `wiring:shim (profile <name>)` line per profile (folders omp
+  refuses as a profile name are skipped), with the reprint command, exit code
+  1 while one fails. The session-start notice names a failing profile on a
+  line of its own — "another omp profile has no Bouncer shim: <name> — …" —
+  never as this session being unguarded. Nothing is installed automatically.
+
 ### Changed
 
 - The pi/omp shim's ask dialog is a numbered, one-key select — `1. Allow` /

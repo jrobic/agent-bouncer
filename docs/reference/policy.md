@@ -542,10 +542,15 @@ ledger. `"shim-file"` (ticket 15c, ADR-0006 § 7): an IN-PROCESS harness
 checks that `<configDir>/extensions/bouncer.ts` exists and is
 byte-identical to what `bouncer harness shim <id>` prints today
 (`wiring:shim`) and that the shim's own baked `BOUNCER` path resolves to
-an executable (`wiring:binary`); no canary concept (the shim already
-fails closed on its own liveness). Optional: a harness declared without
-one gets `wiring: not checkable (declared harness)` in `doctor`, visible
-rather than silently green.
+an executable (`wiring:binary`); and (ticket 56), when `witness` is an
+`agent` directory (`~/.omp/agent`), the same byte-for-byte check for every
+omp profile beside it, each `<witness's parent>/profiles/*/agent`
+(`wiring:shim (profile <name>)` — omp loads none of the default
+directory's extensions in a profile; a folder whose name omp refuses is no
+profile and is skipped; no field to declare); no canary
+concept (the shim already fails closed on its own liveness). Optional: a
+harness declared without one gets `wiring: not checkable (declared
+harness)` in `doctor`, visible rather than silently green.
 
 **`[harness.protocol.input]`** — where things a hook invocation needs
 live in the raw envelope object, as top-level dotted keys: `event` (the
@@ -764,7 +769,8 @@ applied to Codex's OWN two additive sources, `hooks.json` and
 `config.toml`'s `[hooks]` table, plus its hash-trust ledger,
 `config.toml`'s `[hooks.state]`), and `shim-file` (wiring, `src/adapter/
 codecs/wiring/shim-file.ts`, ticket 15c — an in-process harness's own
-printed extension, `wiring:shim` + `wiring:binary`, no settings shape and
+printed extension, `wiring:shim` + `wiring:binary` and, ticket 56, one
+`wiring:shim (profile <name>)` per omp profile; no settings shape and
 no canary); `apply-patch` (input codec on a tool row, `src/adapter/
 codecs/input/apply-patch.ts`, ticket 15b — Codex's `apply_patch` patch
 grammar) and `hashline` (input codec, `src/adapter/codecs/input/
