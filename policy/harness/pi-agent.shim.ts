@@ -20,8 +20,52 @@
 //   1. bouncer missing, not executable, exiting non-zero, or timing out
 //      (2s) → `{ block: true, reason: "bouncer: … — failing closed" }`.
 //   2. empty stdout → `undefined` (allow — nothing matched).
-//   3. `{ ask, reason }` → `ctx.hasUI ? await ctx.ui.confirm(...) : false`;
-//      `false` (declined, or no UI at all) → `{ block: true, reason }`.
+//   3. `{ ask, reason }` → with no UI attached (`ctx.hasUI` false, e.g.
+//      `-p`): `{ block: true, reason }`, nothing opened, nothing emitted.
+//      With a UI: a numbered one-key dialog, `ctx.ui.select("bouncer\n"
+//      + reason, ["1. Allow", "2. Block"], { initialIndex: 1 })` (Block
+//      highlighted by default where the host honours it: omp yes, pi
+//      0.84.1 no — see below), and ONLY the exact answer "1. Allow" lets
+//      the call run — "2. Block", Esc (`undefined`), an abort, any other
+//      string, or a select that rejects or throws → `{ block: true,
+//      reason }`. No timeout: an unanswered dialog waits (a timeout would
+//      silently turn asks into denials).
+//
+// The dialog's shape is measured per binary, never assumed iso (ticket
+// 55, live 2026-10-11, re-run 2026-10-12): `omp` 18.9.1 selects instantly
+// on a digit key when an option label starts with `N. ` and honours
+// `initialIndex`, so Block is the default highlight and a stray Enter
+// blocks; `pi` 0.84.1 honours neither — digits do nothing, the FIRST
+// option ("1. Allow") is always highlighted and Enter confirms it
+// (unchanged from the former Yes/No confirm), arrows move, Esc blocks.
+// See pi-agent.toml's `ask_probe`.
+//
+// Around that wait — UI only — the shim also emits omp's `herdr:blocked`
+// on the extension bus: `pi.events.emit("herdr:blocked", { active:
+// true, label: "bouncer: " + reason })` BEFORE the dialog opens and
+// `{ active: false }` in a `finally` that runs whenever the dialog
+// settles (accept, decline, Esc, Ctrl+C, a failing select — and, under
+// omp, a SIGINT/SIGTERM/SIGHUP to the process, which settles the pending
+// dialog while it shuts down; pi 0.84.1 exits with the dialog still
+// pending, so nothing releases the signal there and it dies with the
+// process: live 2026-10-12, see `ask_probe`), so Herdr's own omp
+// integration flips the agent to `blocked` for the duration of the
+// dialog and back after. This is an OBSERVABILITY SIGNAL, NOT POLICY, and
+// not one of the fixed rules above — nothing the canary enforces: it
+// gates nothing and changes no verdict. One guarded helper
+// (`emitHerdrBlocked`) swallows a missing `pi.events` and a throwing
+// `emit`, so it can never keep the dialog from opening nor mask the
+// verdict. Always emitted, no `HERDR_*` environment sniffing: a bus with
+// no subscriber makes it a no-op, and there is nothing to drift against
+// Herdr's own detection. The label is the same reason text the dialog
+// already shows, never anything else.
+// Why here: Herdr's integration file is herdr-managed and overwritten on
+// reinstall, so the fix cannot live there; a neutral `bouncer:ask` event
+// plus a local bridge extension was rejected (one more unchecked file on
+// disk, outside `doctor`'s byte check, and a silent failure if missing).
+// Known limit: vibe-island listens to omp's `tool_approval_*` events,
+// not to `herdr:blocked`, so it stays blind to a Bouncer ask.
+//
 // `session_start`'s own doctor context is delivered TWO ways, both fixed
 // rules (never a per-harness choice): `ctx.ui.notify` (an immediate,
 // best-effort toast — measured live, ticket 15c: rendered as a startup
@@ -63,8 +107,13 @@ import { appendFileSync } from 'node:fs';
 const BOUNCER = process.env.BOUNCER_BIN ?? '__BOUNCER_BIN__';
 const TIMEOUT_MS = 2000;
 
+// Ticket 55: the ask dialog's one ALLOWING answer — the label offered as the
+// first option AND the only answer the shim compares against, so the two can
+// never drift apart (anything else, `undefined` included, blocks).
+const ALLOW_OPTION = '1. Allow';
+
 interface PiUi {
-  confirm(title: string, text: string): Promise<boolean>;
+  select(title: string, options: string[], opts?: { initialIndex?: number; }): Promise<string | undefined>;
   notify(text: string, level?: string): void;
 }
 
@@ -100,7 +149,17 @@ interface BeforeAgentStartResult {
   message?: BeforeAgentStartMessage;
 }
 
+// The payload of omp's `herdr:blocked` event (Herdr's own omp integration
+// reads `active` and `label`) — see this file's own header comment.
+interface HerdrBlockedSignal {
+  active: boolean;
+  label?: string;
+}
+
 interface PiExtensionHost {
+  // Optional on purpose: the shim only ever emits on it (`emitHerdrBlocked`),
+  // and a `pi` without a bus is a legal host, not an error.
+  events?: { emit(channel: string, data?: unknown): void; };
   on(event: 'tool_call', handler: (event: ToolCallEvent, ctx: PiContext) => Promise<ToolCallResult | undefined>): void;
   on(event: 'session_start', handler: (event: unknown, ctx: PiContext) => Promise<void>): void;
   on(event: 'before_agent_start', handler: (event: unknown, ctx: PiContext) => BeforeAgentStartResult | undefined): void;
@@ -171,6 +230,19 @@ function spawnBouncer(payload: Record<string, unknown>): SpawnOutcome {
   }
 }
 
+// Ticket 55: the ONE place `herdr:blocked` is emitted (see this file's own
+// header comment — an observability signal, never policy). A `pi` with no
+// `events` bus, or an `emit` that throws, is swallowed here: the signal can
+// never keep the dialog from opening nor change the verdict, and the call
+// in the ask branch's `finally` can never mask it.
+function emitHerdrBlocked(pi: PiExtensionHost, signal: HerdrBlockedSignal): void {
+  try {
+    pi.events?.emit('herdr:blocked', signal);
+  } catch {
+    // Swallowed — see this function's own header comment.
+  }
+}
+
 export default function(pi: PiExtensionHost): void {
   // Set by `session_start`, consumed once by the FIRST `before_agent_start`
   // turn, then cleared — see this file's own header comment for why two
@@ -194,8 +266,24 @@ export default function(pi: PiExtensionHost): void {
     }
     if (value['ask'] === true) {
       const reason = typeof value['reason'] === 'string' ? value['reason'] : 'bouncer';
-      const confirmed = ctx.hasUI ? await ctx.ui.confirm('bouncer', reason) : false;
-      return confirmed ? undefined : { block: true, reason };
+      // Rule 3 (header comment): no UI → block, opening and emitting
+      // nothing. With a UI, ONLY the exact answer ALLOW_OPTION runs the
+      // call. Block is the default highlight under omp only (it honours
+      // `initialIndex`); pi 0.84.1 ignores it and opens on "1. Allow". The
+      // `finally` releases the `herdr:blocked` signal whenever the dialog
+      // settles (accept, decline, Esc, Ctrl+C, a select that rejects or
+      // throws); a process signalled with the dialog pending never gets
+      // there under pi (header comment).
+      if (!ctx.hasUI) return { block: true, reason };
+      emitHerdrBlocked(pi, { active: true, label: `bouncer: ${reason}` });
+      try {
+        const answer = await ctx.ui.select(`bouncer\n${reason}`, [ALLOW_OPTION, '2. Block'], { initialIndex: 1 });
+        return answer === ALLOW_OPTION ? undefined : { block: true, reason };
+      } catch {
+        return { block: true, reason };
+      } finally {
+        emitHerdrBlocked(pi, { active: false });
+      }
     }
     return undefined;
   });

@@ -795,12 +795,36 @@ request; a new assistant that fits the existing codecs is a file.
   a stale hash that still happens to have SOME record reads as trusted
   here even though Codex itself would treat it as modified and skip it.
 - pi-agent's own `confirm` mapping was `"deny"` pending a live probe of
-  `ctx.ui.confirm` under both `pi` and `omp` (ticket 15c); confirmed live
-  on both binaries 2026-09-08 (real dialog, decline blocks, accept runs)
-  and flipped to `"ask"` — see `pi-agent.toml`'s own `ask_probe` field
-  and the 15c report's probe table for both runs' evidence, including a
-  first `omp` attempt that turned out to be a stale, reused session and
-  was retracted before the flip.
+  the shim's ask dialog under both `pi` and `omp` (ticket 15c, then a
+  Yes/No `ctx.ui.confirm`); confirmed live on both binaries 2026-09-08
+  (real dialog, decline blocks, accept runs) and flipped to `"ask"` — see
+  `pi-agent.toml`'s own `ask_probe` field and the 15c report's probe
+  table for both runs' evidence, including a first `omp` attempt that
+  turned out to be a stale, reused session and was retracted before the
+  flip. Ticket 55 (2026-10-11, re-run 2026-10-12) turned the dialog into a
+  numbered one-key `ctx.ui.select` (`1. Allow` / `2. Block`; only the
+  exact `1. Allow` allows) and re-ran the probe on both binaries: accept
+  runs, decline, Esc and Ctrl+C block, headless blocks without a dialog —
+  but the digit keys and the default highlight are measured per binary,
+  not iso (omp 18.9.1: digits select instantly and Block is highlighted,
+  so a stray Enter blocks; pi 0.84.1: digits do nothing and Allow is
+  highlighted, so a stray Enter allows, as it did with the former Yes/No
+  dialog).
+- Around the ask dialog, when a UI exists, the pi-agent shim emits omp's
+  `herdr:blocked` event on the extension bus (ticket 55) so that Herdr's
+  omp integration, which listens for it, is expected to report the agent
+  `blocked` while the dialog is up (pending the operator's live Herdr
+  run) — an observability signal, never policy: it changes no verdict,
+  and a `pi` with no event bus or an `emit` that throws is swallowed. The
+  release (`{ active: false }`) runs whenever the dialog settles — an
+  answer, Esc, Ctrl+C, a failing select — and, with the dialog open and
+  the process sent SIGINT, SIGTERM or SIGHUP, under omp (its shutdown
+  settles the dialog) but not under pi 0.84.1, which exits with the dialog
+  still pending (measured 2026-10-12; the signal dies with the process).
+  Known limit: vibe-island listens to omp's `tool_approval_*` events, not
+  to `herdr:blocked`, so it stays blind to a Bouncer ask (omp's native
+  approval is not reachable from an extension's `tool_call` result, which
+  only carries `block`, `reason`, `additionalContext` and `input`).
 
 ## `mcp_write.allowed_tools`
 

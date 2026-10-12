@@ -121,17 +121,72 @@ check is unaffected either way, since it verifies the SHIM's own baked
 fallback path, never whatever `BOUNCER_BIN` happens to override at
 runtime.
 
-## What `confirm` looks like in the UI, and headless
+## What an `ask` looks like in the UI, and headless
 
 pi-agent's own `confirm` degrades to **`ask`** as of this writing
-(`policy/harness/pi-agent.toml`'s dated measurement): a live probe under
-both `pi` 0.84.1 and `omp` 18.1.10 confirmed real `ctx.ui.confirm` dialogs.
-Decline blocked the tool with bouncer's own reason; accept let it run. The
-shim's own contract (ADR-0006 § 7) is `ctx.hasUI ? await
-ctx.ui.confirm("bouncer", reason) : false` — a real TUI session prompts and
-waits for accept/decline; a headless session (`pi -p "…"`/`omp -p "…"`) has
-no UI at all, so `hasUI` is `false` and the call is blocked outright, never
-left hanging (also measured live, both binaries).
+(`policy/harness/pi-agent.toml`'s dated measurement, run 2026-10-11 and
+repeated 2026-10-12 under `pi` 0.84.1 and `omp` 18.9.1). In a real TUI
+session the shim opens a numbered, one-key dialog (`ctx.ui.select`,
+ADR-0006 § 7) titled `bouncer`, with bouncer's own reason above two
+options:
+
+```
+bouncer
+git-protected: git branch can rewrite history, mutate a remote, or discard work — confirm before running
+
+  1. Allow
+  2. Block
+```
+
+Only the exact answer `1. Allow` lets the tool run. `2. Block`, Esc, an
+aborted dialog, or a dialog that fails for any reason blocks the tool with
+bouncer's own reason. There is no timeout: an unanswered dialog waits for
+you. What the keys do differs per binary — measured live, never assumed:
+
+| | `omp` 18.9.1 | `pi` 0.84.1 |
+|---|---|---|
+| Default highlight | `2. Block` (`initialIndex: 1` honoured) | `1. Allow` (`initialIndex` ignored) |
+| `1` / `2` | select instantly, no Enter needed | do nothing |
+| Enter, nothing else pressed | blocks | **allows** |
+| ↑/↓ moves the highlight, Enter confirms it | yes | yes |
+| Esc | blocks | blocks |
+| Ctrl+C (the key) | blocks, like Esc | blocks, like Esc |
+
+So under `omp` the dialog is answered in one key and a stray Enter never
+approves. Under `pi` 0.84.1 you move with the arrow keys and confirm with
+Enter, and a stray Enter approves the highlighted `1. Allow` — as pi's
+former Yes/No dialog did (its `confirm` is the same selector with `Yes`
+first, `showExtensionConfirm` in pi 0.84.1's source): read the highlighted
+line before pressing Enter under `pi`.
+
+A headless session (`pi -p "…"`/`omp -p "…"`) has no UI at all, so
+`hasUI` is `false` and the call is blocked outright — no dialog opened,
+nothing emitted — never left hanging (measured live, both binaries).
+
+### Herdr, and other status integrations
+
+While the dialog is open — and only when a UI exists — the shim emits
+omp's `herdr:blocked` event on the extension bus: `{ active: true,
+label: "bouncer: <reason>" }` before the dialog opens, `{ active: false }`
+once it closes, whatever the answer. Herdr's own omp integration listens
+for that event, so the agent is expected to show `blocked` for the
+duration of the dialog instead of `working` (omp's own dialogs emit
+nothing, so without the signal an agent waiting on a Bouncer ask looks
+busy). The signal is an observability signal, not policy: it changes no
+verdict, it is emitted whether or not anything subscribes, and a `pi`/
+`omp` with no event bus, or an `emit` that throws (a throwing subscriber
+is already contained by omp's own bus), can neither keep the dialog from
+opening nor change its outcome. Measured live on both binaries with a
+stand-in subscriber on `pi.events`: it saw `active: true` when the dialog
+opened and `active: false` right after the answer, Esc or Ctrl+C. With
+the dialog open and the process itself sent SIGINT, SIGTERM or SIGHUP,
+`omp` still releases it (its shutdown settles the dialog first); `pi`
+0.84.1 exits with the dialog still pending and never emits `active:
+false` — the signal dies with the process. Herdr's own `blocked` flip is
+an operator check (Verify, below).
+
+Known limit: vibe-island listens to omp's native `tool_approval_*`
+events, not to `herdr:blocked`, so it stays blind to a Bouncer ask.
 
 ## Doctor notices at session start
 
@@ -177,6 +232,14 @@ upgrade — `bouncer doctor --harness pi-agent`'s `wiring:shim` check is
 exactly the reminder: it fails the moment an installed copy no longer
 matches what the CURRENT binary would print, naming the reprint command.
 
+Bouncer 1.6.0 is one such release: the ask dialog became the numbered
+select above and the shim now emits `herdr:blocked`. Every install reads
+`[fail] wiring:shim` until it is reprinted (`bouncer harness shim
+pi-agent > <dir>/extensions/bouncer.ts` — with the same `--bin` as at
+install time — for each of `~/.pi/agent` and `~/.omp/agent`, or any
+`PI_CODING_AGENT_DIR` seat), then restart the session; `bouncer doctor
+--harness pi-agent` is `[pass]` again once it matches.
+
 ## Verify
 
 - `bouncer doctor --harness pi-agent` exits 0 with every check `[pass]`.
@@ -184,6 +247,13 @@ matches what the CURRENT binary would print, naming the reprint command.
   is denied, with the reason visible to the model.
 - Editing `extensions/bouncer.ts` directly (or deleting it) asks for
   confirmation before it proceeds — the file's own protected-write row.
+- Under Herdr, a Bouncer ask (e.g. `git push` under `omp`) is *expected*
+  to show the agent `blocked`, with the `bouncer: …` label, in `herdr
+  agent get` while the dialog is open, and `working` again after the
+  answer — expected, to be confirmed by the operator's live Herdr run
+  (pending: not observed yet). An agent that stays `working` through an
+  ask: check `bouncer doctor --harness pi-agent` first — a shim printed
+  before 1.6.0 does not emit the signal.
 
 ---
 Source: policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts,

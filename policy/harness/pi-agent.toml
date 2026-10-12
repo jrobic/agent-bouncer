@@ -53,10 +53,14 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # fact 5): `pi.on("tool_call", (event, ctx) => …)` — `event.toolName`,
 # `event.input`, `event.toolCallId`; a thrown handler blocks (fail-closed
 # in the shim's own try/catch, never relied on here — the shim never
-# throws by construction); `ctx.hasUI`, `await ctx.ui.confirm(title,
-# text)` (resolves `false` with no UI attached); `ctx.ui.notify(text,
-# level)`; `ctx.cwd`; `ctx.sessionManager.getSessionId()`;
-# `pi.on("session_start", …)`. Below, per declared field name, updated
+# throws by construction); `ctx.hasUI`; `ctx.ui.notify(text, level)`;
+# `ctx.cwd`; `ctx.sessionManager.getSessionId()`;
+# `pi.on("session_start", …)`; for the ask dialog, `await
+# ctx.ui.confirm(title, text)` (resolves `false` with no UI attached —
+# the shim's dialog until ticket 55) and, since 2026-10-11, `await
+# ctx.ui.select(title, options, opts?)` (the label chosen, `undefined` on
+# Esc or abort; never opened with no UI attached — see the last
+# paragraph below). Below, per declared field name, updated
 # through ticket 15c's review round 1 (tool-forced re-runs, P-3):
 # `bash.command` confirmed LIVE on BOTH binaries (probes 1/3/7).
 # `write.path`/`.content` confirmed LIVE on BOTH — omp natively; pi via
@@ -133,17 +137,19 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # `apply-patch` parses Codex's own patch text: every `[PATH#TAG]` path,
 # `text` = every `+` row across every section joined by `\n`.
 #
-# `confirm` is CONFIRMED live on BOTH binaries as of this comment
-# (2026-09-08, pi 0.84.1 / omp 18.1.10). Headless half: probe 3
-# (`scripts/probe-pi-agent.sh`), a temporary confirm="ask" probe build,
-# genuinely separate subprocess launches on both binaries — `ctx.hasUI`
-# is `false` in headless (`-p`) mode, the shim's own `ctx.hasUI ? await
-# ctx.ui.confirm(...) : false` branch blocks the call without ever
-# hanging (`git branch -D no-such-branch-zzz` → `git-protected: …
-# confirm before running`, ~7-10s of ordinary model latency, never a
-# timeout) — identical on `pi` and `omp`.
+# `confirm` is CONFIRMED live on BOTH binaries (2026-09-08, pi 0.84.1 /
+# omp 18.1.10, re-run 2026-10-11 — see the last paragraph below).
+# Headless half: probe 3 (`scripts/probe-pi-agent.sh`), a temporary
+# confirm="ask" probe build, genuinely separate subprocess launches on
+# both binaries — `ctx.hasUI` is `false` in headless (`-p`) mode, the
+# shim's own no-UI branch (then `ctx.hasUI ? await ctx.ui.confirm(...) :
+# false`, since ticket 55 a block that opens and emits nothing) blocks
+# the call without ever hanging (`git branch -D no-such-branch-zzz` →
+# `git-protected: … confirm before running`, ~7-10s of ordinary model
+# latency, never a timeout) — identical on `pi` and `omp`.
 #
-# Interactive half: probe 2, run in two SEPARATE live panes. `pi`
+# Interactive half: probe 2 (the Yes/No `ctx.ui.confirm` dialog the shim
+# then opened), run in two SEPARATE live panes. `pi`
 # (~20:39Z, session `01a082be-…`): dialog rendered, declined → tool
 # blocked with bouncer's own reason, accepted → tool ran, two
 # `git-protected` `confirm` log entries. `omp` (~21:12Z, session
@@ -166,6 +172,47 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # mistake — trusting a matching rule name as proof of a second process —
 # is never repeated: a shared or reused `session_id` between two
 # supposedly independent runs is itself the tell.
+#
+# Re-run 2026-10-11 (ticket 55: the shim's dialog became a numbered
+# `ctx.ui.select` plus a `herdr:blocked` signal), both binaries again —
+# real TUIs in a private tmux, a scrubbed environment, a temporary HOME
+# and PI_CODING_AGENT_DIR, the shim reprinted from the source binary, a
+# local fake model answering every turn with one `git branch -D
+# no-such-branch-zzz` call. `omp` 18.9.1: dialog titled `bouncer`, the
+# reason, `1. Allow` / `2. Block`, `2. Block` highlighted by default
+# (`initialIndex` honoured); `1` allowed (git ran), `2` blocked, a stray
+# Enter blocked, Esc blocked, Up + Enter allowed — a digit selects
+# instantly, no Enter needed. `pi` 0.84.1: the same dialog with `1.
+# Allow` highlighted by default (`initialIndex` is ignored: its
+# `ExtensionUIDialogOptions` is only `{ signal, timeout }` and its
+# selector has no digit handling); `1` and `2` did nothing, a stray
+# Enter ALLOWED (git ran), Down + Enter blocked, Esc blocked. That
+# stray-Enter divergence is recorded, not fixed: pi's former Yes/No
+# `confirm` was the same selector with Yes first (`showExtensionConfirm`,
+# pi 0.84.1's source), so nothing regressed there. Headless (`-p`) on
+# both: blocked with bouncer's own reason, no dialog, nothing emitted.
+# On both binaries a subscriber on `pi.events` received `{ active: true,
+# label: "bouncer: <reason>" }` when the dialog opened and `{ active:
+# false }` right after the answer key (≤ 60 ms in every run, digit,
+# Enter and Esc alike). Herdr's own `blocked` flip is NOT measured here:
+# it needs Herdr's own integration, an operator step.
+#
+# Repeated 2026-10-12 on the final shim bytes (same rig; digit, Enter, Esc
+# and headless gave the same results on both binaries), plus an ABORT
+# row: the dialog open, then the session interrupted, the stand-in
+# subscriber logging every `herdr:blocked` it receives. Ctrl+C as a KEY
+# (tmux `send-keys C-c`, twice per binary): the dialog closes like Esc on
+# both binaries (pi's own hint reads "escape/ctrl+c cancel"), the tool is
+# blocked, the process stays up and `{ active: false }` follows within
+# 10 ms. A real SIGINT, SIGTERM or SIGHUP sent to the process (3 / 3 / 2
+# runs per binary, identical every time): `omp` exits (130 / 143 / 129)
+# after settling the pending dialog, so the shim's `finally` runs and
+# `{ active: false }` arrives within 10 ms of the signal; `pi` 0.84.1
+# exits (130 / 0 / 0) with the dialog still pending, the `finally` never
+# runs and NO `{ active: false }` is emitted. Recorded, not worked
+# around: the subscriber lives in the same dying process, so a signal
+# left up dies with it; what Herdr then shows for a pane whose agent
+# exited is Herdr's own handling and is not measured here.
 [harness.protocol]
 transport = "stdin-json"
 wiring    = "shim-file"
@@ -233,7 +280,7 @@ flag = "silent"
 # liveness failures as fail-closed (ADR-0006 § 7 rule 1) gains nothing
 # from silently allowing a broken envelope through.
 on_malformed = "deny"
-ask_probe = "2026-09-08, pi 0.84.1 and omp 18.1.10: real ctx.ui.confirm dialogs; decline blocks and accept runs on both"
+ask_probe = "2026-10-11, re-run 2026-10-12, pi 0.84.1 and omp 18.9.1: real ctx.ui.select dialogs (1. Allow / 2. Block); accept runs, decline, Esc and Ctrl+C block, and headless -p blocks without a dialog, on both; omp: digit keys 1/2 select instantly, default highlight is 2. Block (a stray Enter blocks); pi: digit keys do nothing and initialIndex is ignored, default highlight is 1. Allow (a stray Enter allows); herdr:blocked is released on Esc and Ctrl+C on both and, when the process is sent SIGINT/SIGTERM/SIGHUP with the dialog open, under omp but not under pi (it exits with the dialog pending)"
 
 [harness.protocol.output.deny]
 stdout = '{"block":true,"reason":${reason}}'
