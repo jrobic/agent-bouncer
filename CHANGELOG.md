@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The pi/omp shim's ask dialog is a numbered, one-key select — `1. Allow` /
+  `2. Block` — instead of Yes/No. Only the exact answer `1. Allow` runs the
+  call; `2. Block`, Esc, an abort or a failing dialog block, as before. Under
+  omp 18.9.1 `1`/`2` answer instantly and `2. Block` is highlighted by
+  default, so a stray Enter never approves; under pi 0.84.1 the digits do
+  nothing and `1. Allow` stays highlighted, so a stray Enter allows — as it
+  did with the former Yes/No dialog (measured live, recorded in
+  `pi-agent.toml`'s `ask_probe`).
+- **Upgrade:** the shim's bytes changed, so reprint it for each install —
+  `bouncer harness shim pi-agent > <dir>/extensions/bouncer.ts` (the same
+  `--bin` as at install time; `~/.pi/agent` and `~/.omp/agent`) — and
+  restart the session. `bouncer doctor --harness pi-agent` reports
+  `[fail] wiring:shim` until the installed copy matches again.
+
+### Fixed
+
+- Herdr kept the agent `working` for the whole wait of a Bouncer ask in omp:
+  the shim now emits omp's `herdr:blocked` event around the dialog (when a UI
+  exists) — the event Herdr's own omp integration turns into `blocked` — and
+  releases it after the answer. The signal changes no verdict. Known limit:
+  vibe-island listens to omp's `tool_approval_*` events, not to
+  `herdr:blocked`, so it stays blind to a Bouncer ask.
+
 ## [1.5.0] - 2026-09-22
 
 ### Added

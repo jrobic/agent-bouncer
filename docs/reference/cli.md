@@ -721,7 +721,7 @@ bouncer harness list
 harness claude-code baseline transport=stdin-json confirm=ask shim=no ask_probe="2026-08-16, Claude Code (version unrecorded): an unanswerable ask under --dangerously-skip-permissions is enforced as deny"
 harness codex baseline transport=stdin-json confirm=deny shim=no
 harness opencode baseline transport=none confirm=none shim=no
-harness pi-agent baseline transport=stdin-json confirm=ask shim=yes ask_probe="2026-09-08, pi 0.84.1 and omp 18.1.10: real ctx.ui.confirm dialogs; decline blocks and accept runs on both"
+harness pi-agent baseline transport=stdin-json confirm=ask shim=yes ask_probe="2026-10-11, re-run 2026-10-12, pi 0.84.1 and omp 18.9.1: real ctx.ui.select dialogs (1. Allow / 2. Block); accept runs, decline, Esc and Ctrl+C block, and headless -p blocks without a dialog, on both; omp: digit keys 1/2 select instantly, default highlight is 2. Block (a stray Enter blocks); pi: digit keys do nothing and initialIndex is ignored, default highlight is 1. Allow (a stray Enter allows); herdr:blocked is released on Esc and Ctrl+C on both and, when the process is sent SIGINT/SIGTERM/SIGHUP with the dialog open, under omp but not under pi (it exits with the dialog pending)"
 harness gemini-cli baseline transport=none confirm=none shim=no
 harness cursor baseline transport=none confirm=none shim=no
 harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=deny shim=no
@@ -734,8 +734,18 @@ for it (see `run`'s exit-2 contract above). `codex`'s own `confirm=deny`
 (never `ask_probe=`, since `ask_probe` is only mandatory when `confirm =
 "ask"`) is a measured, baseline fact (ADR-0006 § 4 rule 6, ticket 15b) —
 no overlay may relax it back to `ask`; pi-agent's own `confirm=ask` is a
-different measured fact: a live `ctx.ui.confirm` probe under both `pi` and
-`omp` confirmed 2026-09-08 that decline blocks and accept runs. `shim=yes`
+different measured fact: a live probe of the shim's numbered `ctx.ui.select`
+dialog (`1. Allow` / `2. Block`, ticket 55) under both `pi` and `omp`
+confirmed 2026-10-11 that accept runs and decline blocks, while the digit
+keys and the default highlight differ per binary (omp: `1`/`2` select
+instantly and Block is highlighted, so a stray Enter blocks; pi: digits do
+nothing and Allow is highlighted, so a stray Enter allows, as with pi's
+former Yes/No dialog) — see the `ask_probe=` string above. Around that
+dialog, when a UI exists, the shim also emits omp's `herdr:blocked` event
+on the extension bus (an observability signal, not policy: it changes no
+verdict) so Herdr reports the agent `blocked` while the dialog is up.
+Known limit: vibe-island listens to omp's `tool_approval_*` events, not to
+`herdr:blocked`, so it stays blind to a Bouncer ask. `shim=yes`
 (ADR-0006 § 7, ticket 15c): this harness is IN-PROCESS — `harness shim <id>`
 below prints a real embedded extension for it; `shim=no` covers both a
 stdin-json hook harness (nothing to print) and an in-process harness

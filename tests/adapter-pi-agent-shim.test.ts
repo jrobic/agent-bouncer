@@ -4,9 +4,10 @@
 // "a freshly built binary leaves the canary silent") to print the shim,
 // writing it to a fresh temp file per case (a distinct absolute path so
 // Bun's module cache never serves a stale `BOUNCER` from an earlier
-// case), and dynamically importing it with a fake `pi` host that just
-// records the two handlers it registers. Every assertion drives the
-// REAL shim module, never a hand-reimplemented copy of its logic.
+// case), and dynamically importing it with a fake `pi` host that records
+// the handlers it registers (plus an `events` bus where a case needs one).
+// Every assertion drives the REAL shim module, never a hand-reimplemented
+// copy of its logic.
 
 import { describe, expect, test } from 'bun:test';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
@@ -19,11 +20,24 @@ interface FakeCtx {
   hasUI: boolean;
   cwd?: string;
   sessionManager?: { getSessionId?: () => string | undefined; };
-  ui: { confirm: (title: string, text: string) => Promise<boolean>; notify: (text: string, level?: string) => void; };
+  ui: {
+    select: (title: string, options: string[], opts?: { initialIndex?: number; }) => Promise<string | undefined>;
+    notify: (text: string, level?: string) => void;
+  };
 }
 
-type ToolCallHandler = (event: { toolName: string; input: unknown; },
-  ctx: FakeCtx) => Promise<{ block?: boolean; reason?: string; } | undefined>;
+// The slice of omp/pi's `pi.events` bus the shim may touch (`emit` only).
+interface FakeEvents {
+  emit: (channel: string, data?: unknown) => void;
+}
+
+// What a `tool_call` handler hands back to the harness: `undefined` allows.
+interface ToolCallVerdict {
+  block?: boolean;
+  reason?: string;
+}
+
+type ToolCallHandler = (event: { toolName: string; input: unknown; }, ctx: FakeCtx) => Promise<ToolCallVerdict | undefined>;
 type SessionStartHandler = (event: unknown, ctx: FakeCtx) => Promise<void>;
 type BeforeAgentStartHandler = (
   event: unknown,
@@ -41,7 +55,7 @@ function fakeCtx(overrides: Partial<FakeCtx> = {}): FakeCtx {
     hasUI: true,
     cwd: '/tmp/probe-cwd',
     sessionManager: { getSessionId: () => 'fake-session' },
-    ui: { confirm: async () => true, notify: () => {} },
+    ui: { select: async () => undefined, notify: () => {} },
     ...overrides,
   };
 }
@@ -64,8 +78,9 @@ async function ensureBuilt(): Promise<void> {
 // the duration of that one import — never touching the file's own baked
 // `BOUNCER` (`process.execPath` of `dist/bouncer` at print time), which
 // `BOUNCER_BIN` always overrides at the shim's own runtime, per its own
-// contract.
-async function loadShim(bouncerBin: string): Promise<LoadedShim> {
+// contract. `events` is the fake `pi.events` bus handed to the shim; left
+// undefined, the fake `pi` has NO `events` property at all.
+async function loadShim(bouncerBin: string, events?: FakeEvents): Promise<LoadedShim> {
   await ensureBuilt();
   const printed = Bun.spawn([join(PROJECT_ROOT, 'dist', 'bouncer'), 'harness', 'shim', 'pi-agent'], {
     stdout: 'pipe',
@@ -81,7 +96,7 @@ async function loadShim(bouncerBin: string): Promise<LoadedShim> {
 
   const originalBouncerBin = process.env.BOUNCER_BIN;
   process.env.BOUNCER_BIN = bouncerBin;
-  let mod: { default: (pi: { on: (event: string, handler: unknown) => void; }) => void; };
+  let mod: { default: (pi: { on: (event: string, handler: unknown) => void; events?: FakeEvents; }) => void; };
   try {
     // Exception to ts-no-dynamic-import: `file` is a fresh temp path
     // computed at test time (a distinct copy of the printed shim per
@@ -102,6 +117,7 @@ async function loadShim(bouncerBin: string): Promise<LoadedShim> {
     on: (event, handler) => {
       handlers[event as 'tool_call' | 'session_start' | 'before_agent_start'] = handler;
     },
+    ...(events === undefined ? {} : { events }),
   });
   return {
     toolCall: handlers.tool_call as ToolCallHandler,
@@ -172,48 +188,158 @@ describe('pi-agent shim: tool_call — {block} returned as is', () => {
   });
 });
 
-describe('pi-agent shim: tool_call — {ask, reason} degrades through ctx.ui.confirm', () => {
-  test('hasUI true, confirm resolves true (accept): the call runs, nothing returned', async () => {
-    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const shim = await loadShim(fakePath);
-    let confirmCalledWith: readonly [string, string] | undefined;
+// ADR-0006 § 7 (ticket 55): an `ask` is a numbered one-key `ctx.ui.select`
+// with Block as the default highlight; only the exact answer "1. Allow"
+// lets the call run. Around that dialog (UI only) the shim emits omp's
+// `herdr:blocked` on `pi.events` — an observability signal, never policy.
+// One reason, one fake bouncer that always answers `{ask, reason}`, one
+// tool call to judge.
+const ASK_REASON = 'git-protected: confirm before running';
+const askingBouncer = (): Promise<string> => fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"${ASK_REASON}"}'`);
+const ASK_CALL = { toolName: 'bash', input: { command: 'git push --force' } };
+const BLOCKED: ToolCallVerdict = { block: true, reason: ASK_REASON };
+
+// ONE ordered log is fed by both the fake bus's `emit` and the fake
+// `ctx.ui.select`, so "before the dialog opens" and "after it settles" are
+// observed orderings, never inferred ones. `select` is the dialog's own
+// outcome; `opened` settles the moment the dialog is up.
+interface Step {
+  readonly step: 'emit' | 'select opened';
+  readonly channel?: string;
+  readonly data?: unknown;
+}
+const SELECT_OPENED: Step = { step: 'select opened' };
+const BLOCKED_ON: Step = {
+  step: 'emit',
+  channel: 'herdr:blocked',
+  data: { active: true, label: 'bouncer: git-protected: confirm before running' },
+};
+const BLOCKED_OFF: Step = { step: 'emit', channel: 'herdr:blocked', data: { active: false } };
+
+function askRig(select: () => Promise<string | undefined>) {
+  const timeline: Step[] = [];
+  const { promise: opened, resolve: markOpened } = Promise.withResolvers<void>();
+  const events: FakeEvents = {
+    emit: (channel, data) => {
+      timeline.push({ step: 'emit', channel, data });
+    },
+  };
+  const ctx = fakeCtx({
+    ui: {
+      select: () => {
+        timeline.push(SELECT_OPENED);
+        markOpened();
+        return select();
+      },
+      notify: () => {},
+    },
+  });
+  return { timeline, opened, events, ctx };
+}
+
+// Every way the dialog can end, with the verdict it must produce.
+type AskOutcome = [name: string, select: () => Promise<string | undefined>, verdict: ToolCallVerdict | undefined];
+const ACCEPT: AskOutcome = ['accept ("1. Allow")', async () => '1. Allow', undefined];
+const DECLINE: AskOutcome = ['decline ("2. Block")', async () => '2. Block', BLOCKED];
+const ASK_OUTCOMES: AskOutcome[] = [
+  ACCEPT,
+  DECLINE,
+  ['Esc (undefined)', async () => undefined, BLOCKED],
+  ['a select that rejects', () => Promise.reject(new Error('dialog failed')), BLOCKED],
+  [
+    'a select that throws synchronously',
+    () => {
+      throw new Error('dialog failed');
+    },
+    BLOCKED,
+  ],
+];
+
+describe('pi-agent shim: tool_call — {ask, reason} is a numbered select, Block highlighted', () => {
+  test('hasUI true: select("bouncer\\n<reason>", ["1. Allow", "2. Block"], { initialIndex: 1 }); "1. Allow" lets the call run', async () => {
+    const shim = await loadShim(await askingBouncer());
+    let selectCalledWith: readonly [string, readonly string[], unknown] | undefined;
     const ctx = fakeCtx({
       ui: {
-        confirm: async (title, text) => {
-          confirmCalledWith = [title, text];
-          return true;
+        select: async (title, options, opts) => {
+          selectCalledWith = [title, options, opts];
+          return '1. Allow';
         },
         notify: () => {},
       },
     });
-    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
+    const result = await shim.toolCall(ASK_CALL, ctx);
     expect(result).toBeUndefined();
-    expect(confirmCalledWith).toEqual(['bouncer', 'git-protected: confirm before running']);
+    expect(selectCalledWith).toStrictEqual([
+      'bouncer\ngit-protected: confirm before running',
+      ['1. Allow', '2. Block'],
+      { initialIndex: 1 },
+    ]);
   });
 
-  test('hasUI true, confirm resolves false (decline): blocked with the same reason', async () => {
-    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const shim = await loadShim(fakePath);
-    const ctx = fakeCtx({ ui: { confirm: async () => false, notify: () => {} } });
-    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
-    expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
+  test.each<string | undefined>(['2. Block', undefined, 'Allow', '1. allow', '', '1. Allow ', 'Yes'])(
+    'the answer %j is not exactly "1. Allow": blocked with the same reason',
+    async (answer) => {
+      const shim = await loadShim(await askingBouncer());
+      const ctx = fakeCtx({ ui: { select: async () => answer, notify: () => {} } });
+      expect(await shim.toolCall(ASK_CALL, ctx)).toStrictEqual(BLOCKED);
+    },
+  );
+});
+
+describe('pi-agent shim: tool_call — {ask, reason} signals herdr:blocked around the dialog', () => {
+  test('the signal goes up before the dialog opens and comes down only once the answer arrives', async () => {
+    const answer = Promise.withResolvers<string | undefined>();
+    const rig = askRig(() => answer.promise);
+    const shim = await loadShim(await askingBouncer(), rig.events);
+    const pending = shim.toolCall(ASK_CALL, rig.ctx);
+    await rig.opened;
+    expect(rig.timeline).toStrictEqual([BLOCKED_ON, SELECT_OPENED]);
+    answer.resolve('1. Allow');
+    expect(await pending).toBeUndefined();
+    expect(rig.timeline).toStrictEqual([BLOCKED_ON, SELECT_OPENED, BLOCKED_OFF]);
   });
 
-  test('no UI attached (headless -p): blocked WITHOUT ever awaiting ctx.ui.confirm', async () => {
-    const fakePath = await fakeBouncerScript(String.raw`printf '{"ask":true,"reason":"git-protected: confirm before running"}'`);
-    const shim = await loadShim(fakePath);
-    const ctx = fakeCtx({
-      hasUI: false,
-      ui: {
-        confirm: () => {
-          throw new Error('confirm must never be called when hasUI is false');
-        },
-        notify: () => {},
-      },
+  test.each(ASK_OUTCOMES)('%s: the signal still comes down, after the dialog, and the verdict is untouched',
+    async (_outcome, select, verdict) => {
+      const rig = askRig(select);
+      const shim = await loadShim(await askingBouncer(), rig.events);
+      expect(await shim.toolCall(ASK_CALL, rig.ctx)).toStrictEqual(verdict);
+      expect(rig.timeline).toStrictEqual([BLOCKED_ON, SELECT_OPENED, BLOCKED_OFF]);
     });
-    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'git push --force' } }, ctx);
-    expect(result).toEqual({ block: true, reason: 'git-protected: confirm before running' });
+
+  test('no UI attached (headless -p): blocked without opening a select AND without emitting anything', async () => {
+    const rig = askRig(async () => '1. Allow');
+    const shim = await loadShim(await askingBouncer(), rig.events);
+    expect(await shim.toolCall(ASK_CALL, { ...rig.ctx, hasUI: false })).toStrictEqual(BLOCKED);
+    expect(rig.timeline).toStrictEqual([]);
   });
+});
+
+// The signal can never get in the way: a `pi` with no bus at all, or a bus
+// whose `emit` throws (on the raise AND on the release), changes neither
+// whether the dialog opens nor the verdict.
+describe('pi-agent shim: tool_call — {ask, reason} survives a missing or broken pi.events', () => {
+  const BROKEN_BUSES: [string, FakeEvents | undefined][] = [
+    ['pi has no events bus', undefined],
+    [
+      'pi.events.emit throws',
+      {
+        emit: () => {
+          throw new Error('bus is down');
+        },
+      },
+    ],
+  ];
+  for (const [bus, events] of BROKEN_BUSES) {
+    test.each([ACCEPT, DECLINE])(`${bus}: %s — the dialog still opens once and the verdict is untouched`,
+      async (_outcome, select, verdict) => {
+        const rig = askRig(select);
+        const shim = await loadShim(await askingBouncer(), events);
+        expect(await shim.toolCall(ASK_CALL, rig.ctx)).toStrictEqual(verdict);
+        expect(rig.timeline).toStrictEqual([SELECT_OPENED]);
+      });
+  }
 });
 
 describe('pi-agent shim: session_start', () => {
@@ -223,7 +349,7 @@ describe('pi-agent shim: session_start', () => {
     let notified: readonly [string, string | undefined] | undefined;
     const ctx = fakeCtx({
       ui: {
-        confirm: async () => true,
+        select: async () => undefined,
         notify: (text, level) => {
           notified = [text, level];
         },
@@ -239,7 +365,7 @@ describe('pi-agent shim: session_start', () => {
     let notifyCalled = false;
     const ctx = fakeCtx({
       ui: {
-        confirm: async () => true,
+        select: async () => undefined,
         notify: () => {
           notifyCalled = true;
         },
@@ -254,7 +380,7 @@ describe('pi-agent shim: session_start', () => {
     let notified: string | undefined;
     const ctx = fakeCtx({
       ui: {
-        confirm: async () => true,
+        select: async () => undefined,
         notify: (text) => {
           notified = text;
         },
