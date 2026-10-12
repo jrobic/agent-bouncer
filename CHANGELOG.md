@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-12
+
 ### Added
 
 - `doctor --harness pi-agent` reports omp profiles (`~/.omp/profiles/*/agent`)
@@ -184,7 +186,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/jrobic/agent-bouncer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/jrobic/agent-bouncer/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/jrobic/agent-bouncer/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/jrobic/agent-bouncer/compare/v1.2.0...v1.3.0
