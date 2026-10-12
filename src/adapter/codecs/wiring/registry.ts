@@ -32,7 +32,7 @@ import {
   settingsPathFor,
   type SettingsReadResult,
 } from './hook-file.ts';
-import { checkShim, checkShimBinary, readShimFile, shimPathFor } from './shim-file.ts';
+import { checkProfileShims, checkShim, checkShimBinary, readShimFile, shimPathFor } from './shim-file.ts';
 
 export interface WiringChecksResult {
   /** The top-level "can this codec's own file even be read" check — absent for a codec with no such single file (shim-file). */
@@ -115,11 +115,16 @@ const CODEX_HOOKS_CODEC: WiringCodec = {
 // closed on its own liveness (bouncer missing/non-executable/non-zero
 // exit/timeout, ADR-0006 § 7's own fixed rule 1) — `doctor --print-canary`
 // for this wiring is a real, honest error, never a fabricated entry.
+// Ticket 56: one more `wiring:shim (profile <name>)` check per omp profile
+// (each its own agent directory, loading nothing from the default one),
+// except under an explicit `--settings` path, which pins the check to that
+// one file.
 const SHIM_FILE_CODEC: WiringCodec = {
   buildChecks: async (pathOverride, harness, _protocol) => {
     const path = pathOverride ?? shimPathFor(harness);
     const result = await readShimFile(path);
-    return { checks: [checkShim(result, path, harness.id), await checkShimBinary(result)] };
+    const profileChecks = pathOverride === undefined ? await checkProfileShims(harness) : [];
+    return { checks: [checkShim(result, path, harness.id), await checkShimBinary(result), ...profileChecks] };
   },
   formatCanonicalCanaryEntry: async (_pathOverride, harness) => ({
     error: 'shim-file wiring has no canary entry — the printed shim already fails closed on its own '

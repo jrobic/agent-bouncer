@@ -47,11 +47,10 @@
 // there is no declaration left to resolve one from.
 
 import { readdir, readFile, realpath, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join, sep } from 'node:path';
 import { loadPolicyFromLayers, type LoadResult, type NamedLayer, type OverlayFile } from '../policy/load.ts';
 import type { HarnessDeclaration } from '../policy/schema.ts';
-import { profileRootFor } from './log-path.ts';
+import { processHome, profileRootFor } from './log-path.ts';
 
 export interface HarnessLoadResult extends LoadResult {
   readonly harness: HarnessDeclaration | undefined;
@@ -62,25 +61,12 @@ export interface HarnessLoadResult extends LoadResult {
 // the home directory, never from any harness's own configDir (that is
 // what makes it "common" rather than any one harness's own). No file
 // anywhere names this root; every adapter reads the SAME one through this
-// same helper.
-//
-// Reads `process.env.HOME` directly, on purpose, rather than node:os's
-// homedir() — Bun resolves homedir() once at process boot (from the OS,
-// not from `process.env.HOME`) and never re-reads it, so a test that
-// reassigns `process.env.HOME` mid-process (tests/setup.ts sets a
-// throwaway one globally; the process user's real home may carry an
-// installed common layer) would silently keep resolving to the REAL home. A
-// non-empty HOME wins verbatim; homedir() is only the fallback for the
-// (rare, but real outside test contexts) case where HOME itself is
-// unset. GUARD FOR TEST AUTHORS: an empty OR deleted `process.env.HOME`
-// both fall through to this SAME homedir() branch — the process user's real
-// home may carry an installed common layer, not a safe default. A test must
-// always REASSIGN `HOME` to another throwaway string in its own cleanup, exactly like
-// tests/setup.ts's global preload does; never `delete process.env.HOME`
-// or set it to `''` to "reset" it.
+// same helper. `~` is processHome() (src/adapter/log-path.ts): why HOME is
+// read at call time, and its GUARD FOR TEST AUTHORS (a test reassigns
+// HOME, never deletes it), live there — the same resolver every other `~`
+// in a doctor run goes through.
 export function commonRoot(): string {
-  const home = process.env.HOME;
-  return join(home && home.trim() !== '' ? home : homedir(), '.agents', 'bouncer');
+  return join(processHome(), '.agents', 'bouncer');
 }
 
 function errorCode(err: unknown): string | undefined {

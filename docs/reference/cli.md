@@ -434,7 +434,8 @@ bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
   (`<dir>/extensions/bouncer.ts` by default) — there is no
   `settings.json` for an in-process harness; the flag name stays
   `--settings` for one shared CLI surface across every wiring shape,
-  never a per-harness flag.
+  never a per-harness flag. The check is then pinned to that one file: no
+  `wiring:shim (profile <name>)` line (below) is printed.
 - `--print-canary` — print the canonical second `PreToolUse` entry for the
   primary bouncer command in this settings file, ready to paste beside that
   entry. Its shell command runs the same binary's `ping`; on any non-zero
@@ -515,6 +516,71 @@ carrying it stays identical across accounts and machines):
 [fail] wiring:shim — extensions/bouncer.ts differs from `bouncer harness shim pi-agent`; reprint it
 [pass] wiring:binary — /path/to/dist/bouncer is executable
 ```
+
+**omp profiles (ticket 56):** omp runs a profile (`OMP_PROFILE`,
+`PI_PROFILE`, `--profile`) with its own agent directory,
+`~/.omp/profiles/<name>/agent`, and loads no extension from `~/.omp/agent`
+there (measured on omp 18.9.1): a profile without the shim is a session
+without bouncer. `--harness pi-agent` therefore adds one `wiring:shim
+(profile <name>)` line per profile, after `wiring:binary`, in name order — the
+same byte-for-byte check against `bouncer harness shim pi-agent` as the
+default `wiring:shim`:
+
+```
+[pass] wiring:shim — /path/to/.omp/agent/extensions/bouncer.ts matches the printed shim
+[pass] wiring:binary — /path/to/dist/bouncer is executable
+[pass] wiring:shim (profile client) — /path/to/.omp/profiles/client/agent/extensions/bouncer.ts matches the printed shim
+[fail] wiring:shim (profile work) — extensions/bouncer.ts is missing — a session under this profile loads nothing from the default agent directory and runs without bouncer; install it with `mkdir -p ~/.omp/profiles/work/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/work/agent/extensions/bouncer.ts`
+```
+
+- **Where:** the `profiles` directory beside the harness's declared default
+  account directory (`witness`) — `~/.omp/profiles` for pi-agent. A harness
+  whose `witness` is not an `agent` directory has no profiles. `~` is the
+  process's `HOME` (a blank one falls back to the OS home directory), the
+  same for the default account directory and for this root — one resolution
+  per run. The root never comes from `PI_CODING_AGENT_DIR` (omp ignores it
+  under a profile). No `profiles` directory: no profile line at all, the
+  output is the one without this feature. One that exists but cannot be
+  listed: `[fail] wiring:shim (profiles)`.
+- **Which:** every entry holding an `agent/` directory whose name omp
+  18.9.1 can open. A stray file, a folder with no `agent/` (omp creates it
+  at a profile's first launch) and a folder omp refuses (outside
+  `^[a-z0-9][a-z0-9._-]{0,63}$`, ending with `.`, a Windows device name such
+  as `con` or `lpt9`, or `default`, which omp reads as "no profile") are not
+  profiles and are not listed. Case is judged on the lowercased name: omp
+  refuses `Work`, but on a case-insensitive filesystem (the macOS default)
+  `omp --profile=work` opens `profiles/Work/agent`, so a capitalised folder
+  is listed. The rule mirrors omp 18.9.1 and must be re-measured after an
+  omp upgrade; see `docs/how-to/wire-into-pi-agent.md` § omp profiles for
+  the measurements.
+- **Result:** no `extensions/bouncer.ts` → `[fail]` with the install command
+  for that profile (`mkdir -p` included: omp creates no `extensions/` in a new
+  `agent/`); present and identical → `[pass]`; present and different, or
+  unreadable → `[fail]` with the default line's own message. There is no
+  `wiring:binary` per profile.
+- **The profile a session runs under** (omp exports that profile's agent
+  directory as `PI_CODING_AGENT_DIR`) is checked by the default lines and not
+  repeated: `doctor` compares it with the account directory it already
+  resolves, with no `PI_CODING_AGENT_DIR` handling of its own.
+- **Printed text:** a ready-to-paste command is only built from a plain path
+  (letters, digits, `.`, `_`, `-`, `/`); anything else printed from the file
+  system has its control characters escaped (`\u{a}`).
+- `doctor` never writes into an agent directory.
+- **As a `SessionStart` hook,** a failing profile joins every pi-agent/omp
+  session's notice on a line of its own, whichever profile that session runs
+  under — never under the "this session may be running partially or fully
+  unguarded" header, which is for the session's own wiring: a guarded session
+  must not read as unguarded because another profile is not.
+
+```
+bouncer doctor: another omp profile has no Bouncer shim: work — install it with `mkdir -p ~/.omp/profiles/work/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/work/agent/extensions/bouncer.ts`
+bouncer doctor: another omp profile carries a stale Bouncer shim: client — reprint it with `mkdir -p ~/.omp/profiles/client/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/client/agent/extensions/bouncer.ts`
+```
+
+An unreadable shim file reads `another omp profile's Bouncer shim cannot be
+read: <name> — …`; an unreadable `profiles` directory, `omp profiles cannot
+be checked, they may run without Bouncer: ~/.omp/profiles is unreadable
+(EACCES)`. The checklist form above is unchanged.
 
 **A harness declared without a `wiring` codec (ADR-0006 § 6):** the four
 `settings`/`wiring:*` checks collapse into ONE, tagged `[warn]` — never

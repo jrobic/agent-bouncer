@@ -88,6 +88,11 @@ bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
    executable (a moved or removed `dist/bouncer` after `wiring:shim`
    already passed) — every tool call fails closed until either is fixed.
 
+   If omp runs under a profile on this machine, `doctor` also prints one
+   `wiring:shim (profile <name>)` line per profile — see
+   [omp profiles](#omp-profiles): a profile does not load the shim installed
+   above.
+
 ## Shadow first (recommended before cutover)
 
 Unlike Claude Code and Codex, there is no `--shadow` flag to append to a
@@ -223,6 +228,118 @@ session — its profile overlay (`$PI_CODING_AGENT_DIR/bouncer/`), audit log
 entirely separate from the primary account's. Reprint and reinstall the
 shim under that directory too (step 3) — nothing is shared automatically.
 
+## omp profiles
+
+omp can run under a **profile**: `OMP_PROFILE=<name>`, `PI_PROFILE=<name>`
+(`OMP_PROFILE` wins when both are set) or `omp --profile <name>`. The session
+then uses its own agent directory, `~/.omp/profiles/<name>/agent`, **instead
+of** `~/.omp/agent`, and it loads extensions from that directory only. The
+shim installed in `~/.omp/agent/extensions` is not loaded there: **a profile
+without its own copy of the shim runs without bouncer.**
+
+Observed live on omp 18.9.1, in a temporary `HOME` (`omp -p … --no-session`,
+with `BOUNCER_PROBE_LOG` set: the shim appends the `session_start` payload it
+sends to that file, so an empty log means the shim never loaded):
+
+- shim only in `~/.omp/agent/extensions`: a plain session loaded it, a
+  session under `OMP_PROFILE=<name>` did not;
+- shim in `~/.omp/profiles/<name>/agent/extensions/bouncer.ts`: the profiled
+  session loaded it;
+- the same with `PI_PROFILE` and with `--profile`;
+- with `PI_CODING_AGENT_DIR` set as well, the profile wins: omp ignores
+  `PI_CODING_AGENT_DIR` under a profile and exports the profile's own agent
+  directory in its place.
+- the name rule (checked with `omp --profile=<name> --alias <x>`, which
+  validates the name without a model call): `Work`, `con`, `CON.txt`,
+  `aux.txt`, `com1`, `lpt9`, `prn`, `nul`, `work.`, `.work`, `-work`,
+  `_work`, `a b` and a 65-character name exit 1 with `Error: Invalid OMP
+  profile "Work". Profile names must match ^[a-z0-9][a-z0-9._-]{0,63}$, cannot
+  be "." or "..", cannot end with ".", and cannot be a Windows reserved device
+  name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, or any of those with an
+  extension).`; `work`, `client-2`, `w.o-r_k`, a 64-character name, `console`,
+  `com10`, `con-x` and `0abc` are accepted;
+- `OMP_PROFILE=default` opens the default agent directory: a marker extension
+  in `~/.omp/agent/extensions` loaded, one in
+  `~/.omp/profiles/default/agent/extensions` did not;
+- on a case-insensitive filesystem (the macOS default), `OMP_PROFILE=work`
+  opens a folder spelled `Work`: its extension loaded.
+
+Install the shim in each profile, the way step 3 does for the default
+directory:
+
+```sh
+mkdir -p ~/.omp/profiles/<name>/agent/extensions
+bouncer harness shim pi-agent > ~/.omp/profiles/<name>/agent/extensions/bouncer.ts
+```
+
+(`mkdir -p`: omp creates a profile's `agent/` the first time it launches, with
+no `extensions/` in it.) Do it **before the first launch** of a new profile: a
+folder under `~/.omp/profiles/` that was never launched has no `agent/` yet, so
+`doctor` does not list it, and that first session runs without bouncer.
+
+omp hands the profile's agent directory to the shim's `bouncer run` as
+`PI_CODING_AGENT_DIR`, so each profile is its own bouncer account: its profile
+overlay is `<profile agent dir>/bouncer/` and its audit log
+`<profile agent dir>/logs/hooks/bouncer.log` (the common layer,
+`~/.agents/bouncer/`, stays shared).
+
+`bouncer doctor --harness pi-agent` reports every directory
+`~/.omp/profiles/*/agent` it finds, one line each:
+
+```
+[pass] wiring:shim (profile client) — /home/me/.omp/profiles/client/agent/extensions/bouncer.ts matches the printed shim
+[fail] wiring:shim (profile work) — extensions/bouncer.ts is missing — a session under this profile loads nothing from the default agent directory and runs without bouncer; install it with `mkdir -p ~/.omp/profiles/work/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/work/agent/extensions/bouncer.ts`
+```
+
+- `[fail]` when `extensions/bouncer.ts` is missing (the line carries the
+  command for that profile) or differs from what `bouncer harness shim
+  pi-agent` prints today (`extensions/bouncer.ts differs from … ; reprint it`
+  — reprint it into that profile); `[pass]` when it is identical. Exit code 1
+  while any profile fails.
+- No `~/.omp/profiles` directory: no profile line at all. A stray file, or a
+  folder with no `agent/` directory, is not a profile and is not listed. A
+  `profiles` directory that exists but cannot be listed is itself a
+  `[fail]` (`wiring:shim (profiles)`).
+- A folder whose name omp 18.9.1 refuses is not a profile and is not listed:
+  no session can open it, and a standing `[fail]` for it would be a false
+  alarm. The rule is the one measured above: `^[a-z0-9][a-z0-9._-]{0,63}$`,
+  not ending with `.`, not a Windows device name (`con`, `prn`, `aux`, `nul`,
+  `com0`–`com9`, `lpt0`–`lpt9`, with or without an extension), and not
+  `default` (which omp reads as "no profile"). The one exception is case,
+  and it errs towards listing: omp refuses `Work`, but launched as `work` it
+  opens `profiles/Work/agent` on a case-insensitive filesystem, so a
+  capitalised folder **is** listed. (On a case-sensitive filesystem it can
+  never run: rename or delete it.) The rule mirrors omp 18.9.1 — re-measure
+  it after an omp upgrade.
+- `doctor` never installs anything: reprinting is yours, a doctor that
+  writes into an agent directory is a different threat model. The command it
+  prints is only built from a plain path (letters, digits, `.`, `_`, `-`,
+  `/`); anything else it prints from the file system is shown with control
+  characters escaped.
+- **Session-start notice.** The failing profile lines also reach the notice
+  every pi-agent/omp session receives at start (see above), whichever profile
+  that session runs under — on lines of their own, never under the "this
+  session may be running partially or fully unguarded" header, which stays
+  for the session's own wiring: a guarded session does not read as unguarded
+  because another profile is not.
+
+  ```
+  bouncer doctor: another omp profile has no Bouncer shim: work — install it with `mkdir -p ~/.omp/profiles/work/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/work/agent/extensions/bouncer.ts`
+  bouncer doctor: another omp profile carries a stale Bouncer shim: client — reprint it with `mkdir -p ~/.omp/profiles/client/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/client/agent/extensions/bouncer.ts`
+  ```
+
+  A shim file that cannot be read reads "another omp profile's Bouncer shim
+  cannot be read: <name> — …"; a `profiles` directory that cannot be listed,
+  "omp profiles cannot be checked, they may run without Bouncer: ~/.omp/profiles
+  is unreadable (EACCES)". The profile a session runs under is not "another":
+  it is reported by the plain `wiring:shim` line only. `doctor` recognises it
+  by `PI_CODING_AGENT_DIR`, which omp exports as that profile's agent
+  directory (observed) — it reads the account directory it already resolves,
+  nothing more.
+- `bouncer doctor --harness pi-agent --settings <path>` checks that one file
+  and lists no profile.
+- Only omp's `~/.omp/profiles` is read; `pi` is not covered.
+
 ## After an upgrade
 
 `bouncer harness shim pi-agent`'s output can change between bouncer
@@ -240,9 +357,13 @@ install time — for each of `~/.pi/agent` and `~/.omp/agent`, or any
 `PI_CODING_AGENT_DIR` seat), then restart the session; `bouncer doctor
 --harness pi-agent` is `[pass]` again once it matches.
 
+Every [omp profile](#omp-profiles) holds its own copy of the shim: reprint it
+into each one too. `doctor` names every profile whose copy is stale or missing.
+
 ## Verify
 
-- `bouncer doctor --harness pi-agent` exits 0 with every check `[pass]`.
+- `bouncer doctor --harness pi-agent` exits 0 with every check `[pass]`
+  (every `wiring:shim (profile …)` line included).
 - A guarded command inside the session (e.g. `rm -rf /tmp/some-test-dir`)
   is denied, with the reason visible to the model.
 - Editing `extensions/bouncer.ts` directly (or deleting it) asks for

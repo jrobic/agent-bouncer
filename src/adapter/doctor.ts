@@ -15,7 +15,9 @@
 //     message that screams (a real anomaly: wiring gap, broken overlay, an
 //     unwritable log) or calmly announces (only overrides/relaxations are
 //     active, nothing is actually broken) — but never both silent AND
-//     something worth knowing.
+//     something worth knowing. A failing check about ANOTHER session
+//     (`otherSession`) is neither: it gets a line of its own, never the
+//     scream's claim about this session.
 
 import { access, constants as fsConstants, mkdir, open, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -36,6 +38,15 @@ export interface DoctorCheck {
   // wiring whose state cannot be verified; `build` identifies a source or
   // dirty executable.
   readonly warn?: 'unprovable' | 'build';
+  // Set on a FAILING check that is about ANOTHER session than the one
+  // asking — another omp profile's wiring (ticket 56, codecs/wiring/
+  // shim-file.ts): the sentence the SessionStart notice prints for it, on a
+  // line of its own. The check still fails (its checklist line is
+  // unchanged, `bouncer doctor` still exits 1), but it never joins the
+  // scream: "this session may be running unguarded" is a claim about the
+  // session that asked, and a guarded session must not read as unguarded
+  // because a sibling profile is not.
+  readonly otherSession?: string;
   readonly message: string;
 }
 
@@ -290,26 +301,31 @@ export function formatDoctorChecklist(report: DoctorReport): string {
  * stdout at all, indistinguishable from a healthy PreToolUse allow) —
  * reserved for the one case where every check passes, no check is a
  * `[warn]`, AND no override/relaxation is active. Anything else produces
- * a message: a genuine anomaly screams first (settings/wiring/policy/log
- * FAILURES), then calm blocks for override/relaxation state, unprovable
- * wiring, and a source or dirty binary. Each warning remains non-failing;
- * it never joins the scream. Story 19's "impossible to overlook, never
- * silent" applies even when nothing is actually broken.
+ * a message: a genuine anomaly of THIS session screams first (settings/
+ * wiring/policy/log FAILURES), then one line per failing check about
+ * ANOTHER session (`otherSession`: its own sentence, never the scream),
+ * then calm blocks for override/relaxation state, unprovable wiring, and
+ * a source or dirty binary. Each warning remains non-failing; it never
+ * joins the scream. Story 19's "impossible to overlook, never silent"
+ * applies even when nothing is actually broken.
  */
 export function buildSessionStartContext(report: DoctorReport): string | null {
   const failing = report.checks.filter((c) => !c.ok);
+  const failingHere = failing.filter((c) => c.otherSession === undefined);
+  const failingElsewhere = failing.flatMap((c) => (c.otherSession === undefined ? [] : [c.otherSession]));
   const warnings = report.checks.filter((c) => c.warn !== undefined);
   const unprovableWarnings = warnings.filter((c) => c.warn === 'unprovable');
   const buildWarnings = warnings.filter((c) => c.warn === 'build');
   if (failing.length === 0 && report.overrideCount === 0 && warnings.length === 0) return null;
 
   const lines: string[] = [];
-  if (failing.length > 0) {
+  if (failingHere.length > 0) {
     lines.push(
       `${HOOK_NAME} doctor: WIRING/POLICY PROBLEM DETECTED — this session may be running partially or fully unguarded.`,
     );
-    lines.push(...failing.map((f) => `  - ${f.id}: ${f.message}`));
+    lines.push(...failingHere.map((f) => `  - ${f.id}: ${f.message}`));
   }
+  lines.push(...failingElsewhere.map((sentence) => `${HOOK_NAME} doctor: ${sentence}`));
   if (report.overrideCount > 0) {
     lines.push(
       `${HOOK_NAME} doctor: ${report.overrideCount} active override(s)/relaxation(s) — the effective policy is relaxed from the vetted baseline:`,
