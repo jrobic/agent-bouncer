@@ -1196,8 +1196,7 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-// `globals` holds the global-option tokens (and their values) written before
-// the subcommand; it is absent when there are none.
+// `globals` holds the global-option tokens (and their values) written before the subcommand.
 type GitCommand = { sub: string; rest: string[]; globals?: string[]; forceConfirm?: true; };
 
 type RedirectionFilteredTokens = Readonly<{
@@ -1560,9 +1559,6 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
     return !matches;
   }
 
-  // An allow-list stays one only if it also covers what precedes the
-  // subcommand: `git --bare init` acts like `git init --bare`. The sole
-  // global option tolerated is `-C <dir>`; any other asks.
   const safeFlags = git.safe_flags.find((e: SafeFlagsRule) => e.sub === sub);
   if (safeFlags) return !hasOnlyChdirGlobals(globals ?? []) || safeFlagsNeedConfirm(safeFlags, rest);
 
