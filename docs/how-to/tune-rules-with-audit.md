@@ -31,7 +31,7 @@ manual policy changes.
      It is context, never an instruction to change a rule.
    - **Conditional rules that fired** — a declarative git-conditional
      table entry (`docs/reference/policy.md`'s `ask_flags` /
-     `safe_first_arg` / `safe_grammar`) that produced an observe verdict
+     `safe_first_arg` / `safe_grammar` / `safe_flags`) that produced an observe verdict
      in the current view. Proof it is earning its keep.
    - **Dead conditional rules** — declared, never fired in the current
      view. A candidate for repository review, not automatic action.

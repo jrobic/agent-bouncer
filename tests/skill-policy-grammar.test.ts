@@ -24,15 +24,23 @@ function inlineCommands(source: string): readonly string[] {
 function fencedCommands(source: string): readonly string[] {
   const blocks: string[] = [];
   let activeBlock: string[] | undefined;
+  // Inside a fence of another language (toml, …): its closing fence must
+  // not be taken for an opening one, or the parity of every later block flips.
+  let inOtherFence = false;
 
   for (const line of source.split('\n')) {
-    if (activeBlock !== undefined && /^\s*```\s*$/.test(line)) {
+    const fence = /^\s*```(\w*)\s*$/.exec(line);
+    if (fence === null) {
+      activeBlock?.push(line);
+    } else if (activeBlock !== undefined) {
       blocks.push(activeBlock.join('\n'));
       activeBlock = undefined;
-    } else if (activeBlock === undefined && /^\s*```(?:sh|text)?\s*$/.test(line)) {
+    } else if (inOtherFence) {
+      inOtherFence = false;
+    } else if (['', 'sh', 'text'].includes(fence[1]!)) {
       activeBlock = [];
     } else {
-      activeBlock?.push(line);
+      inOtherFence = true;
     }
   }
 
