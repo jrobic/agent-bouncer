@@ -2121,6 +2121,372 @@
       ]
     },
     {
+      "id": "git-branch-grouped-short-delete-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -qD foo"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-grouped-short-delete-first-letter-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -dv foo"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-grouped-short-force-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -fd foo"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-grouped-short-force-create-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -qC x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-grouped-short-delete-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -fd v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-grouped-short-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -fc=y HEAD~1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-force-create-short-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -C=x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-create-short-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -c=x"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-grouped-short-verbose-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -vv"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-grouped-short-all-verbose-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -avv"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-grouped-short-quiet-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -qc feat"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-tag-stuck-number-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -n1"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-tag-short-list-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -l"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-long-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --force=x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-force-create-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch --force-create=x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-format-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --format=%(refname:short)"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-sort-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --sort=-committerdate"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-tag-sort-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag --sort=-v:refname"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-long-prefix-delete-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --delet foo"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-long-prefix-force-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --forc x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-long-prefix-force-create-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch --force-c x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-long-prefix-discard-changes-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch --discard"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-long-prefix-delete-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag --del v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-long-show-current-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --show-current"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-long-prefix-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch --force-c=x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-branch-end-of-options-marker-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -- foo"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-branch-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch main"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-previous-branch-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-create-short-flag-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -c feat"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-symbolic-ref-quiet-short-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git symbolic-ref -q --short HEAD"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-symbolic-ref-second-positional-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git symbolic-ref HEAD refs/heads/main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "known-limit-git-switch-glued-value-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -cfix"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "a value glued to a short option is read as more grouped letters, so the f of -cfix matches -f; the over-confirmation errs on the safe side and ask_flags has no field for options that take a value"
+    },
+    {
+      "id": "known-limit-git-branch-separated-dash-value",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --sort -committerdate"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "ask_flags does not know which options take a value, so a separated value that starts with - is read as a group of short options and its d matches -d; the over-confirmation errs on the safe side, and --sort=-committerdate does not ask"
+    },
+    {
       "id": "git-pull-ff-only-asks-in-trunk",
       "toolName": "Bash",
       "toolInput": {

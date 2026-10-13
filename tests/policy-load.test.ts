@@ -270,6 +270,35 @@ describe('loadPolicyFromOverlayText: a git-conditional entry substituting an alr
   });
 });
 
+// The baseline's ask_flags rows are matched grouped, `--name=value` and
+// abbreviated through fixtures/command.json; fixtures only run against the
+// baseline, so this is where an OVERLAY entry is shown to get the same reading.
+describe('loadPolicyFromOverlayText: an ask_flags overlay entry is matched the way git reads options', () => {
+  const loaded = loadPolicyFromOverlayText(`
+    [[rules.command.git.ask_flags]]
+    sub = "worktree"
+    flags = ["--force", "-f", "-B"]
+    reason = "worktree add/list/remove stay autonomous"
+  `);
+  const checker = createCommandChecker(loaded.policy.command);
+
+  test('the entry loads without warnings', () => {
+    expect(loaded.warnings).toEqual([]);
+  });
+
+  test.each([
+    ['--name=value', 'git worktree add --force=1 ../x feat'],
+    ['an abbreviation', 'git worktree add --forc ../x feat'],
+    ['a group of short options', 'git worktree add -fB x ../x'],
+  ])('%s asks', (_form, command) => {
+    expect(checker.checkGit(command)?.ruleId).toBe('git-protected');
+  });
+
+  test('a form that names no listed option stays allowed', () => {
+    expect(checker.checkGit('git worktree add ../x feat')).toBeNull();
+  });
+});
+
 describe('loadPolicyFromOverlayText: SHA-constrained safe grammar', () => {
   test('an inline SHA slot allows a plain cherry-pick with one abbreviated identifier', () => {
     const loaded = loadPolicyFromOverlayText(`

@@ -1054,6 +1054,49 @@ describe('command-rules: safe_flags semantics (generic, on an ungoverned subcomm
   });
 });
 
+// The baseline's grouped / `=value` / abbreviated matrix lives in
+// fixtures/command.json as the conformance contract and is not repeated
+// here: these tests cover what a baseline fixture cannot say — the shapes of
+// a list ENTRY the baseline has no instance of (an overlay can write them).
+describe('command-rules: ask_flags matching (generic, on an ungoverned subcommand)', () => {
+  const checker = createCommandChecker({
+    ...BASELINE.rules.command,
+    git: {
+      ...BASELINE.rules.command.git,
+      ask_flags: [{ sub: 'gc', flags: ['-ff', '-1', '--aggressive', '--', 'go'] }],
+    },
+  });
+
+  test.each([
+    // an entry that is not `-x` or `--name` matches its own spelling only
+    'git gc -ff',
+    'git gc --',
+    'git gc go',
+    // a digit is a letter like any other once the token is not a number
+    'git gc -a1',
+    // only a bare number is shorthand: with a value, `1` and `2` are letters before the `=`
+    'git gc -12=x',
+  ])('ruleId git-protected: %s asks', (command) => {
+    expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test.each([
+    // a multi-letter single-dash entry does not spread into its letters
+    'git gc -f',
+    'git gc -fx',
+    // a bare word is exact only, never a prefix
+    'git gc g',
+    // a number is git's `-<n>` shorthand, not the listed `-1`
+    'git gc -12',
+    // a listed `--` is not the letter `-` of a short group
+    'git gc -a-b',
+    // a longer option that merely starts with a listed one is not the listed one
+    'git gc --aggressive-all',
+  ])('%s stays allowed', (command) => {
+    expect(checker.checkGit(command)).toBeNull();
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');

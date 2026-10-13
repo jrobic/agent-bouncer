@@ -1524,6 +1524,32 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
   return positionals > rule.max_positionals;
 }
 
+// A bare number as a short group (`-12`): git's `-<n>` shorthand, not letters.
+const NUMERIC_SHORT_GROUP = /^-\d+$/;
+
+// Whether `token` is one of an ask_flags entry's `flags`, read the way git
+// reads options. Token semantics: AskFlagsRule.flags in policy/schema.ts.
+function askFlagMatches(flags: readonly string[], token: string): boolean {
+  if (flags.includes(token)) return true;
+  if (!token.startsWith('-')) return false;
+  const equals = token.indexOf('=');
+
+  if (token.startsWith('--')) {
+    const name = equals === -1 ? token : token.slice(0, equals);
+    if (equals !== -1 && flags.includes(name)) return true;
+    if (name.length <= 2) return false;
+    return flags.some((flag) => flag.length > name.length && flag.startsWith(name));
+  }
+
+  if (NUMERIC_SHORT_GROUP.test(token)) return false;
+  const end = equals === -1 ? token.length : equals;
+  return flags.some((flag) => {
+    if (flag.length !== 2 || flag[0] !== '-' || flag[1] === '-') return false;
+    const at = token.indexOf(flag[1]!, 1);
+    return at !== -1 && at < end;
+  });
+}
+
 // `-C` always consumes the next token, so global tokens that are only
 // `-C <dir>` pairs sit at every even index.
 function hasOnlyChdirGlobals(globals: readonly string[]): boolean {
@@ -1535,7 +1561,7 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
 
   const askFlags = git.ask_flags.find((e: AskFlagsRule) => e.sub === sub);
   if (askFlags) {
-    if (rest.some((t) => askFlags.flags.includes(t))) return true;
+    if (rest.some((t) => askFlagMatches(askFlags.flags, t))) return true;
     if (askFlags.max_positionals !== undefined && positionalArgs(rest).length > askFlags.max_positionals) {
       return true;
     }

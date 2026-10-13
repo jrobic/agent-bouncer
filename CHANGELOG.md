@@ -20,6 +20,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `--bin` as at install time; `~/.pi/agent`, `~/.omp/agent` and each omp
   profile's agent dir) — and restart the session. `bouncer doctor --harness pi-agent`
   reports `[fail] wiring:shim` until the installed copy matches again.
+- **Upgrade:** a personal `ask_flags` overlay becomes stricter without being
+  rewritten. A command that spells a listed flag grouped, as `--name=value` or
+  abbreviated now asks, where it used to pass.
+
+### Security
+
+- **`ask_flags` no longer lets a flag through because of how it is spelled.**
+  A listed flag was recognised only when written exactly as listed, but git
+  accepts three other spellings of the same option, and each of them skipped the
+  confirmation: grouped short options (`git branch -qD foo`, `git branch -fd
+  foo`, `git tag -fd v1`, `git switch -C=x main`), `--long=value` (`git switch
+  --force-create=x main`) and an abbreviated long option (`git branch --forc
+  x`, `git switch --force-c x main`, `git switch --discard`, `git tag --del
+  v1`). All of them now ask with `git-protected`, as the standard spelling
+  does. An argument after the subcommand matches a listed flag when it is
+  identical, when it is `--name=value` and `--name` is listed, when it is a
+  strict prefix of a listed long option (a `--x`, however short; combined with
+  `=value` it still matches, as `--force-c=x` does), or when it is a
+  single-dash group that is not a number and holds a listed short option as
+  any of its letters before a `=`. The rule covers every `ask_flags` entry, the
+  baseline's (`branch`, `tag`, `switch`, `symbolic-ref`) and an overlay's
+  (`worktree`, a replaced `branch`). Known limit: `ask_flags` does not know
+  which options take a value, so a value glued to a short option
+  (`git switch -cfix`, `git tag -mdone`) or a separated value that starts with
+  `-` (`git branch --sort -committerdate`) can contain a listed letter and ask
+  once too often; a separated value that does not start with `-`
+  (`git switch -c fix`) does not ask, and `--opt=value` is the way to write one
+  that does (`git branch --sort=-committerdate`). `max_positionals`,
+  `safe_first_arg`, `safe_grammar` and `safe_flags` are unchanged. Replayed on
+  22,913 distinct commands from real agent sessions that mention git, no real
+  agent command changes verdict: the only ones that do are the probes written
+  to exhibit this bypass. Details:
+  [`ask_flags`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms).
 
 ## [1.9.0] - 2026-10-13
 
