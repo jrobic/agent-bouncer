@@ -769,7 +769,7 @@ algorithm, not by a row of the six regex tables).
 
 - An `export GIT_EXTERNAL_DIFF=… && git diff` in the same line, or in an
   earlier call, sets the variable outside the prefix of the git command,
-  which is all the rule reads (`git-config-exec-exported-variable-is-a-known-limit`
+  which is all the rule reads (`known-limit-git-config-exec-exported-variable`
   in `fixtures/command.json`).
 - A value is read as literal text: `GIT_EDITOR=$EDITOR git commit` asks
   (the text is not `true`), while `GIT_AUTHOR_NAME=$(…) git commit` passes
