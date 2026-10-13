@@ -1,6 +1,6 @@
-// Which form decides a git subcommand. One place builds the set of
-// subcommands a conditional rule governs, so the overlay lint (load.ts), the
-// audit's dead-rule list and its `--suggest` filter cannot drift apart.
+// Which form decides a git subcommand. The one place that builds the set of
+// subcommands a conditional rule governs, so every reader of that set sees
+// the same one.
 
 import type { CommandGitPolicy, GitConditionalTable } from './schema.ts';
 
