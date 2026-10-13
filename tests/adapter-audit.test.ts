@@ -488,7 +488,7 @@ describe('renderSuggestions', () => {
       expect(text).toContain('# value = "gc"');
     });
 
-    test('a subcommand only an overlay entry governs is named too: the effective policy decides, not the baseline', () => {
+    test('the renderer names the form the map it is given assigns (here a safe_flags entry from an overlay)', () => {
       const overlayPolicy = loadPolicyFromOverlayText(
         '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
       ).policy;
