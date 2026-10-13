@@ -316,7 +316,7 @@ export interface OverrideEntry {
   readonly verdict?: 'block' | 'confirm' | 'observe';
 }
 
-// The four allowlists an overlay can only ever RELAX by adding to (each
+// The allowlists an overlay can only ever RELAX by adding to (each
 // addition unconditionally widens what silently passes) — `[[relax]]` is
 // the sole path onto them; a plain overlay addition to
 // `rules.command.git.safe_subcommands` etc. is rejected at load time
@@ -324,6 +324,9 @@ export interface OverrideEntry {
 export type RelaxableList =
   | 'command.git.safe_subcommands'
   | 'command.git.config_read_modes'
+  | 'command.git.allowed_global_options'
+  | 'command.git.allowed_config'
+  | 'command.git.allowed_env'
   | 'mcp_write.read_prefixes'
   | 'mcp_write.allowed_tools';
 
@@ -332,10 +335,13 @@ export type RelaxableList =
 // that needs to validate "is this string a member of RelaxableList"
 // (src/policy/lint.ts's overlay validation, src/adapter/audit.ts's
 // suggestion levers and their own drift test) reads from here instead of
-// re-declaring the four strings a second time.
+// re-declaring the strings a second time.
 export const RELAXABLE_LISTS: readonly RelaxableList[] = [
   'command.git.safe_subcommands',
   'command.git.config_read_modes',
+  'command.git.allowed_global_options',
+  'command.git.allowed_config',
+  'command.git.allowed_env',
   'mcp_write.read_prefixes',
   'mcp_write.allowed_tools',
 ];

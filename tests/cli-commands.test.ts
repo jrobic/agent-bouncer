@@ -364,6 +364,17 @@ describe('runRulesList', () => {
       'overlay-relax command.git.safe_flags init — bare scratch repositories are routine here [profile:policy.toml]',
     );
   });
+
+  test('a relaxed git-config-exec allow-list is an overlay-relax line with its reason', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[relax]]\nlist = "command.git.allowed_env"\nvalue = "GIT_SSH_COMMAND"\nreason = "ssh probes in CI"\n',
+    );
+    const { text } = await runRulesList();
+    expect(text).toMatch(/^summary: \d+ rules, 1 overrides active/m);
+    expect(text).toContain('overlay-relax command.git.allowed_env GIT_SSH_COMMAND — ssh probes in CI [profile:policy.toml]');
+  });
 });
 
 describe('runPing', () => {

@@ -142,6 +142,80 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
   });
 });
 
+// Fixtures judge the baseline alone; these are the overlay half of the
+// `git-config-exec` contract: the three allow-lists open only through a
+// reasoned [[relax]], and the verdict follows the loaded policy.
+describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-lists', () => {
+  const relax = (list: string, value: string, reason = 'human-approved') =>
+    `[[relax]]\nlist = ${JSON.stringify(list)}\nvalue = ${JSON.stringify(value)}\nreason = ${JSON.stringify(reason)}\n`;
+  const checkGitWith = (overlay: string, command: string) => {
+    const loaded = loadPolicyFromOverlayText(overlay);
+    expect(loaded.warnings).toEqual([]);
+    return createCommandChecker(loaded.policy.command).checkGit(command);
+  };
+  const ssh = (value: string) => `GIT_SSH_COMMAND='${value}' git ls-remote ssh://h/r`;
+
+  test('a variable relaxed by name passes at any value, and its neighbours still ask', () => {
+    const overlay = relax('command.git.allowed_env', 'GIT_SSH_COMMAND');
+    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
+    expect(checkGitWith(overlay, ssh('/tmp/anything'))).toBeNull();
+    expect(checkGitWith(overlay, 'GIT_SSH=/x git ls-remote ssh://h/r')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('a variable relaxed as name=value passes at that value only', () => {
+    const overlay = relax('command.git.allowed_env', 'GIT_SSH_COMMAND=ssh -o BatchMode=yes');
+    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
+    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=no'))?.ruleId).toBe('git-config-exec');
+  });
+
+  test('a config key relaxed as key=value passes at that value only, whatever the key\'s case', () => {
+    const overlay = relax('command.git.allowed_config', 'core.pager=less');
+    expect(checkGitWith(overlay, 'git -c core.pager=less diff')).toBeNull();
+    expect(checkGitWith(overlay, 'git -c CORE.Pager=less diff')).toBeNull();
+    expect(checkGitWith(overlay, 'git -c core.pager=more diff')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('a global option relaxed by name passes, with its value in the next token', () => {
+    const overlay = relax('command.git.allowed_global_options', '--namespace');
+    expect(checkGitWith(overlay, 'git --namespace=x status')).toBeNull();
+    expect(checkGitWith(overlay, 'git --namespace x status')).toBeNull();
+    expect(checkGitWith(overlay, 'git --exec-path=/tmp/x status')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('an active relaxation names its list, value, reason and file', () => {
+    const loaded = loadPolicyFromOverlayText(relax('command.git.allowed_env', 'GIT_SSH_COMMAND', 'ssh probes in CI'));
+    expect(loaded.activeRelaxations).toContainEqual({
+      list: 'command.git.allowed_env',
+      value: 'GIT_SSH_COMMAND',
+      reason: 'ssh probes in CI',
+      sourceFile: 'profile:policy.toml',
+    });
+  });
+
+  test.each([
+    'command.git.allowed_global_options',
+    'command.git.allowed_config',
+    'command.git.allowed_env',
+  ])('a [[relax]] on %s without a reason rejects the layer and the baseline holds', (list) => {
+    const loaded = loadPolicyFromOverlayText(`[[relax]]\nlist = "${list}"\nvalue = "GIT_SSH_COMMAND"\nreason = ""\n`);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain('reason');
+    expect(createCommandChecker(loaded.policy.command).checkGit(ssh('ssh -o BatchMode=yes'))?.ruleId).toBe('git-config-exec');
+  });
+
+  test.each([
+    'allowed_global_options',
+    'allowed_config',
+    'allowed_env',
+  ])('a direct rules.command.git.%s addition is rejected and points to [[relax]]', (key) => {
+    const loaded = loadPolicyFromOverlayText(`[rules.command.git]\n${key} = ["GIT_SSH_COMMAND"]\n`);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(`rules.command.git.${key} cannot be extended directly`);
+    expect(loaded.warnings.join(' ')).toContain('[[relax]]');
+    expect(loaded.policy.command.git[key as 'allowed_env']).not.toContain('GIT_SSH_COMMAND');
+  });
+});
+
 describe('loadPolicyFromOverlayText: exact MCP permissions', () => {
   const chromeClick = `
     [[relax]]

@@ -73,6 +73,7 @@ import type {
   SafeFlagsRule,
   SafeGrammarRule,
 } from './schema.ts';
+import { RELAXABLE_LISTS } from './schema.ts';
 
 // Every regex-table id the embedded baseline already owns, across all six
 // families combined — computed once at module load (the baseline never
@@ -443,9 +444,18 @@ function mergeGitPolicy(
       baseline.config_read_modes,
       relaxedValuesFor(relax, 'command.git.config_read_modes'),
     ),
-    allowed_global_options: baseline.allowed_global_options,
-    allowed_config: baseline.allowed_config,
-    allowed_env: baseline.allowed_env,
+    allowed_global_options: appendedAfterBaseline(
+      baseline.allowed_global_options,
+      relaxedValuesFor(relax, 'command.git.allowed_global_options'),
+    ),
+    allowed_config: appendedAfterBaseline(
+      baseline.allowed_config,
+      relaxedValuesFor(relax, 'command.git.allowed_config'),
+    ),
+    allowed_env: appendedAfterBaseline(
+      baseline.allowed_env,
+      relaxedValuesFor(relax, 'command.git.allowed_env'),
+    ),
     ask_flags: overlayTakesPrecedence(entries.askFlags.map((t) => t.raw), baseline.ask_flags),
     safe_first_arg: overlayTakesPrecedence(entries.safeFirstArg.map((t) => t.raw), baseline.safe_first_arg),
     safe_grammar: overlayTakesPrecedence(entries.safeGrammar.map((t) => t.raw), baseline.safe_grammar),
@@ -1026,37 +1036,14 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
     }]);
   }
 
-  if (getPath(parsed, ['rules', 'command', 'git', 'safe_subcommands']) !== undefined) {
-    throw new PolicyRejected([{
-      layer,
-      file: plainFile(layer, filename),
-      detail: `rules.command.git.safe_subcommands cannot be extended directly — use [[relax]] `
-        + `(list = "command.git.safe_subcommands") with a reason`,
-    }]);
-  }
-  if (getPath(parsed, ['rules', 'command', 'git', 'config_read_modes']) !== undefined) {
-    throw new PolicyRejected([{
-      layer,
-      file: plainFile(layer, filename),
-      detail: `rules.command.git.config_read_modes cannot be extended directly — use [[relax]] `
-        + `(list = "command.git.config_read_modes") with a reason`,
-    }]);
-  }
-  if (getPath(parsed, ['rules', 'mcp_write', 'read_prefixes']) !== undefined) {
-    throw new PolicyRejected([{
-      layer,
-      file: plainFile(layer, filename),
-      detail: `rules.mcp_write.read_prefixes cannot be extended directly — use [[relax]] `
-        + `(list = "mcp_write.read_prefixes") with a reason`,
-    }]);
-  }
-  if (getPath(parsed, ['rules', 'mcp_write', 'allowed_tools']) !== undefined) {
-    throw new PolicyRejected([{
-      layer,
-      file: plainFile(layer, filename),
-      detail: `rules.mcp_write.allowed_tools cannot be extended directly — use [[relax]] `
-        + `(list = "mcp_write.allowed_tools") with a reason`,
-    }]);
+  for (const list of RELAXABLE_LISTS) {
+    if (getPath(parsed, ['rules', ...list.split('.')]) !== undefined) {
+      throw new PolicyRejected([{
+        layer,
+        file: plainFile(layer, filename),
+        detail: `rules.${list} cannot be extended directly — use [[relax]] (list = "${list}") with a reason`,
+      }]);
+    }
   }
 
   const fileRelaxIssues = lintRelaxEntries(fileRelax);

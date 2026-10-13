@@ -8,6 +8,7 @@
 // are the same thing).
 
 import { describe, expect, test } from 'bun:test';
+import { createCommandChecker } from '../src/command-rules.ts';
 import { loadPolicyFromLayers, type NamedLayer, type OverlayFile } from '../src/policy/load.ts';
 
 function file(filename: string, text: string): OverlayFile {
@@ -473,5 +474,39 @@ describe('loadPolicyFromLayers: duplicate identities within one layer are reject
     expect(result.overlayApplied).toBe(false);
     expect(result.warnings.join(' ')).toContain('not globally unique');
     expect(result.effectiveRules.find((rule) => rule.rule.id === 'dup-in-file')).toBeUndefined();
+  });
+});
+
+describe('loadPolicyFromLayers: git-config-exec relaxations across layers', () => {
+  const relax = (list: string, value: string, reason: string) =>
+    `[[relax]]\nlist = ${JSON.stringify(list)}\nvalue = ${JSON.stringify(value)}\nreason = ${JSON.stringify(reason)}\n`;
+
+  test('the common and the profile layer each widen a list, and both stay effective with their own provenance', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', relax('command.git.allowed_env', 'GIT_SSH_COMMAND', 'ssh probes'))]),
+      layer('profile', [file('policy.toml', relax('command.git.allowed_config', 'core.pager=less', 'reading logs'))]),
+    ]);
+    expect(result.warnings).toEqual([]);
+    const checker = createCommandChecker(result.policy.command);
+    expect(checker.checkGit('GIT_SSH_COMMAND=ssh git ls-remote ssh://h/r')).toBeNull();
+    expect(checker.checkGit('git -c core.pager=less diff')).toBeNull();
+    expect(checker.checkGit('GIT_EXTERNAL_DIFF=/x git diff')?.ruleId).toBe('git-config-exec');
+    expect(result.activeRelaxations.map((r) => [r.list, r.value, r.sourceFile])).toEqual([
+      ['command.git.allowed_env', 'GIT_SSH_COMMAND', 'common:policy.toml'],
+      ['command.git.allowed_config', 'core.pager=less', 'profile:policy.toml'],
+    ]);
+  });
+
+  test('a profile that extends an allow-list directly is rejected alone, the common relaxation stays', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [file('policy.toml', relax('command.git.allowed_env', 'GIT_SSH_COMMAND', 'ssh probes'))]),
+      layer('profile', [file('policy.toml', '[rules.command.git]\nallowed_config = ["core.fsmonitor"]\n')]),
+    ]);
+    const checker = createCommandChecker(result.policy.command);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('profile layer rejected');
+    expect(result.warnings[0]).toContain('[[relax]]');
+    expect(checker.checkGit('GIT_SSH_COMMAND=ssh git ls-remote ssh://h/r')).toBeNull();
+    expect(checker.checkGit('git -c core.fsmonitor=x status')?.ruleId).toBe('git-config-exec');
   });
 });
