@@ -2472,6 +2472,21 @@
       "knownLimitReason": "a value glued to a short option is read as more grouped letters, so the f of -cfix matches -f; the over-confirmation errs on the safe side and ask_flags has no field for options that take a value"
     },
     {
+      "id": "known-limit-git-branch-separated-dash-value",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch --sort -committerdate"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "ask_flags does not know which options take a value, so a separated value that starts with - is read as a group of short options and its d matches -d; the over-confirmation errs on the safe side, and --sort=-committerdate does not ask"
+    },
+    {
       "id": "git-pull-ff-only-asks-in-trunk",
       "toolName": "Bash",
       "toolInput": {
