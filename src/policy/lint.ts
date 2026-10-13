@@ -379,7 +379,32 @@ export function lintSafeFlagsShape(entries: readonly unknown[]): LintIssue[] {
 
 const EXACT_MCP_TOOL_NAME = /^mcp__[^\s*?[\]{}\\]+__[^\s*?[\]{}\\]+$(?![\s\S])/;
 
-// `[[relax]]` entries are the ONLY sanctioned way to add to the four
+// The two `git-config-exec` lists whose entries are `name` or `name=value`.
+const GIT_NAME_VALUE_LISTS: ReadonlySet<string> = new Set(['command.git.allowed_config', 'command.git.allowed_env']);
+
+// What a `[[relax]]` value must be for its list, or null. Beyond being
+// non-empty: an MCP tool is one exact name; a `git-config-exec` name is never
+// empty and never a bare `*` (that would allow every key or variable, at every
+// value, for one line of TOML); a global option is a name, as the value of
+// `--name=value` is not part of the entry and an entry with one never matches.
+function relaxValueProblem(list: unknown, value: string): string | null {
+  if (list === 'mcp_write.allowed_tools' && !EXACT_MCP_TOOL_NAME.test(value)) {
+    return '"value" must be an exact mcp__SERVER__OP name without whitespace or glob syntax';
+  }
+  if (typeof list === 'string' && GIT_NAME_VALUE_LISTS.has(list)) {
+    const equals = value.indexOf('=');
+    const name = equals === -1 ? value : value.slice(0, equals);
+    if (name === '' || name === '*') {
+      return '"value" must be a name (any value) or name=value (that one value); the name cannot be empty or a bare "*"';
+    }
+  }
+  if (list === 'command.git.allowed_global_options' && value.includes('=')) {
+    return '"value" must be an option name without "=": the value of --name=value is not part of the entry';
+  }
+  return null;
+}
+
+// `[[relax]]` entries are the ONLY sanctioned way to add to the
 // pure-allowlist fields — see schema.ts's RelaxableList. Every entry
 // widens what silently passes, so `reason` is mandatory, not optional.
 export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
@@ -395,11 +420,13 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
     }
     if (!isNonEmptyString(e.value)) {
       issues.push({ message: `relax[${i}] (list=${JSON.stringify(e.list)}): "value" must be a non-empty string` });
-    } else if (e.list === 'mcp_write.allowed_tools' && !EXACT_MCP_TOOL_NAME.test(e.value)) {
-      issues.push({
-        message: `relax[${i}] (list=${JSON.stringify(e.list)}, value=${JSON.stringify(e.value)}): `
-          + '"value" must be an exact mcp__SERVER__OP name without whitespace or glob syntax',
-      });
+    } else {
+      const problem = relaxValueProblem(e.list, e.value);
+      if (problem !== null) {
+        issues.push({
+          message: `relax[${i}] (list=${JSON.stringify(e.list)}, value=${JSON.stringify(e.value)}): ${problem}`,
+        });
+      }
     }
     if (!isNonEmptyString(e.reason)) {
       issues.push({

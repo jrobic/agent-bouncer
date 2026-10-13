@@ -203,6 +203,24 @@ describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-list
     expect(createCommandChecker(loaded.policy.command).checkGit(ssh('ssh -o BatchMode=yes'))?.ruleId).toBe('git-config-exec');
   });
 
+  // A value that names nothing is rejected rather than loaded as an entry that
+  // allows everything (`*`) or never matches (`--namespace=x`).
+  test.each([
+    ['command.git.allowed_env', '*'],
+    ['command.git.allowed_config', '*'],
+    ['command.git.allowed_env', '*=true'],
+    ['command.git.allowed_env', '=true'],
+    ['command.git.allowed_config', '=cat'],
+    ['command.git.allowed_global_options', '--namespace=x'],
+    ['command.git.allowed_global_options', '-C=x'],
+  ])('a [[relax]] on %s with the value %j is rejected with its list and value named', (list, value) => {
+    const loaded = loadPolicyFromOverlayText(relax(list, value));
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(list);
+    expect(loaded.warnings.join(' ')).toContain(JSON.stringify(value));
+    expect(createCommandChecker(loaded.policy.command).checkGit('GIT_EXTERNAL_DIFF=/x git diff')?.ruleId).toBe('git-config-exec');
+  });
+
   test.each([
     'allowed_global_options',
     'allowed_config',
