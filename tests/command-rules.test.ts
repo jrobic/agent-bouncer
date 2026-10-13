@@ -1023,28 +1023,6 @@ describe('command-rules: safe_flags semantics (generic, on an ungoverned subcomm
     expect(checker.checkGit('git gc --quiet >')?.ruleId).toBe('git-protected');
   });
 
-  test('the only global option tolerated before a safe_flags subcommand is -C <dir>', () => {
-    expect(checker.checkGit('git -C /x gc --quiet')).toBeNull();
-    expect(checker.checkGit('git -C /a -C /b gc --quiet')).toBeNull();
-
-    for (
-      const command of [
-        'git --no-pager gc --quiet',
-        'git -c a=b gc --quiet',
-        'git -C /x --no-pager gc --quiet',
-        'git --no-pager -C /x gc --quiet',
-        'git -C/x gc --quiet',
-      ]
-    ) {
-      expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
-    }
-  });
-
-  test('the other forms keep ignoring global options', () => {
-    expect(checker.checkGit('git --no-pager branch new-branch')).toBeNull();
-    expect(checker.checkGit('git -c core.pager=cat status')).toBeNull();
-  });
-
   // Evaluation order: ask_flags, safe_first_arg, safe_grammar, safe_flags,
   // then the checkout/restore engine exceptions. A subcommand reaching an
   // earlier form never reaches a later one.

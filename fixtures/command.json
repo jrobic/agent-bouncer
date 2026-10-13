@@ -2613,6 +2613,61 @@
       ]
     },
     {
+      "id": "git-init-repeated-chdir-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/a -C /tmp/b init -q"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-global-before-chdir-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager -C /tmp/x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-glued-chdir-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C/tmp/x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-global-option-ignored-for-a-safe-subcommand-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager log"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-global-option-ignored-for-a-conditional-subcommand-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager branch -D x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "fd-exec-destructive-short",
       "toolName": "Bash",
       "toolInput": {
