@@ -8,6 +8,7 @@
 // are the same thing).
 
 import { describe, expect, test } from 'bun:test';
+import { createCommandChecker } from '../src/command-rules.ts';
 import { loadPolicyFromLayers, type NamedLayer, type OverlayFile } from '../src/policy/load.ts';
 
 function file(filename: string, text: string): OverlayFile {
@@ -473,5 +474,55 @@ describe('loadPolicyFromLayers: duplicate identities within one layer are reject
     expect(result.overlayApplied).toBe(false);
     expect(result.warnings.join(' ')).toContain('not globally unique');
     expect(result.effectiveRules.find((rule) => rule.rule.id === 'dup-in-file')).toBeUndefined();
+  });
+});
+
+// Ticket 62: ask_flags entries are matched the way git parses options, and
+// that holds for every entry the loader hands the engine — a fresh overlay
+// entry (`worktree`, which the baseline governs with safe_first_arg) as well
+// as an overlay entry that replaces a baseline one (`branch`). The baseline
+// rows are covered by fixtures/command.json; this is the part a fixture
+// cannot express, because fixtures only run against the baseline.
+describe('loadPolicyFromLayers: ask_flags entries from overlay layers match grouped, =value and abbreviated options', () => {
+  const loaded = loadPolicyFromLayers([
+    layer('common', [
+      file(
+        'policy.d/10-worktree.toml',
+        '[[rules.command.git.ask_flags]]\nsub = "worktree"\nflags = ["--force", "-f", "-B"]\nreason = "worktree add/list/remove stay autonomous"\n',
+      ),
+    ]),
+    layer('profile', [
+      file(
+        'policy.toml',
+        '[[rules.command.git.ask_flags]]\nsub = "branch"\nflags = ["-D", "--force"]\nreason = "plain -d is fine for merged branches"\n',
+      ),
+    ]),
+  ]);
+  const { checkGit } = createCommandChecker(loaded.policy.command);
+
+  test('the layers load without warnings', () => {
+    expect(loaded.warnings).toEqual([]);
+  });
+
+  test.each([
+    'git worktree add --forc ../x feat',
+    'git worktree add -fB x ../x',
+    'git worktree add --force=1 ../x feat',
+    'git branch -qD foo',
+    'git branch --forc x',
+  ])('%s asks', (cmd) => {
+    expect(checkGit(cmd)?.ruleId).toBe('git-protected');
+  });
+
+  test.each([
+    'git worktree add ../x feat',
+    'git worktree add -b feat ../x main',
+    'git worktree list',
+    // The replacing entry does not list -d, so the overlay's own list is what
+    // is matched — not the baseline's.
+    'git branch -dv foo',
+    'git branch -vv',
+  ])('%s stays allowed', (cmd) => {
+    expect(checkGit(cmd)).toBeNull();
   });
 });
