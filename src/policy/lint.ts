@@ -335,7 +335,7 @@ export function lintSafeGrammarShape(entries: readonly unknown[]): LintIssue[] {
   return issues;
 }
 
-const SAFE_FLAGS_KEYS: Record<string, true> = { sub: true, flags: true, value_flags: true, max_positionals: true, reason: true };
+const SAFE_FLAGS_KEYS: Readonly<Record<string, true>> = { sub: true, flags: true, value_flags: true, max_positionals: true, reason: true };
 
 function lintSafeFlagsOptionList(label: string, field: 'flags' | 'value_flags', value: unknown): LintIssue[] {
   if (!isStringArray(value)) {
