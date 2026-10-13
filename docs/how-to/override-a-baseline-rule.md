@@ -69,7 +69,8 @@ needs a non-empty `reason` — `rules lint` rejects one without it.
 
 ## Widen a safe allowlist with `[[relax]]`
 
-`safe_subcommands`, `config_read_modes` (both `command.git`),
+`safe_subcommands`, `config_read_modes`, `allowed_global_options`,
+`allowed_config` and `allowed_env` (all `command.git`),
 `mcp_write.read_prefixes`, and `mcp_write.allowed_tools` can't be extended
 by adding to the table directly. `rules lint` rejects that outright.
 Widen them through `[[relax]]` instead, reason mandatory:
@@ -97,6 +98,29 @@ bouncer rules list | grep overlay-relax
 
 Expect a line like:
 `overlay-relax command.git.safe_subcommands push — our CI force-pushes to a scratch branch and the confirm prompt blocks the pipeline`
+
+## Let one `-c` key or environment variable through before `git`
+
+A `-c` setting, `--config-env`, a global option or an environment prefix that
+is not on an allow-list asks with `git-config-exec`, even in front of an
+allowed subcommand (`GIT_SSH_COMMAND='ssh -o BatchMode=yes' git ls-remote
+ssh://h/r`). The refusal names the first offender. Widen the list that
+holds it, in the profile layer:
+
+```toml
+[[relax]]
+list = "command.git.allowed_env"   # or allowed_config, allowed_global_options
+value = "GIT_SSH_COMMAND=ssh -o BatchMode=yes"
+reason = "CI probes reach hosts over ssh and must not prompt"
+```
+
+`value` is a name, which allows it at any value (`GIT_SSH_COMMAND`), or
+`name=value`, which allows that one value. Prefer the pair for anything that
+runs a program: the bare name also lets `GIT_SSH_COMMAND=/tmp/evil` through.
+`rules lint` rejects an entry without a `reason`, and
+`bouncer rules list | grep overlay-relax` shows the relaxation like any other.
+See [`git-config-exec`](../reference/policy.md#git-config-exec-what-may-stand-before-git)
+for the entry grammar and the baseline lists.
 
 ## Authorize one MCP tool without widening other servers
 
@@ -152,12 +176,13 @@ texts the guard looks at. It cannot exempt a path or a file, and it cannot
 change what counts as a protected value. For a dev password that a compose file
 or a test fixture legitimately repeats, use `relax` to `confirm` or `disable`.
 
-## The limit: three rules aren't override-able
+## The limit: four rules aren't override-able
 
-`rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`
-(the git conditional dispatch itself) are produced by engine algorithms,
+`rm-rf-dangerous`, `sudo` (privilege escalation), `git-protected`
+(the git conditional dispatch itself) and `git-config-exec` (what stands
+before `git`) are produced by engine algorithms,
 not by a `{id, regex, reason}` table row — `[[override]]` only resolves
-against the six regex tables, so targeting any of these three fails
+against the six regex tables, so targeting any of these four fails
 lint:
 
 ```sh
@@ -170,10 +195,12 @@ lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bounce
 Each is governed by its own named TOML table instead:
 `command.rm_rf.dangerous_targets` (additive only — new entries widen what
 counts as dangerous, never narrow it), `command.privilege_escalation.commands`
-(same), and the four declarative git-conditional forms
+(same), the four declarative git-conditional forms
 (`command.git.ask_flags` / `safe_first_arg` / `safe_grammar` /
 `safe_flags`, plus `safe_subcommands` via `[[relax]]` above) for
-`git-protected`. See
+`git-protected`, and the three allow-lists `command.git.allowed_global_options` /
+`allowed_config` / `allowed_env` (widened via `[[relax]]` above) for
+`git-config-exec`. See
 `docs/reference/policy.md` for each table's shape.
 
 ## The self-protection loop: overriding `bouncer-policy`

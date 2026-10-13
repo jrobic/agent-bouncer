@@ -450,7 +450,9 @@ whose safety depends on their arguments — everything else falls through
 to `git-protected` (always confirm). `checkout` and `restore` are the
 two subcommands these four forms can't express (pathspec detection,
 index-only form — `--staged` plus one or more pathspecs) — they stay
-engine code under their own names.
+engine code under their own names. Three more lists, `allowed_global_options`,
+`allowed_config` and `allowed_env`, judge what is written around `git`
+instead of the subcommand (§ [`git-config-exec`](#git-config-exec-what-may-stand-before-git) below).
 
 A subcommand is judged by the first form that governs it, in this order:
 `safe_subcommands` (always safe), `ask_flags`, `safe_first_arg`,
@@ -641,8 +643,10 @@ subcommand. Global options such as `--bare`, `--git-dir`, `--work-tree`,
 (`git --bare init` is `git init --bare`), so for a subcommand decided by
 `safe_flags` the only global option tolerated is `-C <dir>`, alone or
 repeated; any other asks with `git-protected`. The other three forms,
-and `safe_subcommands`, keep ignoring global options. Environment
-prefixes (`GIT_TEMPLATE_DIR=… git init`) are not read by any form.
+and `safe_subcommands`, ignore global options when they decide the
+subcommand. The global options and the environment prefixes
+(`GIT_TEMPLATE_DIR=… git init`) of every subcommand are judged
+separately, by `git-config-exec` (§ below).
 
 Against the baseline `init` row:
 
@@ -667,10 +671,129 @@ Against the baseline `init` row:
 | `git --bare init`, `git --git-dir=/tmp/x/.git init`, `git --work-tree=/tmp/x init`, `git -c init.templateDir=/tmp/t init -q` | a global option other than `-C <dir>` |
 | `git -C /tmp/x --bare init -q` | `-C` combined with another global option |
 
+## `git-config-exec`: what may stand before `git`
+
+A git subcommand the section above allows still runs any program git is
+told to run. `git -c core.fsmonitor=<shell> status` executes the shell
+command, `git -c core.hooksPath=/tmp/h commit` the `pre-commit` hook found
+there, `GIT_EXTERNAL_DIFF=<program> git diff` the program, and
+`git --exec-path=/tmp/x status` a `git-*` helper planted in `/tmp/x`.
+`git-config-exec` reads what is written around `git` and answers `confirm`
+unless every item is on an allow-list. Like the rest of the git policy it
+judges the text only: it does not call git and does not read the file
+system.
+
+**What is judged**, in every git segment:
+
+| Written | Judged by |
+|---|---|
+| `-c <key>=<value>` | `allowed_config`: key and value |
+| `--config-env=<key>=<VAR>`, or `--config-env <key>=<VAR>` | `allowed_config`: key only, because git reads the value from `VAR` when it runs, so only an entry without a value allows it |
+| any other global option before the subcommand (`--exec-path`, `--namespace`, `-C <dir>`, `--no-pager`…) | `allowed_global_options`: by name; for `--name=value` the name is looked up and the value is not |
+| `VAR=<value> git …`, `VAR+=<value> git …`, `env VAR=<value> git …`, and through `rtk`, `rtk proxy`, `command`, `exec`, `nice`, `time`, `builtin` | `allowed_env`: name and value; the name of `VAR+=<value>` keeps its `+`, so it matches no entry and asks |
+
+**Entry grammar** (`allowed_config` and `allowed_env`). An entry is either a
+name, which allows it at any value (`user.name`; a trailing `*` makes it a
+prefix, `user.*`), or `name=value`, which allows it at that one value
+(`core.pager=cat`). It is split at its first `=`, so a value may hold one.
+A config key is compared without regard to case, as git does
+(`tag.gpgSign` matches `tag.gpgsign`); a value and a variable name are
+compared exactly. A `*` means something only at the end of an entry that
+has no value. A list that is empty allows nothing.
+
+**Baseline content** (`policy/command.toml`):
+
+| List | Entries |
+|---|---|
+| `allowed_global_options` | `-C`, `--no-pager`, `-P`, `-p`, `--paginate`, `--no-replace-objects`, `--literal-pathspecs`, `--glob-pathspecs`, `--noglob-pathspecs`, `--icase-pathspecs`, `--no-optional-locks`, `--no-advice`, `--git-dir`, `--work-tree`, `--bare` |
+| `allowed_config`, any value | `user.*`, `color.*`, `advice.*`, `init.defaultBranch`, `commit.gpgsign`, `tag.gpgsign`, `tag.forceSignAnnotated`, `push.followTags`, `gc.auto`, `core.quotepath` |
+| `allowed_config`, one value | `core.hooksPath=/dev/null`, `core.pager=cat`, `core.fsmonitor=false`, `core.editor=true`, `core.editor=:`, `sequence.editor=true`, `sequence.editor=:` |
+| `allowed_env`, any value | `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_TERMINAL_PROMPT`, `GIT_INDEX_FILE`, `LC_ALL`, `LANG`, `TZ`, `NO_COLOR`, `CI`, `GIT_DIR`, `GIT_WORK_TREE` |
+| `allowed_env`, one value | `GIT_EDITOR=true`, `GIT_EDITOR=:`, `GIT_SEQUENCE_EDITOR=true`, `GIT_SEQUENCE_EDITOR=:`, `GIT_PAGER=cat`, `PAGER=cat`, `GIT_TRACE=0`, `GIT_TRACE=1`, `GIT_TRACE=2`, `GIT_TRACE=true`, `GIT_TRACE=false` |
+
+The keys and variables listed with one value are the ones that run a
+program at any other value (`core.pager=less`, `GIT_EDITOR='cp /tmp/m'`) and
+are harmless at the listed one. `GIT_TRACE` is listed the same way for
+another reason: at any value but the five that switch tracing on or off it
+is a file git appends its trace to, a write no write rule looks at
+(`GIT_TRACE=/tmp/x git status` asks). The other `GIT_TRACE*` variables
+(`GIT_TRACE2`, `GIT_TRACE_PACKET`, `GIT_TRACE_PERFORMANCE`…) are not listed
+and ask; a `[[relax]]` widens them. `--git-dir`, `--work-tree`, `--bare`,
+`GIT_DIR` and `GIT_WORK_TREE` run nothing themselves and are listed so
+that they pass; the subcommand's own verdict still applies.
+
+**Order.** The subcommand's own verdict comes first, and `git-config-exec`
+only turns an allow into a confirm. A line with several git segments
+answers for the first segment that asks, whichever rule asks. So
+`git -c core.pager=x push` answers `git-protected`, as does
+`GIT_EDITOR=true git rebase --continue` (push and rebase ask on their own),
+and so does `git -c user.name=x init -q`: `init` is decided by
+`safe_flags`, which tolerates no global option but `-C <dir>`, whatever the
+`-c` key. The audit log tells the two ids apart.
+
+Asking (`confirm [git-config-exec]`), with the first offender in the reason:
+
+| Command | Offender |
+|---|---|
+| `git -c core.fsmonitor='echo x' status`, `git -c core.hooksPath=/tmp/h commit -m x`, `git -c diff.external=/x diff`, `git -c include.path=/tmp/c status` | a key that runs a program or loads a file, at a value not listed |
+| `git -c core.pager=less diff`, `git -c core.hooksPath= commit` | a listed key at another value |
+| `git --config-env=core.pager=CAT diff`, `git --config-env core.pager=X diff` | a key listed with a value only: the value is unknown |
+| `git --exec-path=/tmp/x status`, `git --namespace=x status` | a global option that is not listed |
+| `GIT_EXTERNAL_DIFF=/x git diff`, `env GIT_SSH_COMMAND=/x git ls-remote ssh://h/r`, `HOME=/tmp/h git status`, `GIT_CONFIG_GLOBAL=/tmp/c git status`, `PATH=/tmp/bin:$PATH git status` | a variable that is not listed |
+| `GIT_EDITOR='cp /tmp/m' git commit` | a listed variable at another value |
+
+Passing, as long as the subcommand itself passes:
+
+| Command | Why |
+|---|---|
+| `git -c user.email=t@t -c user.name=t commit -qm i`, `git -c commit.gpgsign=false commit -q -F -`, `git -c tag.gpgSign=false tag v1` | keys listed at any value |
+| `git -c core.hooksPath=/dev/null commit -qm i`, `git -c core.pager=cat diff` | keys listed at that value |
+| `git --no-pager diff`, `git -C /tmp/x status`, `git --git-dir=/tmp/x/.git log` | global options listed |
+| `GIT_EDITOR=true git commit`, `GIT_SEQUENCE_EDITOR=: git log`, `LC_ALL=C git ls-remote https://h/r`, `GIT_TERMINAL_PROMPT=0 git fetch https://h/r`, `rtk git status` | variables listed; a wrapper alone |
+
+**Widening.** The three lists are policy data like `config_read_modes`: an
+overlay extends them through [`[[relax]]`](#relax-widen-a-pure-allowlist)
+only, reason mandatory, and `bouncer doctor` and `bouncer rules list`
+show each entry as an active relaxation. A `value` follows the entry grammar
+above, so `GIT_SSH_COMMAND='ssh -o BatchMode=yes' git ls-remote ssh://h/r`
+passes after:
+
+```toml
+[[relax]]
+list = "command.git.allowed_env"
+value = "GIT_SSH_COMMAND=ssh -o BatchMode=yes"   # that one value; "GIT_SSH_COMMAND" allows any
+reason = "CI probes reach hosts over ssh and must not prompt"
+```
+
+Prefer a `name=value` entry for a key or variable that runs a program: the
+bare name allows every value, `-c core.sshCommand=/tmp/evil` included.
+`[[override]]` cannot target `git-config-exec` (it is produced by an engine
+algorithm, not by a row of the six regex tables).
+
+**Known limits.**
+
+- An `export GIT_EXTERNAL_DIFF=… && git diff` in the same line, or in an
+  earlier call, sets the variable outside the prefix of the git command,
+  which is all the rule reads (`known-limit-git-config-exec-exported-variable`
+  in `fixtures/command.json`).
+- A value is read as literal text: `GIT_EDITOR=$EDITOR git commit` asks
+  (the text is not `true`), while `GIT_AUTHOR_NAME=$(…) git commit` passes
+  the rule, a variable listed at any value.
+- `GIT_INDEX_FILE` is listed at any value because it runs nothing, but git
+  writes its index to the path it names. With a subcommand the baseline
+  allows, that creates a new file at most, and `read-tree`, which can
+  overwrite one, asks on its own; the rule does not look at that path.
+- `--git-dir`, `--work-tree`, `GIT_DIR` and `GIT_WORK_TREE` are listed, but git
+  reads the config of the repository they name: a config file planted
+  there, like a `.gitconfig` or a `.git/config` written by another tool, is
+  not seen.
+- A binary named `git` started by a path (`/tmp/x/git status`) is judged as
+  git, whatever it is. A `PATH=… git …` prefix asks, as `PATH` is not listed.
+
 ## The two algorithm-driven tables
 
-`rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`
-are produced by engine algorithms, not by a `{id, regex, reason}` row —
+`rm-rf-dangerous`, `sudo` (privilege escalation), `git-protected` and
+`git-config-exec` are produced by engine algorithms, not by a `{id, regex, reason}` row —
 `[[override]]` can't target them (§ below). Each is governed by its own
 named table instead, additive only (new entries widen what's caught,
 never narrow it):
@@ -684,7 +807,8 @@ commands = ["sudo", "doas", "pkexec", "runas", "please"]
 ```
 
 `git-protected` is governed by `safe_subcommands` and the four
-declarative forms above.
+declarative forms above; `git-config-exec` by `allowed_global_options`,
+`allowed_config` and `allowed_env` (§ above).
 
 ### Secret Bash path-token scan
 
@@ -1253,16 +1377,27 @@ layer the override lives in (§ Fail-closed behavior below).
 ## `[[relax]]`: widen a pure allowlist
 
 The only sanctioned way to add to `command.git.safe_subcommands`,
-`command.git.config_read_modes`, `mcp_write.read_prefixes`, or
-`mcp_write.allowed_tools`. A direct addition to any of these lists via
-the table itself is rejected outright.
+`command.git.config_read_modes`, `command.git.allowed_global_options`,
+`command.git.allowed_config`, `command.git.allowed_env`,
+`mcp_write.read_prefixes`, or `mcp_write.allowed_tools`. A direct addition
+to any of these lists via the table itself is rejected outright.
 
 ```toml
 [[relax]]
-list = "command.git.safe_subcommands"   # one of the four lists above
+list = "command.git.safe_subcommands"   # one of the seven lists above
 value = "push"
 reason = "..."   # mandatory, non-empty — this can only relax security
 ```
+
+For `allowed_global_options`, `allowed_config` and `allowed_env`, `value`
+is an entry as described in § `git-config-exec`: a name for any value, or
+`name=value` for one value. `rules lint` rejects the layer for a value that
+names nothing: on `allowed_config` and `allowed_env` an empty name
+(`=true`) or a bare `*` (`*`, `*=true`), which would allow every key or
+variable; on `allowed_global_options` a value holding `=`, since the value of
+`--name=value` is not part of an entry and such an entry would never match,
+and `-c` or `--config-env`, which `allowed_config` judges before this list is
+read.
 
 A `safe_first_arg`/`ask_flags`/`safe_grammar`/`safe_flags` overlay entry
 whose `sub` is already governed by the baseline (`init` is, through

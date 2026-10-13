@@ -142,6 +142,107 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
   });
 });
 
+// Fixtures judge the baseline alone; these are the overlay half of the
+// `git-config-exec` contract: the three allow-lists open only through a
+// reasoned [[relax]], and the verdict follows the loaded policy.
+describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-lists', () => {
+  const relax = (list: string, value: string, reason = 'human-approved') =>
+    `[[relax]]\nlist = ${JSON.stringify(list)}\nvalue = ${JSON.stringify(value)}\nreason = ${JSON.stringify(reason)}\n`;
+  const verdictUnder = (overlay: string, command: string) => {
+    const loaded = loadPolicyFromOverlayText(overlay);
+    expect(loaded.warnings).toEqual([]);
+    return createCommandChecker(loaded.policy.command).checkGit(command);
+  };
+  const ssh = (value: string) => `GIT_SSH_COMMAND='${value}' git ls-remote ssh://h/r`;
+
+  test('a variable relaxed by name passes at any value, and its neighbours still ask', () => {
+    const overlay = relax('command.git.allowed_env', 'GIT_SSH_COMMAND');
+    expect(verdictUnder(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
+    expect(verdictUnder(overlay, ssh('/tmp/anything'))).toBeNull();
+    expect(verdictUnder(overlay, 'GIT_SSH=/x git ls-remote ssh://h/r')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('a config key relaxed as key=value passes at that value only, whatever the key\'s case', () => {
+    const overlay = relax('command.git.allowed_config', 'core.pager=less');
+    expect(verdictUnder(overlay, 'git -c core.pager=less diff')).toBeNull();
+    expect(verdictUnder(overlay, 'git -c CORE.Pager=less diff')).toBeNull();
+    expect(verdictUnder(overlay, 'git -c core.pager=more diff')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('a global option relaxed by name passes, with its value in the next token', () => {
+    const overlay = relax('command.git.allowed_global_options', '--namespace');
+    expect(verdictUnder(overlay, 'git --namespace=x status')).toBeNull();
+    expect(verdictUnder(overlay, 'git --namespace x status')).toBeNull();
+    expect(verdictUnder(overlay, 'git --exec-path=/tmp/x status')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('an active relaxation names its list, value, reason and file', () => {
+    const loaded = loadPolicyFromOverlayText(relax('command.git.allowed_env', 'GIT_SSH_COMMAND', 'ssh probes in CI'));
+    expect(loaded.activeRelaxations).toContainEqual({
+      list: 'command.git.allowed_env',
+      value: 'GIT_SSH_COMMAND',
+      reason: 'ssh probes in CI',
+      sourceFile: 'profile:policy.toml',
+    });
+  });
+
+  // Each command below passes once its entry is accepted (see the tests above),
+  // so it asks only because the layer was rejected.
+  test.each([
+    ['command.git.allowed_env', 'GIT_SSH_COMMAND', ssh('ssh -o BatchMode=yes')],
+    ['command.git.allowed_config', 'core.sshCommand', 'git -c core.sshCommand=/x ls-remote ssh://h/r'],
+    ['command.git.allowed_global_options', '--namespace', 'git --namespace=x status'],
+  ])('a [[relax]] on %s without a reason rejects the layer and the baseline holds', (list, value, command) => {
+    const loaded = loadPolicyFromOverlayText(`[[relax]]\nlist = "${list}"\nvalue = "${value}"\nreason = ""\n`);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain('reason');
+    expect(createCommandChecker(loaded.policy.command).checkGit(command)?.ruleId).toBe('git-config-exec');
+  });
+
+  // A bare `*` would allow every variable or key at every value: the command
+  // is one the entry would let through.
+  test.each([
+    ['command.git.allowed_env', 'GIT_EXTERNAL_DIFF=/x git diff'],
+    ['command.git.allowed_config', 'git -c core.fsmonitor=x status'],
+  ])('a [[relax]] of "*" on %s is rejected and the baseline holds', (list, command) => {
+    const loaded = loadPolicyFromOverlayText(relax(list, '*'));
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(list);
+    expect(loaded.warnings.join(' ')).toContain('"*"');
+    expect(createCommandChecker(loaded.policy.command).checkGit(command)?.ruleId).toBe('git-config-exec');
+  });
+
+  // These entries would load and never match anything, so there is no command
+  // they change: the rejection itself, with its list and value named, is the
+  // behaviour.
+  test.each([
+    ['command.git.allowed_env', '*=true'],
+    ['command.git.allowed_env', '=true'],
+    ['command.git.allowed_config', '=cat'],
+    ['command.git.allowed_global_options', '--namespace=x'],
+    ['command.git.allowed_global_options', '-C=x'],
+    ['command.git.allowed_global_options', '-c'],
+    ['command.git.allowed_global_options', '--config-env'],
+  ])('a [[relax]] on %s with the dead value %j is rejected with its list and value named', (list, value) => {
+    const loaded = loadPolicyFromOverlayText(relax(list, value));
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(list);
+    expect(loaded.warnings.join(' ')).toContain(JSON.stringify(value));
+  });
+
+  test.each([
+    'allowed_global_options',
+    'allowed_config',
+    'allowed_env',
+  ])('a direct rules.command.git.%s addition is rejected and points to [[relax]]', (key) => {
+    const loaded = loadPolicyFromOverlayText(`[rules.command.git]\n${key} = ["GIT_SSH_COMMAND"]\n`);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(`rules.command.git.${key} cannot be extended directly`);
+    expect(loaded.warnings.join(' ')).toContain('[[relax]]');
+    expect(loaded.policy.command.git[key as 'allowed_env']).not.toContain('GIT_SSH_COMMAND');
+  });
+});
+
 describe('loadPolicyFromOverlayText: exact MCP permissions', () => {
   const chromeClick = `
     [[relax]]

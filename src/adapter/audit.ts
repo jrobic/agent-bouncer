@@ -449,10 +449,10 @@ export function renderReport(
 // `rules lint` accepts as-is (AC3) — "fill in a reason" is the operator's
 // review step, not a requirement for the snippet to parse. A rule id with
 // no policy lever (rm-rf-dangerous, sudo, an invalid mcp-write tool name,
-// and any `git-conditional-*` id — none of these are resolvable via
-// [[override]], and only four lists accept [[relax]], see
-// policy/schema.ts's RelaxableList) gets a plain `#` comment instead of a
-// fabricated, lint-rejected snippet.
+// `git-config-exec`, and any `git-conditional-*` id — none of these is
+// resolvable via [[override]], and RELAX_LEVERS below names no [[relax]] list
+// for them, see policy/schema.ts's RelaxableList) gets a plain `#` comment
+// instead of a fabricated, lint-rejected snippet.
 
 type SuggestionAction =
   | { readonly kind: 'relax'; readonly list: RelaxableList; readonly value: string; }

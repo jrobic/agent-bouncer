@@ -143,6 +143,24 @@ describe('runDoctor: the manual checklist, always printed', () => {
     expect(text).toContain('manual doctor visibility test');
   });
 
+  test('a relaxed git-config-exec allow-list is shown in the manual checklist with its reason', async () => {
+    const accountDir = freshAccountDir();
+    await writeFile(join(accountDir, 'settings.json'), JSON.stringify({ hooks: HEALTHY_HOOKS }), 'utf8');
+    await mkdir(join(accountDir, 'bouncer'), { recursive: true });
+    await writeFile(
+      join(accountDir, 'bouncer', 'policy.toml'),
+      '[[relax]]\nlist = "command.git.allowed_env"\nvalue = "GIT_SSH_COMMAND"\nreason = "ssh probes in CI"\n',
+      'utf8',
+    );
+
+    const { text, ok } = await runDoctor();
+    expect(ok).toBe(true);
+    expect(text).toContain('overrides: 1 active');
+    expect(text).toContain('command.git.allowed_env');
+    expect(text).toContain('GIT_SSH_COMMAND');
+    expect(text).toContain('ssh probes in CI');
+  });
+
   test('--print-canary emits an entry that passes after pasting beside the primary hook', async () => {
     freshAccountDir();
     const scratchDir = tmpDir('bouncer-doctor-settings-');

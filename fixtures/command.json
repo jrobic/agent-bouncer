@@ -3029,6 +3029,759 @@
       "expected": []
     },
     {
+      "id": "git-config-exec-c-fsmonitor-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.fsmonitor='echo x' status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-hooks-path-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.hooksPath=/tmp/h commit -m x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-diff-external-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c diff.external=/x diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-ssh-command-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.sshCommand=/x ls-remote ssh://h/r"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-include-path-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c include.path=/tmp/c status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-ext-transport-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c protocol.ext.allow=always ls-remote ext::x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-pair-key-mixed-case-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c Core.HooksPath=/dev/null commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-key-without-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.fsmonitor status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-one-bad-among-allowed-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c user.name=t -c core.fsmonitor=x -c color.ui=never status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-user-identity-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c user.email=t@t -c user.name=t commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-commit-gpgsign-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c commit.gpgsign=false commit -q -F -"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-tag-gpgsign-mixed-case-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c tag.gpgSign=false tag v1"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-quoted-allowed-value-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c user.name='A B' status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-hooks-path-dev-null-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.hooksPath=/dev/null commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-pager-cat-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.pager=cat diff"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-c-pager-other-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.pager=less diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-hooks-path-near-dev-null-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.hooksPath=/dev/null/x commit -qm i"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-c-harmless-value-is-case-sensitive-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.fsmonitor=False status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-config-env-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --config-env=core.pager=X diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-config-env-separate-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --config-env core.pager=X diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-config-env-pair-key-asks-whatever-the-variable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --config-env=core.pager=CAT diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-config-env-allowed-key-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --config-env=user.name=GIT_NAME commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-config-env-separate-allowed-key-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --config-env user.name=GIT_NAME commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-exec-path-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --exec-path=/tmp/x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-exec-path-separate-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --exec-path /tmp/x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-unlisted-global-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --namespace=x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-unlisted-global-option-separate-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --namespace x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-unlisted-global-option-after-allowed-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager --namespace=x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-glued-short-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -cuser.name=t status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-listed-global-options-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager --literal-pathspecs --no-optional-locks status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-chdir-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/x status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-git-dir-and-work-tree-stay-out-of-scope-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --git-dir=/tmp/x/.git --work-tree /tmp/x status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-external-diff-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-config-global-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_CONFIG_GLOBAL=/tmp/c git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-home-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "HOME=/tmp/h git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-path-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "PATH=/tmp/bin:$PATH git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-one-bad-among-allowed-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "CI=1 GIT_AUTHOR_NAME=t GIT_EXTERNAL_DIFF=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-name-is-case-sensitive-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ci=1 git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-append-assignment-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF+=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-append-assignment-keeps-git-protected",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "X+=1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-template-dir-on-init-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TEMPLATE_DIR=/tmp/t git init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-editor-command-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EDITOR='cp /tmp/m' git commit"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-in-later-segment-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git status && GIT_EXTERNAL_DIFF=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-env-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env GIT_SSH_COMMAND=/x git ls-remote ssh://h/r"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-env-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i GIT_EXTERNAL_DIFF=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-rtk-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF=/x rtk git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-rtk-proxy-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF=/x rtk proxy git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-command-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF=/x command git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-through-env-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env GIT_AUTHOR_NAME=t CI=1 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-wrapper-alone-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-author-and-committer-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_DATE=2020-01-01T00:00:00 git commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-terminal-prompt-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TERMINAL_PROMPT=0 git fetch https://h/r"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-locale-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "LC_ALL=C LANG=C TZ=UTC git ls-remote https://h/r"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-index-file-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_INDEX_FILE=/tmp/i git diff"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-trace-harmless-value-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TRACE=1 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-trace-path-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TRACE=/tmp/x git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-trace-variant-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TRACE_PACKET=1 git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-git-dir-and-work-tree-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_DIR=/tmp/x/.git GIT_WORK_TREE=/tmp/x git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-env-editor-true-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EDITOR=true git commit"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-subcommand-that-asks-keeps-git-protected",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c core.pager=x push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-rebase-editor-prefix-keeps-git-protected",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EDITOR=true git rebase --continue"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-init-allowed-config-keeps-git-protected",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c user.name=x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-init-unlisted-config-with-chdir-keeps-git-protected",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/x -c core.fsmonitor=x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-earlier-segment-that-asks-wins",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git push; git -c core.fsmonitor=x status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-non-git-command-with-prefix-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "HOME=/tmp/h GIT_EXTERNAL_DIFF=/x echo ok"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-config-exec-subcommand-argument-dash-c-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git log -c"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-git-config-exec-exported-variable",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "export GIT_EXTERNAL_DIFF=/x && git diff"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "an export in the same line (or an earlier call) sets the variable outside the prefix of the git command, which is all the rule reads"
+    },
+    {
       "id": "fd-exec-destructive-short",
       "toolName": "Bash",
       "toolInput": {

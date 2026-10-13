@@ -464,6 +464,92 @@ describe('guards-digest: tamper lock — the git guard\'s two membership sets', 
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// The `git-config-exec` allow-lists. What is listed is what passes without
+// asking, so a silently added entry widens the guard and a silently removed
+// one only adds friction: the first is what this freezes, in order, as an
+// independent second copy of the policy/command.toml data.
+// ─────────────────────────────────────────────────────────────────────────
+
+const EXPECTED_ALLOWED_GLOBAL_OPTIONS: readonly string[] = [
+  '0 -C',
+  '1 --no-pager',
+  '2 -P',
+  '3 -p',
+  '4 --paginate',
+  '5 --no-replace-objects',
+  '6 --literal-pathspecs',
+  '7 --glob-pathspecs',
+  '8 --noglob-pathspecs',
+  '9 --icase-pathspecs',
+  '10 --no-optional-locks',
+  '11 --no-advice',
+  '12 --git-dir',
+  '13 --work-tree',
+  '14 --bare',
+];
+
+const EXPECTED_ALLOWED_CONFIG: readonly string[] = [
+  '0 user.*',
+  '1 color.*',
+  '2 advice.*',
+  '3 init.defaultBranch',
+  '4 commit.gpgsign',
+  '5 tag.gpgsign',
+  '6 tag.forceSignAnnotated',
+  '7 push.followTags',
+  '8 gc.auto',
+  '9 core.quotepath',
+  '10 core.hooksPath=/dev/null',
+  '11 core.pager=cat',
+  '12 core.fsmonitor=false',
+  '13 core.editor=true',
+  '14 core.editor=:',
+  '15 sequence.editor=true',
+  '16 sequence.editor=:',
+];
+
+const EXPECTED_ALLOWED_ENV: readonly string[] = [
+  '0 GIT_AUTHOR_*',
+  '1 GIT_COMMITTER_*',
+  '2 GIT_TERMINAL_PROMPT',
+  '3 GIT_INDEX_FILE',
+  '4 LC_ALL',
+  '5 LANG',
+  '6 TZ',
+  '7 NO_COLOR',
+  '8 CI',
+  '9 GIT_DIR',
+  '10 GIT_WORK_TREE',
+  '11 GIT_TRACE=0',
+  '12 GIT_TRACE=1',
+  '13 GIT_TRACE=2',
+  '14 GIT_TRACE=true',
+  '15 GIT_TRACE=false',
+  '16 GIT_EDITOR=true',
+  '17 GIT_EDITOR=:',
+  '18 GIT_SEQUENCE_EDITOR=true',
+  '19 GIT_SEQUENCE_EDITOR=:',
+  '20 GIT_PAGER=cat',
+  '21 PAGER=cat',
+];
+
+describe('guards-digest: tamper lock — the git-config-exec allow-lists', () => {
+  const git = BASELINE.rules.command.git;
+
+  test('command.git.allowed_global_options matches the frozen ordered digest (15 entries)', () => {
+    expect(orderedValueDigest(git.allowed_global_options)).toEqual([...EXPECTED_ALLOWED_GLOBAL_OPTIONS]);
+  });
+
+  test('command.git.allowed_config matches the frozen ordered digest (17 entries)', () => {
+    expect(orderedValueDigest(git.allowed_config)).toEqual([...EXPECTED_ALLOWED_CONFIG]);
+  });
+
+  test('command.git.allowed_env matches the frozen ordered digest (22 entries)', () => {
+    expect(orderedValueDigest(git.allowed_env)).toEqual([...EXPECTED_ALLOWED_ENV]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // The 15-subcommand conditional matrix — UNCHANGED from before ticket 06,
 // other than ticket 13 removing `pull`/`merge` (16 → 14): both moved out
 // of the baseline entirely (their `--ff-only` safe form was a personal git
