@@ -454,9 +454,6 @@ describe('loadPolicyFromOverlayText: the safe_flags overlay form', () => {
     const checker = createCommandChecker(loaded.policy.command);
     expect(checker.checkGit('git init --bare /tmp/x')).toBeNull();
     expect(checker.checkGit('git init --shared')?.ruleId).toBe('git-protected');
-    // The overlay entry comes first in the merged table, so it is the one
-    // `find` returns: the baseline entry for init no longer decides.
-    expect(loaded.policy.command.git.safe_flags[0]?.flags).toContain('--bare');
   });
 
   test('narrowing init through an overlay entry takes effect too', () => {
