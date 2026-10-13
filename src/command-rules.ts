@@ -1250,6 +1250,17 @@ export function extractGitSubcommand(segment: string): GitCommand | null {
   return extractGitSubcommandFromTokens(tokens);
 }
 
+// The `NAME=value` words among the first `end` tokens: what stands in front of
+// the command once the wrappers are consumed.
+function assignmentsBefore(tokens: readonly ShellToken[], end: number): string[] {
+  const assignments: string[] = [];
+  for (let index = 0; index < end; index++) {
+    const value = tokens[index]!.value;
+    if (ENV_ASSIGNMENT.test(value)) assignments.push(value);
+  }
+  return assignments;
+}
+
 export function extractGitSubcommandFromTokens(
   tokens: readonly ShellToken[],
 ): GitCommand | null {
@@ -1277,15 +1288,12 @@ export function extractGitSubcommandFromTokens(
     }
   }
   if (i >= filtered.tokens.length) return null;
-  const assignments = filtered.tokens
-    .slice(0, prefix.index)
-    .map((token) => token.value)
-    .filter((value) => ENV_ASSIGNMENT.test(value));
+  const assignments = prefix.index > 0 ? assignmentsBefore(filtered.tokens, prefix.index) : null;
   return {
     sub: filtered.tokens[i]!.value,
     rest: filtered.tokens.slice(i + 1).map((token) => token.value),
     ...(globals.length > 0 ? { globals } : {}),
-    ...(assignments.length > 0 ? { assignments } : {}),
+    ...(assignments !== null && assignments.length > 0 ? { assignments } : {}),
     ...(prefix.ambiguous || filtered.forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1616,18 +1624,49 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
   return true;
 }
 
-// Whether `name` is on one of the `git-config-exec` allow-lists, for a setting
-// of that `value` (null when it has none, or when it is only known at run
-// time). Entry grammar: CommandGitPolicy.allowed_config. A `*` only means
-// something at the end of an entry without a value.
-function onAllowList(entries: readonly string[], name: string, value: string | null, foldCase: boolean): boolean {
+// One entry of `allowed_config` or `allowed_env`, split once when the checker
+// is built. Entry grammar: CommandGitPolicy.allowed_config. `name` is folded to
+// lower case in a list compared without regard to case, and loses its `*` in a
+// prefix entry; a `*` only means something at the end of an entry without a
+// value.
+type AllowEntry = Readonly<{ name: string; value: string | null; prefix: boolean; }>;
+type AllowList = Readonly<{ entries: readonly AllowEntry[]; foldCase: boolean; }>;
+
+// The three `git-config-exec` lists, ready to be read for every command.
+type ConfigExecLists = Readonly<{
+  globalOptions: ReadonlySet<string>;
+  config: AllowList;
+  env: AllowList;
+}>;
+
+function compileAllowList(entries: readonly string[], foldCase: boolean): AllowList {
+  const fold = (text: string): string => (foldCase ? text.toLowerCase() : text);
+  return {
+    foldCase,
+    entries: entries.map((entry): AllowEntry => {
+      const equals = entry.indexOf('=');
+      if (equals !== -1) return { name: fold(entry.slice(0, equals)), value: entry.slice(equals + 1), prefix: false };
+      const name = fold(entry);
+      return name.endsWith('*') ? { name: name.slice(0, -1), value: null, prefix: true } : { name, value: null, prefix: false };
+    }),
+  };
+}
+
+function compileConfigExecLists(git: CommandGitPolicy): ConfigExecLists {
+  return {
+    globalOptions: new Set(git.allowed_global_options),
+    config: compileAllowList(git.allowed_config, true),
+    env: compileAllowList(git.allowed_env, false),
+  };
+}
+
+// Whether `name` is on an allow-list, for a setting of that `value` (null when
+// it has none, or when it is only known at run time).
+function onAllowList({ entries, foldCase }: AllowList, name: string, value: string | null): boolean {
   const subject = foldCase ? name.toLowerCase() : name;
   return entries.some((entry) => {
-    const equals = entry.indexOf('=');
-    const entryName = equals === -1 ? entry : entry.slice(0, equals);
-    const pattern = foldCase ? entryName.toLowerCase() : entryName;
-    if (equals !== -1) return subject === pattern && value === entry.slice(equals + 1);
-    return pattern.endsWith('*') ? subject.startsWith(pattern.slice(0, -1)) : subject === pattern;
+    if (entry.value !== null) return entry.value === value && subject === entry.name;
+    return entry.prefix ? subject.startsWith(entry.name) : subject === entry.name;
   });
 }
 
@@ -1636,12 +1675,12 @@ function onAllowList(entries: readonly string[], name: string, value: string | n
 // setting, as the verdict's reason; null when every one is allowed. The reason
 // names a variable, a key or an option, never a value. Read lexically, like the
 // rest of the git policy — git is not called and no file is read.
-function gitConfigExecOffender({ globals, assignments }: GitCommand, git: CommandGitPolicy): string | null {
+function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: ConfigExecLists): string | null {
   const runsProgram = 'can make git run an arbitrary program and is not on the git-config-exec allow-list';
   for (const assignment of assignments ?? []) {
     const equals = assignment.indexOf('=');
     const name = assignment.slice(0, equals);
-    if (!onAllowList(git.allowed_env, name, assignment.slice(equals + 1), false)) {
+    if (!onAllowList(lists.env, name, assignment.slice(equals + 1))) {
       return `environment variable ${name} ${runsProgram}`;
     }
   }
@@ -1657,11 +1696,11 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, git: Comman
       const key = settingEquals === -1 ? setting : setting.slice(0, settingEquals);
       // `--config-env=key=VAR` reads the value from VAR when git runs.
       const value = name === '-c' && settingEquals !== -1 ? setting.slice(settingEquals + 1) : null;
-      if (!onAllowList(git.allowed_config, key, value, true)) return `${name} ${key} ${runsProgram}`;
+      if (!onAllowList(lists.config, key, value)) return `${name} ${key} ${runsProgram}`;
       continue;
     }
 
-    if (!git.allowed_global_options.includes(name)) {
+    if (!lists.globalOptions.has(name)) {
       const shown = option.includes('=') ? option.slice(0, option.indexOf('=')) : option;
       return `global option ${shown} is not on the git-config-exec allow-list`;
     }
@@ -1669,7 +1708,7 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, git: Comman
   return null;
 }
 
-function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
+function checkGitWith(cmd: string, git: CommandGitPolicy, lists: ConfigExecLists): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
@@ -1683,7 +1722,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
     }
     // Judged after the subcommand, so that a subcommand that asks keeps
     // `git-protected` and this rule only turns an allow into a confirm.
-    const offender = gitConfigExecOffender(parsed, git);
+    const offender = gitConfigExecOffender(parsed, lists);
     if (offender !== null) {
       return {
         verdict: 'confirm',
@@ -1741,8 +1780,9 @@ export function createCommandChecker(policy: CommandPolicy): CommandChecker {
   const dangerousTargets = policy.rm_rf.dangerous_targets.map((pattern) => new RegExp(pattern));
   const privilegeCommands = new Set(policy.privilege_escalation.commands);
   const git = policy.git;
+  const configExecLists = compileConfigExecLists(git);
 
-  const checkGit = (cmd: string): Verdict | null => checkGitWith(cmd, git);
+  const checkGit = (cmd: string): Verdict | null => checkGitWith(cmd, git, configExecLists);
   const classifyGitAllow = (cmd: string): Verdict | null => classifyGitAllowWith(cmd, git);
 
   const checkBash = (cmd: string): Verdict | null => {
