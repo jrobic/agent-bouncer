@@ -951,6 +951,109 @@ describe('command-rules: SHA safe grammar slots', () => {
   });
 });
 
+// `safe_flags` is the fourth declarative git-conditional form: a list of
+// ALLOWED options (the inverse of `ask_flags`), with value-taking options
+// and a positional cap. The init matrix (every allowed and refused form)
+// lives in fixtures/command.json as the conformance contract and is not
+// repeated here: these engine tests cover what a fixture on `init` cannot
+// express — the classifier, and the generic semantics against a
+// subcommand the baseline does not govern.
+describe('command-rules: an allowed git init is classified observe', () => {
+  test('git-conditional-init for an allowed form; nothing for a refused one', () => {
+    const checker = createCommandChecker(BASELINE.rules.command);
+    expect(checker.classifyGitAllow('git init -q /tmp/repo')).toMatchObject({
+      verdict: 'observe',
+      ruleId: 'git-conditional-init',
+    });
+    expect(checker.classifyGitAllow('git init --bare')).toBeNull();
+  });
+});
+
+describe('command-rules: safe_flags semantics (generic, on an ungoverned subcommand)', () => {
+  const gc = {
+    sub: 'gc',
+    flags: ['--quiet', '-q'],
+    value_flags: ['--prune', '-p'],
+    max_positionals: 0,
+  };
+  const checkerWith = (git: Partial<typeof BASELINE.rules.command.git>) =>
+    createCommandChecker({
+      ...BASELINE.rules.command,
+      git: { ...BASELINE.rules.command.git, ...git },
+    });
+  const checker = checkerWith({ safe_flags: [gc, ...BASELINE.rules.command.git.safe_flags] });
+
+  test.each([
+    'git gc -q --quiet',
+    'git gc --quiet --prune=now -p 1.day',
+  ])('%s is allowed', (command) => {
+    expect(checker.checkGit(command)).toBeNull();
+  });
+
+  test.each([
+    'git gc extra',
+    'git gc --prune --quiet',
+    'git gc --prune=',
+    'git gc -p=now',
+    'git gc --quiet=1',
+    'git gc -',
+    'git gc --quiet 2>&1 -x',
+  ])('ruleId git-protected: %s asks', (command) => {
+    expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test('max_positionals = 0 refuses any positional; a larger cap allows exactly that many', () => {
+    const two = checkerWith({ safe_flags: [{ sub: 'gc', flags: [], value_flags: [], max_positionals: 2 }] });
+    expect(two.checkGit('git gc a b')).toBeNull();
+    expect(two.checkGit('git gc a b c')?.ruleId).toBe('git-protected');
+  });
+
+  test('a redirection is not a positional, and an ambiguous one still asks', () => {
+    expect(checker.checkGit('git gc --quiet 2>/dev/null')).toBeNull();
+    expect(checker.checkGit('git gc --quiet >')?.ruleId).toBe('git-protected');
+  });
+
+  // Evaluation order: ask_flags, safe_first_arg, safe_grammar, safe_flags,
+  // then the checkout/restore engine exceptions. A subcommand reaching an
+  // earlier form never reaches a later one.
+  test('ask_flags, safe_first_arg and safe_grammar decide before safe_flags does', () => {
+    const permissive = { sub: 'gc', flags: ['--force', 'go'], value_flags: [], max_positionals: 5 };
+
+    const withAskFlags = checkerWith({ ask_flags: [{ sub: 'gc', flags: ['--force'] }], safe_flags: [permissive] });
+    expect(withAskFlags.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withAskFlags.checkGit('git gc --unknown')).toBeNull();
+
+    const withFirstArg = checkerWith({
+      safe_first_arg: [{ sub: 'gc', values: ['list'], safe_when_absent: false }],
+      safe_flags: [permissive],
+    });
+    expect(withFirstArg.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withFirstArg.checkGit('git gc list --unknown')).toBeNull();
+
+    const withGrammar = checkerWith({
+      safe_grammar: [{ sub: 'gc', sequences: [['--check']] }],
+      safe_flags: [permissive],
+    });
+    expect(withGrammar.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withGrammar.checkGit('git gc --check')).toBeNull();
+  });
+
+  test('safe_flags decides before the checkout and restore engine exceptions', () => {
+    const checkout = checkerWith({ safe_flags: [{ sub: 'checkout', flags: ['-f'], value_flags: [], max_positionals: 0 }] });
+    expect(checkout.checkGit('git checkout -f')).toBeNull();
+    expect(checkout.checkGit('git checkout main')?.ruleId).toBe('git-protected');
+
+    const restore = checkerWith({ safe_flags: [{ sub: 'restore', flags: [], value_flags: [], max_positionals: 1 }] });
+    expect(restore.checkGit('git restore f.ts')).toBeNull();
+    expect(restore.checkGit('git restore --staged f.ts')?.ruleId).toBe('git-protected');
+  });
+
+  test('a subcommand in safe_subcommands stays unconditionally safe', () => {
+    const status = checkerWith({ safe_flags: [{ sub: 'status', flags: [], value_flags: [], max_positionals: 0 }] });
+    expect(status.checkGit('git status --anything goes here')).toBeNull();
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');

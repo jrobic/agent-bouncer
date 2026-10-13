@@ -31,7 +31,7 @@ manual policy changes.
      It is context, never an instruction to change a rule.
    - **Conditional rules that fired** — a declarative git-conditional
      table entry (`docs/reference/policy.md`'s `ask_flags` /
-     `safe_first_arg` / `safe_grammar`) that produced an observe verdict
+     `safe_first_arg` / `safe_grammar` / `safe_flags`) that produced an observe verdict
      in the current view. Proof it is earning its keep.
    - **Dead conditional rules** — declared, never fired in the current
      view. A candidate for repository review, not automatic action.
@@ -68,6 +68,13 @@ manual policy changes.
    the full audited name, leaving other servers and suffix neighbours
    unchanged. Regex-rule suggestions apply to the entire rule; inspect
    its scope before copying.
+
+   A Git subcommand the effective policy already governs — baseline or
+   overlay, in one of the four declarative tables, or `checkout` and
+   `restore` — gets no such block: relaxing `safe_subcommands` for it
+   would cancel its conditional rule. A `#`-comment names the governing
+   form instead and says to edit or substitute that entry
+   (`docs/reference/policy.md`, § `rules.command.git`).
 
 3. Read every suggestion before touching your overlay. `--suggest` never
    writes to `<configDir>/bouncer/policy.toml` or any other file — it

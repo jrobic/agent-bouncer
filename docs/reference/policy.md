@@ -357,15 +357,22 @@ An overlay addition to any of these six tables is pure hardening: it
 can only add a new match, never override or shadow an existing baseline
 row (baseline entries are always checked first).
 
-## `rules.command.git`: the three declarative conditional forms
+## `rules.command.git`: the four declarative conditional forms
 
 Below `rules.command.git`, two plain lists (`safe_subcommands`,
-`config_read_modes`) and three declarative tables cover git subcommands
+`config_read_modes`) and four declarative tables cover git subcommands
 whose safety depends on their arguments — everything else falls through
 to `git-protected` (always confirm). `checkout` and `restore` are the
-two subcommands these three forms can't express (pathspec detection,
+two subcommands these four forms can't express (pathspec detection,
 index-only form — `--staged` plus one or more pathspecs) — they stay
 engine code under their own names.
+
+A subcommand is judged by the first form that governs it, in this order:
+`safe_subcommands` (always safe), `ask_flags`, `safe_first_arg`,
+`safe_grammar`, `safe_flags`, then the `checkout` and `restore` engine
+exceptions. A subcommand an earlier form governs never reaches a later
+one, so an overlay `ask_flags` entry for `init` takes over from the
+baseline's `safe_flags` entry for it.
 
 **`ask_flags`** — safe unless one of `flags` is present, or (with
 `max_positionals`) too many non-flag arguments are given. This is
@@ -457,6 +464,84 @@ syntax requires confirmation instead of silently dropping arguments.
 | `sequences` | `Array<Array<string \| { kind = "sha" }>>` | yes |
 | `reason` | string | conditional — see § [[relax]] below |
 
+**`safe_flags`** — safe only if every argument is an allowed option, the
+value of one, or one of at most `max_positionals` positional arguments.
+It is the inverse of `ask_flags`: the entry lists what is allowed, so an
+option it does not list asks. Baseline's own `init` row; same
+substitution note as `ask_flags` above:
+
+```toml
+[[rules.command.git.safe_flags]]
+sub = "init"
+flags = ["-q", "--quiet"]
+value_flags = ["-b", "--initial-branch"]
+max_positionals = 1
+reason = "example only — this duplicates the baseline row verbatim"
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `sub` | string | yes |
+| `flags` | string[] — options accepted on their own, each starting with `-` | yes |
+| `value_flags` | string[] — options that take a value, each starting with `-` | yes |
+| `max_positionals` | integer ≥ 0 | yes |
+| `reason` | string | conditional — see § [[relax]] below |
+
+Any other key rejects the layer: a misspelled `value_flag` would
+otherwise be dropped in silence, and an allow-list that lost a field is
+read in the permissive direction.
+
+The arguments after the subcommand — once recognized shell redirections
+are removed, as for `safe_grammar` — are read one by one. The command is
+safe only if every one is:
+
+1. an option of `flags`, written exactly;
+2. an option of `value_flags`, written exactly, followed by a value that
+   does not start with `-` (the value is consumed: it is not a
+   positional);
+3. `--name=value`, where `--name` is a long option of `value_flags` and
+   `value` is not empty (a short option has no `=` form);
+4. a positional argument — one that does not start with `-` — within the
+   `max_positionals` count.
+
+Anything else asks with `git-protected`. The rule judges the text only:
+it does not call git and does not read the file system. Abbreviated long
+options, grouped short options, glued short values and `--` match none of
+the four cases, so they ask by construction — which is why the form is an
+allow-list rather than a deny-list.
+
+The same allow-list reasoning covers what is written before the
+subcommand. Global options such as `--bare`, `--git-dir`, `--work-tree`,
+`-c` or `--no-pager` act on the command as if they followed it
+(`git --bare init` is `git init --bare`), so for a subcommand decided by
+`safe_flags` the only global option tolerated is `-C <dir>`, alone or
+repeated; any other asks with `git-protected`. The other three forms,
+and `safe_subcommands`, keep ignoring global options. Environment
+prefixes (`GIT_TEMPLATE_DIR=… git init`) are not read by any form.
+
+Against the baseline `init` row:
+
+| Accepted | Why |
+|---|---|
+| `git init`, `git init -q` | no argument, or a `flags` option |
+| `git init --quiet /tmp/x`, `git init -q .` | one positional |
+| `git init -q -b develop .` | `-b` consumes `develop`; `.` is the positional |
+| `git init --initial-branch=main` | `--name=value` of a long `value_flags` option |
+| `git -C /tmp/x init -q` | `-C <dir>` is the one global option `safe_flags` tolerates before the subcommand |
+| `git init -q 2>/dev/null` | a redirection is not an argument |
+
+| Refused (`git-protected`) | Why |
+|---|---|
+| `git init --bare`, `--shared`, `--template=<d>`, `--separate-git-dir <d>`, `--object-format=sha256`, `--ref-format=reftable` | option not listed |
+| `git init --separate=<d>` | an abbreviation is an unknown token |
+| `git init -qb main` | grouped short options are one unknown token |
+| `git init -bmain` | a glued short value is an unknown token |
+| `git init -b`, `git init -b -q`, `git init --initial-branch=` | no value, a value starting with `-`, an empty value |
+| `git init --` | the end-of-options marker is an unknown token |
+| `git init /tmp/a /tmp/b` | more positionals than `max_positionals` |
+| `git --bare init`, `git --git-dir=/tmp/x/.git init`, `git --work-tree=/tmp/x init`, `git -c init.templateDir=/tmp/t init -q` | a global option other than `-C <dir>` |
+| `git -C /tmp/x --bare init -q` | `-C` combined with another global option |
+
 ## The two algorithm-driven tables
 
 `rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`
@@ -473,7 +558,7 @@ dangerous_targets = ["^\\/$", "^~\\/?$", "..."]  # regexes the rm target must NO
 commands = ["sudo", "doas", "pkexec", "runas", "please"]
 ```
 
-`git-protected` is governed by `safe_subcommands` and the three
+`git-protected` is governed by `safe_subcommands` and the four
 declarative forms above.
 
 ### Secret Bash path-token scan
@@ -1054,11 +1139,11 @@ value = "push"
 reason = "..."   # mandatory, non-empty — this can only relax security
 ```
 
-A `safe_first_arg`/`ask_flags`/`safe_grammar` overlay entry whose `sub`
-is already governed by the baseline is a SUBSTITUTION, not a fresh
-addition, and needs the same mandatory `reason` (see the field tables
-above) — the overlay entry wins over the baseline one for that
-subcommand.
+A `safe_first_arg`/`ask_flags`/`safe_grammar`/`safe_flags` overlay entry
+whose `sub` is already governed by the baseline (`init` is, through
+`safe_flags`) is a SUBSTITUTION, not a fresh addition, and needs the same
+mandatory `reason` (see the field tables above) — the overlay entry wins
+over the baseline one for that subcommand.
 
 ## Regex dialect
 
@@ -1170,11 +1255,11 @@ Three different orders, by scope:
   Matching overlay ids append `dir`, `parents`, and `env`; new ids append
   whole declarations. Derived protected-write rows are rebuilt from that
   effective set before the handwritten protected-write rows.
-- **`ask_flags` / `safe_first_arg` / `safe_grammar`** — overlay entries
-  come first. Every consumer looks a `sub` up by `Array.find()`, so an
-  overlay entry for an already-governed `sub` wins over the baseline
-  one — this asymmetry is what makes such an entry a substitution
-  (§ `[[relax]]` above), not a plain addition.
+- **`ask_flags` / `safe_first_arg` / `safe_grammar` / `safe_flags`** —
+  overlay entries come first. Every consumer looks a `sub` up by
+  `Array.find()`, so an overlay entry for an already-governed `sub` wins
+  over the baseline one — this asymmetry is what makes such an entry a
+  substitution (§ `[[relax]]` above), not a plain addition.
 
 ## Precedence: the profile wins on a shared target (ADR-0001)
 
@@ -1186,9 +1271,9 @@ targets this applies to (the four case ADR-0001 names):
 - A regex-table row `id` (any of the six families).
 - An `[[override]]`'s `rule`.
 - An `[[relax]]`'s `list` + `value`.
-- An `ask_flags` / `safe_first_arg` / `safe_grammar` entry's `sub`
-  (within its own table — `ask_flags` and `safe_first_arg` sharing a
-  `sub` name is not itself a shared target).
+- An `ask_flags` / `safe_first_arg` / `safe_grammar` / `safe_flags`
+  entry's `sub` (within its own table — `ask_flags` and `safe_first_arg`
+  sharing a `sub` name is not itself a shared target).
 
 When both layers contribute the same target, the common layer's entry is
 dropped from the effective policy entirely (never chained, never applied
@@ -1221,8 +1306,8 @@ carrying the row is enough:
   of the same layer.
 - Two `[[relax]]` entries for the same `list` + `value`, in two different
   files of the same layer.
-- Two `ask_flags`/`safe_first_arg`/`safe_grammar` entries for the same
-  `sub`, in two different files of the same layer.
+- Two `ask_flags`/`safe_first_arg`/`safe_grammar`/`safe_flags` entries for
+  the same `sub`, in two different files of the same layer.
 - Two regex-table rows (any of the six families) sharing the same `id`
   anywhere in one effective policy — whether they came from one file,
   several files, the baseline, or derived harness rows. Ids resolve

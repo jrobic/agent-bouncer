@@ -8,10 +8,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `git init` no longer asks when its options are on a short allow-list: `-q` /
+  `--quiet`, `-b <name>` / `--initial-branch <name>` / `--initial-branch=<name>`,
+  and at most one directory. `git init`, `git init -q`, `git init --quiet <dir>`,
+  `git init -q -b develop .`, `git -C <dir> init -q` and `git init -q
+  2>/dev/null` pass; every other form (`--bare`, `--template`,
+  `--separate-git-dir`, `--shared`, `--object-format`, `--ref-format`, an
+  abbreviated long option, grouped short options such as `-qb main`, a glued
+  value such as `-bmain`, `--`, two directories, a global option other than
+  `-C <dir>` such as `git --bare init` or `git -c … init`) still asks with
+  `git-protected`. An allowed `init` is logged as `observe
+  git-conditional-init`, so `bouncer audit` keeps showing what the change lets
+  through.
+- `safe_flags`, a fourth declarative git-conditional form
+  (`[[rules.command.git.safe_flags]]`): an allow-list of options for one git
+  subcommand — `flags`, `value_flags` and `max_positionals` — the inverse of
+  `ask_flags`. It is the mechanism behind the `init` entry and is available to
+  overlays and the `bouncer-policy` skill. An unknown or abbreviated option
+  asks by construction, and so does any global option other than `-C <dir>`
+  written before the subcommand. Entries are shape-checked on load (any unknown key
+  rejects the layer), two files of one layer declaring the same `sub` conflict,
+  an overlay entry wins over the baseline, and an entry that replaces a
+  governed subcommand needs a `reason`, is listed by `bouncer doctor` as an
+  active relaxation and appears in `bouncer rules list` as an `overlay-relax`
+  line.
 - `docs/how-to/keep-env-secrets-away-from-agents.md` shows an operator what
   the 1.8.0 environment rows do, how to check and relax them, and how to
   close the gap at the launcher. `docs/adr/0007-environment-secrets-baseline-net.md`
   records why they are a net and not a barrier.
+
+### Changed
+
+- **Upgrade:** `init` is now a baseline-governed git subcommand. An overlay
+  entry for `init` in `ask_flags`, `safe_first_arg`, `safe_grammar` or
+  `safe_flags` without a `reason` is rejected as a unit: run `bouncer rules
+  lint` and `bouncer doctor` after upgrading.
+- `bouncer audit --suggest` no longer proposes a blanket `[[relax]]` of
+  `command.git.safe_subcommands` for a git subcommand the effective policy
+  already governs (baseline or overlay: `init`, `branch`, `tag`, … in any of
+  the four tables, plus `checkout` and `restore`): that block would cancel
+  the conditional rule rather than widen it. A comment names the governing
+  form and says to edit or substitute it instead. A subcommand no table
+  governs (`gc`, `push`) is suggested as before.
 
 ## [1.8.0] - 2026-10-13
 

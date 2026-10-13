@@ -75,7 +75,18 @@ Use this order. Move to a wider lever only after the human rejects the narrower 
    reason = "<reason>"
    ```
 
-4. `[[relax]]` on `command.git.safe_subcommands` affects every form of the named Git subcommand, including `--force`; keep this block commented exactly as `--suggest` emits it until the human uncomments it.
+4. `[[rules.command.git.safe_flags]]` allows exactly the listed options of one Git subcommand, plus at most `max_positionals` positional arguments; any other option still asks. Propose it, in place of lever 5, when a subcommand needs an allow-list of options rather than a blanket pass (the baseline uses it for `init`). Every field except `reason` is required. An entry for a subcommand the baseline already governs, `init` included, replaces the baseline entry: it needs a `reason`, and everything it omits asks. Options match as exact tokens: an abbreviation, grouped short options, or a glued value such as `-bmain` never matches.
+
+   ```toml
+   [[rules.command.git.safe_flags]]
+   sub = "<git-subcommand>"
+   flags = ["<option>"]
+   value_flags = ["<option-taking-a-value>"]
+   max_positionals = 1
+   reason = "<reason>"
+   ```
+
+5. `[[relax]]` on `command.git.safe_subcommands` affects every form of the named Git subcommand, including `--force`; keep this block commented exactly as `--suggest` emits it until the human uncomments it. Never use it for a subcommand the effective policy already governs (`init`, `branch`, …): `--suggest` names the governing form for those, and the lever is to edit or substitute that entry (lever 4 for `safe_flags`).
 
    ```toml
    [[relax]]
@@ -84,7 +95,7 @@ Use this order. Move to a wider lever only after the human rejects the narrower 
    reason = "<reason>"
    ```
 
-5. `[[override]]` with `action = "disable"` removes the named rule for every match.
+6. `[[override]]` with `action = "disable"` removes the named rule for every match.
 
    ```toml
    [[override]]

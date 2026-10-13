@@ -36,6 +36,7 @@ import { withDispatcherLikeRun } from './adapter/run.ts';
 import { renderShim } from './adapter/shim.ts';
 import { renderSkill } from './adapter/skill.ts';
 import { BASELINE } from './policy/baseline.ts';
+import { gitGoverningForms } from './policy/git-forms.ts';
 import { resolvableRuleIds } from './policy/lint.ts';
 import type { EffectiveRule, LoadResult } from './policy/load.ts';
 import type { HarnessDeclaration, HarnessProtocol } from './policy/schema.ts';
@@ -690,6 +691,7 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
     const text = renderSuggestions(clusters, resolvable, {
       days: options.days,
       headerLines: replayHeaders,
+      governedGitSubs: gitGoverningForms(loaded.policy.command.git),
       ...(replay === null ? {} : { resolvedCount }),
     });
     // `#`-commented: renderSuggestions's output is TOML meant to be pasted

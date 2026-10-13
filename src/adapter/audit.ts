@@ -17,6 +17,7 @@
 // strings and already-loaded data structures.
 
 import { extractGitSubcommand } from '../command-rules.ts';
+import { type GitGoverningForm, gitGoverningForms } from '../policy/git-forms.ts';
 import type { RelaxableList, RulesPolicy } from '../policy/schema.ts';
 import type { VerdictKind } from '../types.ts';
 import type { PolicyTransition, ReplayedVerdict } from './audit-replay.ts';
@@ -314,7 +315,7 @@ export function clusterPolicyDelta(entries: readonly PolicyDeltaEntry[]): Policy
 // ─── dead conditional rules ────────────────────────────────────────────
 
 /** Every `git-conditional-<sub>` id the given git policy can EVER produce —
- * the three declarative tables (each entry can fire an observe verdict for
+ * the four declarative tables (each entry can fire an observe verdict for
  * its `sub`) plus the two engine-escape names (checkout/restore, which
  * classifyGitAllowWith in src/command-rules.ts treats identically to a
  * table-driven conditional). Unconditionally-safe subcommands
@@ -322,14 +323,7 @@ export function clusterPolicyDelta(entries: readonly PolicyDeltaEntry[]): Policy
  * silently, nothing to log or audit — so they are deliberately absent
  * here. */
 export function conditionalRuleIdsOf(git: RulesPolicy['command']['git']): string[] {
-  const subs = new Set<string>([
-    ...git.ask_flags.map((r) => r.sub),
-    ...git.safe_first_arg.map((r) => r.sub),
-    ...git.safe_grammar.map((r) => r.sub),
-    'checkout',
-    'restore',
-  ]);
-  return [...subs].map((sub) => `git-conditional-${sub}`);
+  return [...gitGoverningForms(git).keys()].map((sub) => `git-conditional-${sub}`);
 }
 
 /** Every conditional rule id of `policy` that is NOT in `firedRuleIds` — a
@@ -349,6 +343,13 @@ export interface AuditReportOptions {
   readonly headerLines?: readonly string[];
   readonly deltaClusters?: readonly PolicyDeltaCluster[];
   readonly resolvedCount?: number;
+}
+
+export interface SuggestionOptions extends AuditReportOptions {
+  // Subcommand -> form deciding it (gitGoverningForms). A git-protected
+  // cluster for one of them is never offered a blanket safe_subcommands
+  // relax: that would cancel the conditional rule, not widen it.
+  readonly governedGitSubs: ReadonlyMap<string, GitGoverningForm>;
 }
 
 const FRICTION_VERDICTS: Readonly<Record<VerdictKind, boolean>> = {
@@ -456,7 +457,16 @@ export function renderReport(
 type SuggestionAction =
   | { readonly kind: 'relax'; readonly list: RelaxableList; readonly value: string; }
   | { readonly kind: 'override'; readonly rule: string; readonly verdict: VerdictKind; }
+  | { readonly kind: 'governed'; readonly sub: string; readonly form: GitGoverningForm; }
   | { readonly kind: 'none'; };
+
+const GOVERNING_FORM_PHRASE: Readonly<Record<GitGoverningForm, string>> = {
+  ask_flags: 'an `ask_flags` entry',
+  safe_first_arg: 'a `safe_first_arg` entry',
+  safe_grammar: 'a `safe_grammar` entry',
+  safe_flags: 'a `safe_flags` entry',
+  engine: 'its engine rule',
+};
 
 // Exact tool-name relaxation is deliberately narrower than the engine's
 // generic read-prefix posture: a candidate must name a non-empty MCP server
@@ -488,13 +498,19 @@ const RELAX_LEVERS: readonly RelaxLever[] = [
   },
 ];
 
-function suggestionFor(cluster: Cluster, resolvableIds: ReadonlySet<string>): SuggestionAction {
+function suggestionFor(
+  cluster: Cluster,
+  resolvableIds: ReadonlySet<string>,
+  governedGitSubs: ReadonlyMap<string, GitGoverningForm>,
+): SuggestionAction {
   const lever = RELAX_LEVERS.find((l) => l.ruleId === cluster.ruleId);
   if (lever) {
     const raw = cluster.exampleTargets[0] ?? '';
     const value = lever.extractValue(raw);
-    if (value) return { kind: 'relax', list: lever.list, value };
-    return { kind: 'none' };
+    if (!value) return { kind: 'none' };
+    const form = isGitSafeSubcommandLever(lever.list) ? governedGitSubs.get(value) : undefined;
+    if (form !== undefined) return { kind: 'governed', sub: value, form };
+    return { kind: 'relax', list: lever.list, value };
   }
   if (resolvableIds.has(cluster.ruleId)) {
     const nextVerdict: VerdictKind | null = cluster.verdict === 'block'
@@ -546,7 +562,7 @@ function gitSafeSubcommandReason(cluster: Cluster, value: string, days: number):
 export function renderSuggestions(
   clusters: readonly Cluster[],
   resolvableIds: ReadonlySet<string>,
-  options: AuditReportOptions,
+  options: SuggestionOptions,
 ): string {
   const lines: string[] = [
     `# bouncer audit --suggest — candidate policy overlay snippets, last ${options.days} day(s)`,
@@ -569,7 +585,18 @@ export function renderSuggestions(
   const overrideSeen = new Set<string>();
 
   for (const cluster of friction) {
-    const action = suggestionFor(cluster, resolvableIds);
+    const action = suggestionFor(cluster, resolvableIds, options.governedGitSubs);
+
+    if (action.kind === 'governed') {
+      const asLogged = cluster.asLogged ? ' (as logged)' : '';
+      lines.push(
+        `# ${cluster.ruleId}${asLogged}: git ${action.sub} is governed by ${GOVERNING_FORM_PHRASE[action.form]} — `
+          + `a blanket relax of command.git.safe_subcommands would cancel that rule; edit or substitute it instead `
+          + `(fired ${cluster.count}x, last ${cluster.lastSeen}) — review manually`,
+      );
+      lines.push('');
+      continue;
+    }
 
     if (action.kind === 'none') {
       const asLogged = cluster.asLogged ? ' (as logged)' : '';

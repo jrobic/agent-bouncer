@@ -350,6 +350,20 @@ describe('runRulesList', () => {
     expect(text).toContain('override disable mkfs — test [profile:policy.d/10-npm.toml]');
     expect(text).toContain('overlay-relax command.git.safe_subcommands push — test [profile:policy.d/10-npm.toml]');
   });
+
+  test('a safe_flags overlay entry substituting the governed init is an overlay-relax line with its reason', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[rules.command.git.safe_flags]]\nsub = "init"\nflags = ["-q", "--bare"]\nvalue_flags = []\nmax_positionals = 1\n'
+        + 'reason = "bare scratch repositories are routine here"\n',
+    );
+    const { text } = await runRulesList();
+    expect(text).toMatch(/^summary: \d+ rules, 1 overrides active/m);
+    expect(text).toContain(
+      'overlay-relax command.git.safe_flags init — bare scratch repositories are routine here [profile:policy.toml]',
+    );
+  });
 });
 
 describe('runPing', () => {

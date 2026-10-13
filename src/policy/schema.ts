@@ -42,7 +42,7 @@ export interface AskFlagsRule {
   // tokens are present — symbolic-ref's "at most one ref name" rule.
   readonly max_positionals?: number;
   // Mandatory (lint-enforced) when `sub` is already governed by the
-  // baseline (safe_subcommands, or any of the three declarative tables) —
+  // baseline (safe_subcommands, or any of the four declarative tables) —
   // such an overlay entry can only SUBSTITUTE, and therefore only relax,
   // the baseline's own behavior for that subcommand. Optional when `sub`
   // is genuinely new. See src/policy/lint.ts's lintGitConditionalRelaxation.
@@ -77,13 +77,34 @@ export interface SafeGrammarRule {
   readonly reason?: string;
 }
 
+export interface SafeFlagsRule {
+  readonly sub: string;
+  // Options accepted on their own, matched token for token (`-q`,
+  // `--quiet`). The inverse of AskFlagsRule.flags: a token NOT listed here
+  // or in `value_flags` is unknown, and an unknown option asks.
+  readonly flags: readonly string[];
+  // Options that take a value, in the next token (`-b main`,
+  // `--initial-branch main`) or, for a LONG option only, as `--name=value`
+  // with a non-empty value. The value must not start with `-`.
+  readonly value_flags: readonly string[];
+  // At most this many positional tokens (not starting with `-`, and not
+  // consumed as the value of a `value_flags` option).
+  readonly max_positionals: number;
+  // See AskFlagsRule.reason.
+  readonly reason?: string;
+}
+
 export interface CommandGitPolicy {
   readonly safe_subcommands: readonly string[];
   readonly config_read_modes: readonly string[];
   readonly ask_flags: readonly AskFlagsRule[];
   readonly safe_first_arg: readonly SafeFirstArgRule[];
   readonly safe_grammar: readonly SafeGrammarRule[];
+  readonly safe_flags: readonly SafeFlagsRule[];
 }
+
+// The four declarative git-conditional tables of `CommandGitPolicy`, by name.
+export type GitConditionalTable = 'ask_flags' | 'safe_first_arg' | 'safe_grammar' | 'safe_flags';
 
 export interface CommandPolicy {
   readonly bash: readonly RegexRule[];

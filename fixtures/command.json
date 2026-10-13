@@ -2273,6 +2273,396 @@
       ]
     },
     {
+      "id": "git-init-bare-command-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-quiet-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -q"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-quiet-long-with-directory-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --quiet /tmp/repo"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-quiet-dot-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -q ."
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-quiet-initial-branch-short-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -q -b develop ."
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-initial-branch-equals-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --initial-branch=main"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-initial-branch-separate-with-directory-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --initial-branch main /tmp/repo"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-global-dir-option-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/repo init -q"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-redirect-is-not-a-positional-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -q 2>/dev/null"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-throwaway-repo-chain-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "mkdir -p /tmp/repo && cd /tmp/repo && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm i"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-bare-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --bare"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-template-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --template=/tmp/tpl"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-template-separate-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --template /tmp/tpl"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-separate-git-dir-separate-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --separate-git-dir /tmp/gd"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-separate-git-dir-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --separate-git-dir=/tmp/gd"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-abbreviated-long-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --separate=/tmp/gd"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-shared-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --shared"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-grouped-short-options-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -qb main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-glued-short-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -bmain"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-initial-branch-without-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init -b"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-double-dash-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-two-positionals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init /tmp/a /tmp/b"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-object-format-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --object-format=sha256"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-ref-format-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git init --ref-format=reftable"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-bare-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --bare init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-bare-with-directory-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --bare init /tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-git-dir-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --git-dir=/tmp/x/.git init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-work-tree-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --work-tree=/tmp/x init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-config-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c init.templateDir=/tmp/t init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-chdir-combined-with-another-global-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/x --bare init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-repeated-chdir-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/a -C /tmp/b init -q"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-init-global-before-chdir-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager -C /tmp/x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-glued-chdir-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C/tmp/x init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-global-option-ignored-for-a-safe-subcommand-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager log"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-global-option-ignored-for-a-conditional-subcommand-allowed",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --no-pager branch new-branch"
+      },
+      "expected": []
+    },
+    {
       "id": "fd-exec-destructive-short",
       "toolName": "Bash",
       "toolInput": {

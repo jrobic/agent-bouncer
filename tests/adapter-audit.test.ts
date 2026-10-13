@@ -20,10 +20,12 @@ import {
 } from '../src/adapter/audit.ts';
 import type { AuditEntry } from '../src/adapter/audit.ts';
 import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
+import { gitGoverningForms } from '../src/policy/git-forms.ts';
 import { resolvableRuleIds } from '../src/policy/lint.ts';
 import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
 
 const BASELINE_POLICY = loadPolicyFromOverlayText(null).policy;
+const governedGitSubs = gitGoverningForms(BASELINE_POLICY.command.git);
 
 function entry(overrides: Partial<AuditEntry> = {}): AuditEntry {
   return {
@@ -435,7 +437,7 @@ describe('renderSuggestions', () => {
       entry({ target: 'git push origin main' }),
       entry({ target: 'git push origin feature-x' }),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
 
     // Every line of the block is commented — not just wrapped in a leading
     // explanatory comment with an active block still inside it.
@@ -458,11 +460,54 @@ describe('renderSuggestions', () => {
     expect(result.policy.command.git.safe_subcommands).not.toContain('push');
   });
 
+  describe('a git subcommand the policy already governs is never offered a blanket safe_subcommands relax', () => {
+    test.each([
+      ['init', 'git init --bare /tmp/x', 'a `safe_flags` entry'],
+      ['branch', 'git branch -D old-branch', 'an `ask_flags` entry'],
+      ['worktree', 'git worktree remove w', 'a `safe_first_arg` entry'],
+      ['apply', 'git apply p.diff', 'a `safe_grammar` entry'],
+      ['checkout', 'git checkout -f', 'its engine rule'],
+    ])('%s: a comment names the governing form, and no [[relax]] block is emitted', (sub, target, governing) => {
+      const clusters = clusterEntries([entry({ target }), entry({ target })]);
+      const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
+
+      expect(text).not.toContain('[[relax]]');
+      expect(text).not.toContain('safe_subcommands"');
+      expect(text).toContain(`# git-protected: git ${sub} is governed by ${governing}`);
+      expect(text).toContain('edit or substitute it instead');
+      expect(text).not.toContain('baseline');
+      expect(text).toContain('fired 2x');
+      expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
+    });
+
+    test('a subcommand no table governs still gets the commented blanket relax', () => {
+      const clusters = clusterEntries([entry({ target: 'git gc --aggressive' })]);
+      const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
+
+      expect(text).toContain('# [[relax]]');
+      expect(text).toContain('# value = "gc"');
+    });
+
+    test('the renderer names the form the map it is given assigns (here a safe_flags entry from an overlay)', () => {
+      const overlayPolicy = loadPolicyFromOverlayText(
+        '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+      ).policy;
+      const clusters = clusterEntries([entry({ target: 'git gc --aggressive' })]);
+      const text = renderSuggestions(clusters, resolvable, {
+        days: 30,
+        governedGitSubs: gitGoverningForms(overlayPolicy.command.git),
+      });
+
+      expect(text).toContain('# git-protected: git gc is governed by a `safe_flags` entry');
+      expect(text).not.toContain('[[relax]]');
+    });
+  });
+
   test('emits a [[override]] relax snippet for a resolvable regex-rule id', () => {
     const clusters = clusterEntries([
       entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/user/project/.env' }),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
     expect(text).toContain('[[override]]');
     expect(text).toContain('rule = "dotenv"');
     expect(text).toContain('action = "relax"');
@@ -473,7 +518,7 @@ describe('renderSuggestions', () => {
     const clusters = clusterEntries([
       entry({ ruleId: 'rm-rf-dangerous', verdict: 'block', target: 'rm -rf /some/dir' }),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
     expect(text).not.toContain('[[relax]]');
     expect(text).not.toContain('[[override]]');
     expect(text).toContain('# rm-rf-dangerous');
@@ -484,7 +529,7 @@ describe('renderSuggestions', () => {
       asLoggedEntry(entry()),
       asLoggedEntry(entry({ ruleId: 'rm-rf-dangerous', verdict: 'block', target: 'rm -rf /some/dir' })),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
 
     expect(text).toContain('rule \\"git-protected\\" (as logged) fired');
     expect(text).toContain('# rm-rf-dangerous (as logged): no policy lever available');
@@ -495,7 +540,7 @@ describe('renderSuggestions', () => {
       entry({ target: 'git push origin main' }),
       entry({ target: 'git push origin main extra-token' }), // different shape, same sub
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
     expect(text.match(/\[\[relax\]\]/g)?.length).toBe(1);
   });
 
@@ -506,7 +551,7 @@ describe('renderSuggestions', () => {
       entry({ ruleId: 'dotenv', family: 'secret', verdict: 'block', target: '/Users/user/project/.env' }),
       entry({ ruleId: 'mcp-write', family: 'mcp-write', verdict: 'confirm', target: toolName }),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
     const result = loadPolicyFromOverlayText(text);
 
     expect(result.warnings).toEqual([]);
@@ -528,7 +573,7 @@ describe('renderSuggestions', () => {
       entry({ ruleId: 'mcp-write', family: 'mcp-write', target: 'mcp__chrome devtools__click' }),
       entry({ ruleId: 'mcp-write', family: 'mcp-write', target: 'mcp__chrome-devtools__click*' }),
     ]);
-    const text = renderSuggestions(clusters, resolvable, { days: 30 });
+    const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
     const result = loadPolicyFromOverlayText(text);
 
     expect(text).not.toContain('mcp_write.allowed_tools');
@@ -537,7 +582,7 @@ describe('renderSuggestions', () => {
   });
 
   test('an empty-friction cluster set produces a TOML-safe "nothing to suggest" comment', () => {
-    const text = renderSuggestions([], resolvable, { days: 30 });
+    const text = renderSuggestions([], resolvable, { days: 30, governedGitSubs });
     expect(text).toContain('#');
     const result = loadPolicyFromOverlayText(text);
     expect(result.warnings).toEqual([]);
@@ -602,6 +647,7 @@ describe('current-policy audit view', () => {
   test('comments replay headers and the resolved-hit count in TOML suggestions', () => {
     const text = renderSuggestions([], resolvableRuleIds(BASELINE_POLICY), {
       days: 30,
+      governedGitSubs,
       headerLines: ['Replayed 1 of 1 entries against the current policy — verdicts only, nothing is executed.'],
       resolvedCount: 1,
     });
@@ -614,6 +660,7 @@ describe('current-policy audit view', () => {
   test('comments a zero resolved-hit count after replay', () => {
     const text = renderSuggestions([], resolvableRuleIds(BASELINE_POLICY), {
       days: 30,
+      governedGitSubs,
       headerLines: ['Replayed 1 of 1 entries against the current policy — verdicts only, nothing is executed.'],
       resolvedCount: 0,
     });

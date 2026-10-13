@@ -12,8 +12,8 @@
 // TOML: `checkout`'s pathspec detection and `restore`'s index-only form
 // (`--staged` plus one or more pathspecs) both need real structural parsing
 // (arbitrary positional counts, ref vs. pathspec shape) that none of the
-// three declarative forms — ask_flags, safe_first_arg, safe_grammar — can
-// express as data.
+// four declarative forms — ask_flags, safe_first_arg, safe_grammar,
+// safe_flags — can express as data.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
 // The Bash matcher operates on the literal command STRING. Anything that
@@ -43,6 +43,7 @@ import type {
   CommandGitPolicy,
   CommandPolicy,
   SafeFirstArgRule,
+  SafeFlagsRule,
   SafeGrammarRule,
   SafeGrammarToken,
 } from './policy/schema.ts';
@@ -92,7 +93,7 @@ export type WrapperOptionPolicy = {
 // Tokenizer grammar, not security policy — how far a wrapper's OWN options
 // extend before the wrapped command begins. Stays engine code: these are
 // parsing rules for the structural tokenizer below, not a table of
-// verdicts, and none of the three declarative git-conditional forms model
+// verdicts, and none of the four declarative git-conditional forms model
 // "how many tokens does this prefix consume".
 export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolicy>> = {
   rtk: { flags: new Set(), optionsWithArg: new Set() },
@@ -1195,7 +1196,8 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-type GitCommand = { sub: string; rest: string[]; forceConfirm?: true; };
+// `globals` holds the global-option tokens (and their values) written before the subcommand.
+type GitCommand = { sub: string; rest: string[]; globals?: string[]; forceConfirm?: true; };
 
 type RedirectionFilteredTokens = Readonly<{
   tokens: readonly ShellToken[];
@@ -1250,13 +1252,16 @@ export function extractGitSubcommandFromTokens(
   const head = filtered.tokens[i]!.value;
   if (head !== 'git' && !head.endsWith('/git')) return null;
   i++;
+  const globalsStart = i;
   while (i < filtered.tokens.length && filtered.tokens[i]!.value.startsWith('-')) {
     i += GIT_OPTS_WITH_ARG.has(filtered.tokens[i]!.value) ? 2 : 1;
   }
   if (i >= filtered.tokens.length) return null;
+  const globals = filtered.tokens.slice(globalsStart, i).map((token) => token.value);
   return {
     sub: filtered.tokens[i]!.value,
     rest: filtered.tokens.slice(i + 1).map((token) => token.value),
+    ...(globals.length > 0 ? { globals } : {}),
     ...(prefix.ambiguous || filtered.forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1481,7 +1486,7 @@ function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
   return pathspecs.length === 0 || pathspecs.some((t) => t.startsWith('-'));
 }
 
-// The interpreter for the three declarative git-conditional forms (see
+// The interpreter for the four declarative git-conditional forms (see
 // policy/schema.ts). `checkout` and `restore` fall through to the two
 // named engine functions above; every other subcommand not in
 // `safe_subcommands` and not covered by any declarative entry is the
@@ -1493,7 +1498,39 @@ function safeGrammarTokenMatches(token: SafeGrammarToken, value: string): boolea
   return token === '*' ? !value.startsWith('-') : token === value;
 }
 
-function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: CommandGitPolicy): boolean {
+// `safe_flags` is read lexically (ADR-0001): no git call, no filesystem
+// read. Token semantics: SafeFlagsRule in policy/schema.ts.
+function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boolean {
+  let positionals = 0;
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index]!;
+    if (!token.startsWith('-')) {
+      positionals++;
+      continue;
+    }
+    if (rule.flags.includes(token)) continue;
+    if (rule.value_flags.includes(token)) {
+      const value = rest[index + 1];
+      if (value === undefined || value.startsWith('-')) return true;
+      index++;
+      continue;
+    }
+    const equals = token.indexOf('=');
+    if (token.startsWith('--') && equals > 2 && equals < token.length - 1 && rule.value_flags.includes(token.slice(0, equals))) {
+      continue;
+    }
+    return true;
+  }
+  return positionals > rule.max_positionals;
+}
+
+// `-C` always consumes the next token, so global tokens that are only
+// `-C <dir>` pairs sit at every even index.
+function hasOnlyChdirGlobals(globals: readonly string[]): boolean {
+  return globals.every((token, index) => index % 2 === 1 || token === '-C');
+}
+
+function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: CommandGitPolicy): boolean {
   if (git.safe_subcommands.includes(sub)) return false;
 
   const askFlags = git.ask_flags.find((e: AskFlagsRule) => e.sub === sub);
@@ -1522,6 +1559,9 @@ function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: Co
     return !matches;
   }
 
+  const safeFlags = git.safe_flags.find((e: SafeFlagsRule) => e.sub === sub);
+  if (safeFlags) return !hasOnlyChdirGlobals(globals ?? []) || safeFlagsNeedConfirm(safeFlags, rest);
+
   if (sub === 'checkout') return checkGitCheckoutNeedsConfirm(rest);
   if (sub === 'restore') return checkGitRestoreNeedsConfirm(rest);
 
@@ -1532,7 +1572,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
-    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) {
+    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed, git)) {
       return {
         verdict: 'confirm',
         ruleId: 'git-protected',
@@ -1558,7 +1598,7 @@ function classifyGitAllowWith(cmd: string, git: CommandGitPolicy): Verdict | nul
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed || parsed.forceConfirm) continue;
-    if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) continue;
+    if (gitSubcommandNeedsConfirm(parsed, git)) continue;
     if (git.safe_subcommands.includes(parsed.sub)) continue;
     return {
       verdict: 'observe',

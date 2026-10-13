@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { checkBash as checkCommandBash, checkGit, GIT_BENIGN_PREFIXES, WRAPPER_OPTION_POLICIES } from '../src/command-rules.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
-import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/policy/schema.ts';
+import type { AskFlagsRule, SafeFirstArgRule, SafeFlagsRule, SafeGrammarRule } from '../src/policy/schema.ts';
 
 // ─────────────────────────────────────────────────────────────────────────
 // REPOINTED (ticket 06): every rule table this file locks used to be a TS
@@ -19,12 +19,13 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeGrammarRule } from '../src/pol
 //     `uniqueIndexOf`) — a TOML array has no "is this predicate function
 //     the live one" ambiguity a `test: (p) => …` closure had. It is
 //     digested exactly like the four regex tables below.
-//   • The git conditional chain (16 subcommands, formerly 15
-//     `if (sub === …)` blocks scraped out of command-rules.ts) is now DATA
-//     for 14 of them — ask_flags/safe_first_arg/safe_grammar, digested
-//     directly — plus the two named engine escapes (checkout, restore),
-//     whose behaviour is asserted the same way it always was (the
-//     GIT_CONDITIONAL_MATRIX below, unchanged).
+//   • The git conditional chain (formerly 15 `if (sub === …)` blocks
+//     scraped out of command-rules.ts, covering 16 subcommands; 15 today —
+//     ticket 13 removed pull/merge, ticket 61 added init) is now DATA for
+//     13 of them — ask_flags (4), safe_first_arg (7), safe_grammar (1),
+//     safe_flags (1), digested directly — plus the two named engine
+//     escapes (checkout, restore), whose behaviour is asserted the same
+//     way it always was (the GIT_CONDITIONAL_MATRIX below).
 // ─────────────────────────────────────────────────────────────────────────
 
 function ruleDigest(
@@ -457,17 +458,18 @@ describe('guards-digest: tamper lock — the git guard\'s two membership sets', 
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// The 14-subcommand conditional matrix — UNCHANGED from before ticket 06,
+// The 15-subcommand conditional matrix — UNCHANGED from before ticket 06,
 // other than ticket 13 removing `pull`/`merge` (16 → 14): both moved out
 // of the baseline entirely (their `--ff-only` safe form was a personal git
 // habit, not a hazard) and now ask UNCONDITIONALLY, with no reading-safe
 // form left to pair into this matrix's {reading, mutating} shape — see
 // tests/command-rules.test.ts's dedicated "always ask in the trunk
-// baseline" block instead. It is a pure BEHAVIOURAL lock (calls checkGit
-// with real commands), so it does not care whether the decision underneath
-// comes from a TS if-chain or from TOML data — it keeps testing the
-// OBSERVABLE property regardless of mechanism, which is exactly why it
-// survives the repointing untouched.
+// baseline" block instead — and ticket 61 adding `init` (14 → 15), the
+// first subcommand governed by `safe_flags`. It is a pure BEHAVIOURAL
+// lock (calls checkGit with real commands), so it does not care whether
+// the decision underneath comes from a TS if-chain or from TOML data — it
+// keeps testing the OBSERVABLE property regardless of mechanism, which is
+// exactly why it survives the repointing untouched.
 // ─────────────────────────────────────────────────────────────────────────
 
 interface GitConditionalCase {
@@ -495,9 +497,10 @@ const GIT_CONDITIONAL_MATRIX: readonly GitConditionalCase[] = [
   { sub: 'worktree', reading: 'git worktree list', mutating: 'git worktree remove w' },
   { sub: 'apply', reading: 'git apply --check p.diff', mutating: 'git apply p.diff' },
   { sub: 'restore', reading: 'git restore --staged f.ts', mutating: 'git restore f.ts' },
+  { sub: 'init', reading: 'git init -q', mutating: 'git init --bare' },
 ];
 
-describe('guards-digest: tamper lock — the 14 conditional git subcommands', () => {
+describe('guards-digest: tamper lock — the 15 conditional git subcommands', () => {
   for (const { sub, reading, mutating } of GIT_CONDITIONAL_MATRIX) {
     test(`git ${sub}: the reading form stays silent (${reading})`, () => {
       expect(checkGit(reading)).toBeNull();
@@ -534,17 +537,18 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 
 // ─────────────────────────────────────────────────────────────────────────
 // REPLACES the old "conditional chain, scraped from its source" lock: there
-// is no more TS if-chain to scrape for 12 of the 14 subcommands — they are
-// policy/command.toml data (ask_flags / safe_first_arg / safe_grammar),
-// digested directly, the same discipline as every other table in this file.
-// `checkout` and `restore` are the two that stay engine code (pathspec
-// detection, index-only form — beyond what any of the three declarative
-// forms can express as data); their behaviour is already covered by the
-// matrix above, so this section's own job is narrower: prove the
-// declarative tables plus those two names together account for EXACTLY
-// the 14 subcommands, with no gap and no double-coverage. (16 → 14,
-// ticket 13: `pull`/`merge` moved out of safe_grammar entirely, see that
-// section's own note.)
+// is no more TS if-chain to scrape for 13 of the 15 subcommands — they are
+// policy/command.toml data (ask_flags / safe_first_arg / safe_grammar /
+// safe_flags), digested directly, the same discipline as every other table
+// in this file. `checkout` and `restore` are the two that stay engine code
+// (pathspec detection, index-only form — beyond what any of the four
+// declarative forms can express as data); their behaviour is already
+// covered by the matrix above, so this section's own job is narrower:
+// prove the declarative tables plus those two names together account for
+// EXACTLY the 15 subcommands, with no gap and no double-coverage. (16 →
+// 14, ticket 13: `pull`/`merge` moved out of safe_grammar entirely, see
+// that section's own note; 14 → 15, ticket 61: `init` joined through the
+// new safe_flags table.)
 // ─────────────────────────────────────────────────────────────────────────
 
 function askFlagsDigest(rules: readonly AskFlagsRule[]): string[] {
@@ -561,7 +565,13 @@ function safeGrammarDigest(rules: readonly SafeGrammarRule[]): string[] {
   return rules.map((r, i) => `${i} ${r.sub} sequences=${JSON.stringify(r.sequences)}`);
 }
 
-// DERIVED by running the three projections above against
+function safeFlagsDigest(rules: readonly SafeFlagsRule[]): string[] {
+  return rules.map((r, i) =>
+    `${i} ${r.sub} flags=[${r.flags.join(',')}] value_flags=[${r.value_flags.join(',')}] max_positionals=${r.max_positionals}`
+  );
+}
+
+// DERIVED by running the four projections above against
 // policy/command.toml and printing the output.
 const EXPECTED_ASK_FLAGS_DIGEST: readonly string[] = [
   '0 branch flags=[-d,-D,--delete,-m,-M,--move,-f,--force] max_positionals=none',
@@ -588,7 +598,15 @@ const EXPECTED_SAFE_GRAMMAR_DIGEST: readonly string[] = [
   '0 apply sequences=[["--check"],["--check","*"]]',
 ];
 
-describe('guards-digest: tamper lock — the three declarative git-conditional forms', () => {
+// Ticket 61: `init` is the sole entry — the quiet and initial-branch
+// options, at most one directory. Anything else (--bare, --template,
+// --separate-git-dir, --shared, --object-format, --ref-format, grouped or
+// glued short options, `--`) keeps `git-protected`.
+const EXPECTED_SAFE_FLAGS_DIGEST: readonly string[] = [
+  '0 init flags=[-q,--quiet] value_flags=[-b,--initial-branch] max_positionals=1',
+];
+
+describe('guards-digest: tamper lock — the four declarative git-conditional forms', () => {
   const git = BASELINE.rules.command.git;
 
   test('ask_flags matches the frozen ordered digest (4 entries)', () => {
@@ -603,21 +621,26 @@ describe('guards-digest: tamper lock — the three declarative git-conditional f
     expect(safeGrammarDigest(git.safe_grammar)).toEqual([...EXPECTED_SAFE_GRAMMAR_DIGEST]);
   });
 
+  test('safe_flags matches the frozen ordered digest (1 entry)', () => {
+    expect(safeFlagsDigest(git.safe_flags)).toEqual([...EXPECTED_SAFE_FLAGS_DIGEST]);
+  });
+
   // The equation that makes the split non-circular: taking the expected
   // coverage from the matrix itself would let a subcommand silently fall
   // out of BOTH the declarative tables and the engine escapes without
   // reddening anything. Comparing SETS (not counts) names which subcommand
   // moved, not just that the total changed.
-  test('the declarative tables plus checkout/restore cover exactly the 14-subcommand matrix', () => {
+  test('the declarative tables plus checkout/restore cover exactly the 15-subcommand matrix', () => {
     const declared = [
       ...git.ask_flags.map((r) => r.sub),
       ...git.safe_first_arg.map((r) => r.sub),
       ...git.safe_grammar.map((r) => r.sub),
+      ...git.safe_flags.map((r) => r.sub),
       'checkout',
       'restore',
     ];
     expect(new Set(declared)).toEqual(new Set(GIT_CONDITIONAL_MATRIX.map((c) => c.sub)));
-    // No duplicates across the three tables + the two engine names: a
+    // No duplicates across the four tables + the two engine names: a
     // subcommand claimed twice would pass the Set comparison above while
     // still being a real drift (two competing definitions of its ask
     // behaviour), so length is checked apart from set equality.

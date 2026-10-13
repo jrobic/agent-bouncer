@@ -338,6 +338,25 @@ describe('loadPolicyFromOverlayFiles: cross-file [[override]]/[[relax]] conflict
     expect(result.warnings.join(' ')).toContain('policy.d/10-a.toml');
     expect(result.warnings.join(' ')).toContain('policy.d/20-b.toml');
   });
+
+  test('the same `sub` in two safe_flags files is rejected, naming both files and the table', () => {
+    const files = [
+      file(
+        'policy.d/10-a.toml',
+        '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+      ),
+      file(
+        'policy.d/20-b.toml',
+        '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet", "-q"]\nvalue_flags = []\nmax_positionals = 0\n',
+      ),
+    ];
+    const result = loadPolicyFromOverlayFiles(files);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('command.git.safe_flags');
+    expect(result.warnings.join(' ')).toContain('"gc"');
+    expect(result.warnings.join(' ')).toContain('policy.d/10-a.toml');
+    expect(result.warnings.join(' ')).toContain('policy.d/20-b.toml');
+  });
 });
 
 describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket 13, carried from 12)', () => {

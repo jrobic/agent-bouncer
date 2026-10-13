@@ -141,9 +141,10 @@ lint: FAILED (common: /path/to/.agents/bouncer, profile: /path/to/.claude/bounce
 Each is governed by its own named TOML table instead:
 `command.rm_rf.dangerous_targets` (additive only — new entries widen what
 counts as dangerous, never narrow it), `command.privilege_escalation.commands`
-(same), and the three declarative git-conditional forms
-(`command.git.ask_flags` / `safe_first_arg` / `safe_grammar`, plus
-`safe_subcommands` via `[[relax]]` above) for `git-protected`. See
+(same), and the four declarative git-conditional forms
+(`command.git.ask_flags` / `safe_first_arg` / `safe_grammar` /
+`safe_flags`, plus `safe_subcommands` via `[[relax]]` above) for
+`git-protected`. See
 `docs/reference/policy.md` for each table's shape.
 
 ## The self-protection loop: overriding `bouncer-policy`
