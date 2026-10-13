@@ -25,7 +25,7 @@
 // bytes a real installed/source path produced.
 
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../src/adapter/run.ts';
 import { renderShim } from '../src/adapter/shim.ts';
@@ -173,8 +173,9 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
     settingsFor: () => undefined,
     // `wiring:binary` validates an actual executable, never a hook-file
     // string. A fake installed path would make the healthy case fail a
-    // check unrelated to SessionStart rendering, so `process.execPath`
-    // provides the real executable path. The healthy stdout is `null`
+    // check unrelated to SessionStart rendering, so the shim bakes a
+    // symlink to `process.execPath` (a Homebrew Bun's own path is a Cellar
+    // path, which `wiring:binary` fails). The healthy stdout is `null`
     // regardless of which executable path was baked into the shim; that
     // path is therefore outside the fixture byte contract.
     // Keep this executable-path rationale synchronized with
@@ -182,7 +183,10 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
     installArtifact: (caseId, configDir) => {
       if (caseId !== 'sessionstart-healthy-silent') return;
       mkdirSync(join(configDir, 'extensions'), { recursive: true });
-      writeFileSync(join(configDir, 'extensions', 'bouncer.ts'), renderShim('pi-agent', process.execPath)!, 'utf8');
+      const stableBin = join(configDir, 'bin', 'bouncer');
+      mkdirSync(join(configDir, 'bin'), { recursive: true });
+      symlinkSync(process.execPath, stableBin);
+      writeFileSync(join(configDir, 'extensions', 'bouncer.ts'), renderShim('pi-agent', stableBin)!, 'utf8');
     },
     requiredCaseIds: [
       'rm-rf-root-deny',

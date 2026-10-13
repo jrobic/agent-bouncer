@@ -1,7 +1,8 @@
 bouncer is installed at ${PREFIX}/bin/bouncer. Wire that path,
 never the Cellar path, into your harness (`bouncer doctor` checks it).
-pi/omp users: the printed extension bakes the absolute binary path; under
-Homebrew that path changes on upgrade. Export
-BOUNCER_BIN=${PREFIX}/bin/bouncer in your shell, or reprint the
-extension after each upgrade (`bouncer harness shim pi-agent`).
+pi/omp users: print the extension through that path, never the Cellar path
+(`brew upgrade` removes it and every tool call then fails closed):
+`${PREFIX}/bin/bouncer harness shim pi-agent`, or
+`bouncer harness shim pi-agent --bin ${PREFIX}/bin/bouncer`.
+`bouncer doctor --harness pi-agent` fails a shim that bakes a Cellar path.
 The bouncer-policy skill is printed by `bouncer skill policy`; reprint it after each upgrade.

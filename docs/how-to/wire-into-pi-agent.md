@@ -20,7 +20,9 @@ verdict vocabulary.
 ## Homebrew
 
 Installed with Homebrew? Use the stable `$(brew --prefix)/bin/bouncer` path
-below; see [Install](install.md). Print the extension with:
+below, never the versioned Cellar path (`brew upgrade` removes it, and
+`doctor` fails a shim that bakes one); see [Install](install.md). Print the
+extension with:
 
 ```sh
 bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
@@ -38,11 +40,13 @@ bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
      ```
 
      This produces `dist/bouncer`. `bouncer harness shim pi-agent` bakes
-     **this process's own absolute path** (`process.execPath`) into the
-     printed shim's `BOUNCER` constant — always run it through the compiled
-     binary you intend to keep installed, never a `bun run src/cli.ts`
-     source invocation (that would bake in `bun`'s own path instead of a
-     useful one).
+     **the path bouncer was invoked through** into the printed shim's
+     `BOUNCER` constant (made absolute, never resolved: a symlink to
+     `dist/bouncer` keeps its own path; the binary's own resolved path,
+     `process.execPath`, when the invoked path cannot be told) — always run
+     it through the compiled binary you intend to keep installed, never a
+     `bun run src/cli.ts` source invocation (that would bake in `bun`'s own
+     path instead of a useful one).
 
 2. Decide the target `$PI_CODING_AGENT_DIR` — `~/.omp/agent` or
    `~/.pi/agent` for your primary account (both share one convention,
@@ -80,13 +84,18 @@ bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer"
    prints today, compared with the SAME `BOUNCER` path the installed
    copy already carries — a doctor run from a different checkout never
    claims drift just because its own binary lives somewhere else),
-   `wiring:binary` (that baked `BOUNCER` path is executable), `policy`,
+   `wiring:binary` (that baked `BOUNCER` path is an executable that is not a
+   versioned Homebrew Cellar path), `policy`,
    and `log`, and exits 0. `[fail] wiring:shim` names the exact reprint
    command (`bouncer harness shim pi-agent`) when the installed file has
    drifted from a prior version or was hand-edited; `[fail] wiring:binary`
    means the shim's own baked bouncer path no longer resolves to an
    executable (a moved or removed `dist/bouncer` after `wiring:shim`
-   already passed) — every tool call fails closed until either is fixed.
+   already passed) — every tool call fails closed until either is fixed —
+   or is a versioned Homebrew Cellar path
+   (`<prefix>/Cellar/bouncer/<version>/bin/bouncer`) that `brew upgrade`
+   will remove: reprint with `--bin <prefix>/bin/bouncer`, the command the
+   failure line names.
 
    If omp runs under a profile on this machine, `doctor` also prints one
    `wiring:shim (profile <name>)` line per profile — see
