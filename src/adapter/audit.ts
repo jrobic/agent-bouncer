@@ -343,10 +343,13 @@ export interface AuditReportOptions {
   readonly headerLines?: readonly string[];
   readonly deltaClusters?: readonly PolicyDeltaCluster[];
   readonly resolvedCount?: number;
+}
+
+export interface SuggestionOptions extends AuditReportOptions {
   // Subcommand -> form deciding it (gitGoverningForms). A git-protected
   // cluster for one of them is never offered a blanket safe_subcommands
   // relax: that would cancel the conditional rule, not widen it.
-  readonly governedGitSubs?: ReadonlyMap<string, GitGoverningForm>;
+  readonly governedGitSubs: ReadonlyMap<string, GitGoverningForm>;
 }
 
 const FRICTION_VERDICTS: Readonly<Record<VerdictKind, boolean>> = {
@@ -559,7 +562,7 @@ function gitSafeSubcommandReason(cluster: Cluster, value: string, days: number):
 export function renderSuggestions(
   clusters: readonly Cluster[],
   resolvableIds: ReadonlySet<string>,
-  options: AuditReportOptions,
+  options: SuggestionOptions,
 ): string {
   const lines: string[] = [
     `# bouncer audit --suggest — candidate policy overlay snippets, last ${options.days} day(s)`,
@@ -582,7 +585,7 @@ export function renderSuggestions(
   const overrideSeen = new Set<string>();
 
   for (const cluster of friction) {
-    const action = suggestionFor(cluster, resolvableIds, options.governedGitSubs ?? new Map());
+    const action = suggestionFor(cluster, resolvableIds, options.governedGitSubs);
 
     if (action.kind === 'governed') {
       const asLogged = cluster.asLogged ? ' (as logged)' : '';
