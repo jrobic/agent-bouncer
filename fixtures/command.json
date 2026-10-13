@@ -2186,6 +2186,40 @@
       ]
     },
     {
+      "id": "git-switch-grouped-short-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -fc=y HEAD~1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-force-create-short-equals-value-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -C=x main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-switch-create-short-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -c=x"
+      },
+      "expected": []
+    },
+    {
       "id": "git-branch-grouped-short-verbose-safe",
       "toolName": "Bash",
       "toolInput": {

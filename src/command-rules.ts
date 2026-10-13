@@ -1524,6 +1524,9 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
   return positionals > rule.max_positionals;
 }
 
+// A number as a short group (`-12`, `-12=x`): git's `-<n>` shorthand, not letters.
+const NUMERIC_SHORT_GROUP = /^-\d+(?:=|$)/;
+
 // Whether `token`, an argument after the subcommand, is one of the
 // `ask_flags` `flags` as git itself would read it (gitcli(7)) — the exact
 // spelling is only one of four ways to write the same option:
@@ -1533,8 +1536,8 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
 //       option, however short, since git resolves an unambiguous one and
 //       an ambiguous one is only an error. (b) and (c) compose: git takes
 //       `--force-c=x` as `--force-create=x`;
-//   (d) a group of short options (`-qD`, no `=`, not a number) holding a
-//       listed short option as ANY of its letters.
+//   (d) a group of short options (`-qD`, not a number) holding a listed
+//       short option as ANY of its letters before a `=` (`-fc=y`, `-C=x`).
 // The list stays a list of FORBIDDEN options. Known, accepted limit of (d):
 // a value glued to an option (`-cfix`) reads as more letters, so one of
 // its letters can coincide with a listed option — a confirmation too many,
@@ -1552,8 +1555,14 @@ function askFlagMatches(flags: readonly string[], token: string): boolean {
     return flags.some((flag) => flag.length > name.length && flag.startsWith(name));
   }
 
-  if (token.includes('=') || /^-\d+$/.test(token)) return false;
-  return flags.some((flag) => flag.length === 2 && flag[0] === '-' && flag[1] !== '-' && token.includes(flag[1]!, 1));
+  if (NUMERIC_SHORT_GROUP.test(token)) return false;
+  const equals = token.indexOf('=');
+  const end = equals === -1 ? token.length : equals;
+  return flags.some((flag) => {
+    if (flag.length !== 2 || flag[0] !== '-' || flag[1] === '-') return false;
+    const at = token.indexOf(flag[1]!, 1);
+    return at !== -1 && at < end;
+  });
 }
 
 // `-C` always consumes the next token, so global tokens that are only
