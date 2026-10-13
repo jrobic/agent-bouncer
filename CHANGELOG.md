@@ -83,13 +83,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   listed); everything else asks, `PATH`, `HOME`, `GIT_SSH_COMMAND` and
   `GIT_CONFIG_GLOBAL` included. A `--config-env` setting is judged by its key
   only, as its value is read from the environment when git runs. `--config-env`
-  joins the global options that take a value, so `git --config-env
-  core.pager=X diff` is no
-  longer read with `core.pager=X` as the subcommand. A subcommand that asks on
-  its own keeps `git-protected` (`git -c core.pager=x push`, `git -c user.name=x
-  init -q`): the new rule only turns an allow into a confirm. The three lists are
-  widened through `[[relax]]` only, reason mandatory, shown by `bouncer doctor`
-  and `bouncer rules list`. Known limits: an `export` in the same line or an
+  joins the global options that take a value, so `git --config-env core.pager=X
+  diff` is no longer read with `core.pager=X` as the subcommand. A subcommand
+  that asks on its own keeps `git-protected` (`git -c core.pager=x push`,
+  `git -c user.name=x init -q`): the new rule only turns an allow into a
+  confirm. The three lists are widened through `[[relax]]` only, reason
+  mandatory, shown by `bouncer doctor` and `bouncer rules list`. Known limits:
+  an `export` in the same line or an
   earlier call is not read, `GIT_INDEX_FILE` is allowed at any value although
   git writes its index where it points (a new file at most with the
   subcommands the baseline allows), and a config file written into a
