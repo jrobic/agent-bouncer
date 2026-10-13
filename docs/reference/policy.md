@@ -489,15 +489,17 @@ four ways to hit a flag, and each of them asks:
 |---|---|---|
 | the listed spelling | identical | `git branch -D foo` |
 | `--name=value` | `--name` is listed (the value is ignored) | `git switch --force-create=x main`, `git branch --force=x` |
-| an abbreviation | a `--x` without `=` that is a strict prefix of a listed long option, however short | `git branch --delet foo`, `git tag --del v1`, `git switch --discard` |
-| a group of short options | a single-dash token, without `=`, that is not a number, and in which any letter, at any position, is a listed short option | `git branch -qD foo`, `git branch -dv foo`, `git tag -fd v1` |
+| an abbreviation | a `--x` that is a strict prefix of a listed long option, however short | `git branch --delet foo`, `git tag --del v1`, `git switch --discard` |
+| a group of short options | a single-dash token that is not a number, in which any letter before a `=`, at any position, is a listed short option | `git branch -qD foo`, `git branch -dv foo`, `git tag -fd v1`, `git switch -C=x main` |
 
 The `=value` and abbreviation forms compose: `git switch --force-c=x main`
-asks, as git itself reads it as `--force-create=x`. A listed spelling asks
-even where git refuses it (`git branch --force=x`, an ambiguous
-abbreviation): the list is a confirmation net, not a model of git's
-errors. `--` (end of options) and a bare `-` are matched only when listed
-themselves. An entry that is neither `-x` nor `--name` (a bare word,
+asks, as git itself reads it as `--force-create=x`. In a group of short
+options, a `=` starts the value: only the letters before it are read, so
+`git switch -fc=y HEAD~1` asks (`-f`) and `git switch -c=x` does not. A
+listed spelling asks even where git refuses it (`git branch --force=x`, an
+ambiguous abbreviation): the list is a confirmation net, not a model of
+git's errors. `--` (end of options) and a bare `-` are matched only when
+listed themselves. An entry that is neither `-x` nor `--name` (a bare word,
 `-ff`) matches its exact spelling only. `max_positionals` counts the
 arguments that are not options and does not change.
 
@@ -505,12 +507,18 @@ The rule is the same for every `ask_flags` entry, the baseline's and an
 overlay's, so an existing overlay entry becomes stricter without being
 rewritten.
 
-**Known limit.** A value glued to a short option reads as more letters
-(`git switch -cfix`, `git tag -mdone`), so a letter of the value can
-coincide with a listed option and the command asks once too often. The
-error is on the safe side, no `ask_flags` field names the options that
-take a value, and the separated spelling (`git switch -c fix`) does not
-ask. `fixtures/command.json` pins the case (`known-limit-git-switch-glued-value-letter`).
+**Known limit.** The options that take a value are unknown to `ask_flags`
+(no field names them), so a value can be read as options. A value glued to
+a short option reads as more letters (`git switch -cfix`, `git tag -mdone`),
+and so does a value in the next token that starts with `-`
+(`git branch --sort -committerdate`): a letter of the value can coincide
+with a listed option and the command asks once too often. The error is on
+the safe side. A separated value that does not start with `-`
+(`git switch -c fix`) does not ask; for one that does, write
+`--opt=value` (`git branch --sort=-committerdate` does not ask).
+`fixtures/command.json` pins both cases
+(`known-limit-git-switch-glued-value-letter`,
+`known-limit-git-branch-separated-dash-value`).
 
 **`safe_first_arg`** — safety hinges on the first non-flag argument.
 Baseline's own `stash` row; same substitution note as above:
