@@ -154,6 +154,11 @@ the codecs a `transport`/`wiring` string can name.
    reason = "npm publish should go through CI, not an agent session"
    ```
 
+   A regex that is hard to read with every backslash doubled can be a TOML
+   literal string instead — single quotes, no escape processing:
+   `regex = '\bnpm\s+publish\b'`. It cannot hold an apostrophe: write `\x27`
+   for one. The baseline's longer environment rows are written that way.
+
    An addition to any of the six regex tables only ever adds a new
    BLOCK/confirm signature — it can't relax an existing one. It's active
    as soon as it validates, no restart needed (the policy is loaded fresh

@@ -11,7 +11,8 @@
 // to baseline" the way a bad overlay can.
 
 import { describe, expect, test } from 'bun:test';
-import { assertExactlyOneFamily, assertUniqueRuleIds, BASELINE } from '../src/policy/baseline.ts';
+import { assertExactlyOneFamily, assertNoUnfilledPlaceholders, assertUniqueRuleIds, BASELINE } from '../src/policy/baseline.ts';
+import { lintRegexSource } from '../src/policy/lint.ts';
 import type { RulesPolicy } from '../src/policy/schema.ts';
 
 describe('assertExactlyOneFamily', () => {
@@ -69,5 +70,56 @@ describe('the real baseline module (six actual TOML files) satisfies the asserti
     expect(BASELINE.rules.write_secret.length).toBeGreaterThan(0);
     expect(BASELINE.rules.prompt.length).toBeGreaterThan(0);
     expect(BASELINE.rules.protected_write.length).toBeGreaterThan(0);
+  });
+});
+
+// Shared regex fragments (src/policy/fragments.ts): a baseline row may spell
+// `{{name}}`, filled in once at load. A placeholder that survives the fill is
+// a typo that would silently disable its rule, so the baseline module refuses
+// to load; and an overlay row — which is never filled — is rejected by lint.
+describe('assertNoUnfilledPlaceholders', () => {
+  const withSecretBash = (regex: string, except?: string): RulesPolicy => ({
+    ...BASELINE.rules,
+    secret: { ...BASELINE.rules.secret, bash: [{ id: 'probe', regex, reason: 'probe', ...(except === undefined ? {} : { except }) }] },
+  });
+
+  test('the effective baseline carries no {{…}} in any regex or except of any table', () => {
+    expect(() => assertNoUnfilledPlaceholders(BASELINE.rules)).not.toThrow();
+  });
+
+  test('a regex that still spells a {{name}} throws, naming the rule', () => {
+    expect(() => assertNoUnfilledPlaceholders(withSecretBash('a{{not-a-fragment}}b'))).toThrow(/probe.*placeholder/);
+  });
+
+  test('an except that still spells a {{name}} throws too', () => {
+    expect(() => assertNoUnfilledPlaceholders(withSecretBash('a', '{{protected_name}}'))).toThrow(/probe.*placeholder/);
+  });
+
+  test('a placeholder in another table is caught as well', () => {
+    const rules = {
+      ...BASELINE.rules,
+      command: {
+        ...BASELINE.rules.command,
+        bash: [{ id: 'probe-command', regex: 'x{{oops}}', reason: 'probe' }],
+      },
+    };
+    expect(() => assertNoUnfilledPlaceholders(rules)).toThrow(/probe-command.*placeholder/);
+  });
+});
+
+describe('lintRegexSource: placeholders belong to the baseline', () => {
+  test('{{protected-name}} in an overlay regex is rejected with a message that says why', () => {
+    const issues = lintRegexSource('\\$\\{?{{protected-name}}\\b');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.message).toContain('placeholder');
+    expect(issues[0]?.message).toContain('baseline');
+  });
+
+  test('any {{…}} is refused, known fragment or not', () => {
+    expect(lintRegexSource('a{{whatever}}b')).toHaveLength(1);
+  });
+
+  test('escaped braces are literal text, not a placeholder', () => {
+    expect(lintRegexSource('\\{\\{.Config\\}\\}')).toEqual([]);
   });
 });

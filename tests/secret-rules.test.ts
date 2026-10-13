@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { BASELINE } from '../src/policy/baseline.ts';
+import { isProtectedName } from '../src/protected-names.ts';
 import { checkPath, checkSecretBash, checkUrl, createSecretChecker } from '../src/secret-rules.ts';
 
 // One test per PATH_RULES id (nominal) + the two ENV_WHITELIST counter-examples
@@ -291,6 +292,59 @@ describe('secret-rules: PATH_RULES', () => {
     expect(checkSecretBash('gh auth token')).toMatchObject({ verdict: 'confirm', ruleId: 'credential-printer' });
   });
 
+  // Ticket 57 completed the row (same id, `confirm`): the short flag of
+  // `auth status`, `glab config get token`, `git credential fill`, a docker
+  // credential helper, an npm auth token, the AWS CLI's secret reads. The
+  // original forms are listed again so a regression on either side shows.
+  test.each([
+    'gh auth token',
+    'glab auth status --show-token',
+    'op read op://v/i/f',
+    'op item get x --reveal',
+    'gcloud auth print-access-token',
+    'aws sts get-session-token',
+    'vault kv get secret/x',
+    'doppler secrets download',
+    'glab auth status -t',
+    'gh auth status -t',
+    'gh auth status --hostname github.com --show-token',
+    'glab config get token --host gitlab.example.com',
+    'git credential fill',
+    'printf \'protocol=https\\nhost=example.com\\n\' | git credential fill',
+    'docker-credential-osxkeychain get',
+    'echo https://index.docker.io/v1/ | docker-credential-desktop get',
+    'npm config get //registry.npmjs.org/:_authToken',
+    'pnpm config get //registry.npmjs.org/:_authToken',
+    'npm config get _auth',
+    'aws configure get aws_secret_access_key',
+    'aws configure get aws_session_token --profile dev',
+    'aws configure export-credentials --profile dev',
+  ])('credential-printer: %s is confirmed', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'confirm', ruleId: 'credential-printer' });
+  });
+
+  test.each([
+    'gh auth status',
+    'gh auth login',
+    'glab auth status',
+    'glab auth status --hostname gitlab.example.com',
+    'glab auth status -h gitlab.example.com',
+    'glab config get host',
+    'glab config set token x',
+    'git credential approve',
+    'docker-credential-osxkeychain list',
+    'docker login',
+    'npm config get registry',
+    'npm config set registry https://registry.example',
+    'npm config get //registry.npmjs.org/:_foo',
+    'aws configure get region',
+    'aws configure get aws_access_key_id',
+    'aws configure list',
+    'aws configure set region eu-west-1',
+  ])('credential-printer: benign %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
   test('ruleId secret-dir: secrets/ directory is blocked', () => {
     expect(checkPath('/proj/secrets/db.yaml')?.ruleId).toBe('secret-dir');
   });
@@ -409,6 +463,479 @@ describe('secret-rules: sops and age decryption', () => {
     'age --version',
   ])('benign: %s is allowed', (command) => {
     expect(checkSecretBash(command)).toBeNull();
+  });
+});
+
+// Ticket 57 — the environment rows. The agent's own environment holds what
+// its launcher exported; these rows refuse the commands that print or
+// reference it. A net, not a barrier (docs/reference/policy.md).
+describe('secret-rules: environment dumps (ticket 57)', () => {
+  test('ruleId env-dump: env with nothing to run is blocked', () => {
+    expect(checkSecretBash('env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test.each([
+    'env | sort',
+    'env -i',
+    'env -u HOME',
+    'env -0',
+    'env --',
+    'env FOO=1',
+    'env FOO="a b"',
+    'env FOO=\'a b\'',
+    'FOO=1 env',
+    'env 2>&1 | head',
+    'env; echo done',
+    'cd app && env',
+    'KEYS=$(env | cut -d= -f1)',
+    'bash -c env',
+    'bash -c \'env | sort\'',
+    'sh -c \'env\'',
+    'sh -c "printenv"',
+    '/usr/bin/env',
+    'if env | grep -q TOKEN; then echo yes; fi',
+    'diff <(env) <(env -i)',
+    'time env',
+    'rtk env',
+    'exec env',
+    'echo start\nenv',
+    'printenv',
+    'printenv -0',
+    'printenv | sort',
+    'export',
+    'export -p | sort',
+    'declare -p',
+    'declare -px',
+    'declare -x',
+    'typeset -x',
+    'declare',
+    'typeset',
+    'set',
+    'set | grep TOKEN',
+    'set; echo done',
+    'compgen -e',
+    'compgen -e | grep TOKEN',
+    'compgen -A export',
+    'echo ${!AWS_@}',
+    'echo ${!AWS_*}',
+  ])('%s is blocked', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  // `env` that runs a command, `set` as an option or a word, an assignment,
+  // a word that merely contains `env`, a search pattern that spells it.
+  test.each([
+    'env FOO=1 make test',
+    'env -i FOO=1 make',
+    'env -u HOME make',
+    'env -- make test',
+    'env FOO="a b" make',
+    '/usr/bin/env bash',
+    '#!/usr/bin/env python3',
+    'which env',
+    'echo env',
+    'pnpm env use 20',
+    'conda env list',
+    'env = ["TOY_HOME"]',
+    'pyenv versions',
+    'env -S \'FOO=1 make\'',
+    'env -i HOME=$T PATH=/usr/bin:/bin bun run x',
+    'cd /tmp && env DIR=\'/var/x y\' omp',
+    'printenv HOME',
+    'printenv HOME PATH',
+    'printenv MY_TOKEN_FILE',
+    'export PATH="$PATH:/opt/bin"',
+    'export -n FOO',
+    'declare -x FOO=bar',
+    'declare -a arr=(1 2)',
+    'declare -r X=1',
+    'declare -f',
+    'set -euo pipefail',
+    'set -x',
+    'set -o pipefail',
+    'set --',
+    'git remote set-url origin https://example.com/repo.git',
+    'npm config set registry https://registry.example',
+    'gh variable set FOO --body x',
+    'claude config set theme dark',
+    'compgen -c',
+    'echo "${!arr[@]}"',
+    'rg "env|printenv" src',
+    'grep -rn "a|env|b" .',
+    'ENV FOO=bar',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId env-dump: a fetched URL ending in an env word is not a command', () => {
+    expect(checkUrl('https://example.com/search?q=release&env')).toBeNull();
+    expect(checkSecretBash('curl -s "https://example.com/search?q=release&env"')).toBeNull();
+  });
+
+  test('ruleId env-dump-ps: BSD e and macOS -E print a process environment', () => {
+    expect(checkSecretBash('ps eww -p $$')).toMatchObject({ verdict: 'block', ruleId: 'env-dump-ps' });
+  });
+
+  test.each([
+    'ps e',
+    'ps auxe',
+    'ps axeww',
+    'ps -E',
+    'ps -E -o command= -p 4242 | tr " " "\\n"',
+    'ps -p 4242 -E',
+    'ps ax -E',
+  ])('%s is blocked as a process environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-ps' });
+  });
+
+  // `-ef`, `-e` (every process, `-A` on macOS) and `aux` print no
+  // environment; a `grep -E` after the pipe is grep's, not ps's.
+  test.each([
+    'ps -ef',
+    'ps -e',
+    'ps aux',
+    'ps -ax -o pid=,command=',
+    'ps aux | grep -E "node|bun"',
+    'ps -ef | grep -E java',
+    'ps -p 4242 -o comm=',
+    'ps -U someuser',
+    'ps aux --sort=-pcpu | head',
+    'docker ps -a',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId env-dump-launchctl: launchctl getenv reads the launchd environment', () => {
+    expect(checkSecretBash('launchctl getenv PATH')).toMatchObject({ verdict: 'block', ruleId: 'env-dump-launchctl' });
+    expect(checkSecretBash('launchctl list')).toBeNull();
+    expect(checkSecretBash('launchctl print gui/501')).toBeNull();
+  });
+
+  test('ruleId env-dump-jq: the env builtin and $ENV are blocked', () => {
+    expect(checkSecretBash('jq -n env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump-jq' });
+  });
+
+  test.each([
+    'jq -n \'env | keys\'',
+    'jq -n \'$ENV\'',
+    'jq -n "\\$ENV | to_entries"',
+    'jq -nr \'env|to_entries[]\'',
+    'jq -n --arg x 1 env',
+    'gojq -n env',
+  ])('%s is blocked as the jq environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-jq' });
+  });
+
+  // `.env` is a field accessor (ticket 28's guard), `{env: …}` an object key,
+  // `env.NAME` one variable (a non-protected one is allowed), and a `| grep
+  // env` after the program is not jq.
+  test.each([
+    'jq -n \'env.PREFIX + "x"\'',
+    'jq \'.scripts.env\' package.json',
+    'jq \'.env // {}\' settings.json',
+    'jq \'{cleanupPeriodDays, env: (.env // {})}\' x.json',
+    'jq \'{name, env}\' package.json',
+    'jq -n \'$ENV.PATH\'',
+    'jq -r .name package.json | grep env',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId env-dump-docker: docker exec … env and docker compose config are blocked', () => {
+    expect(checkSecretBash('docker exec app env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump-docker' });
+  });
+
+  test.each([
+    'docker exec -it app printenv',
+    'docker compose exec web env | sort',
+    'docker-compose exec web env',
+    'docker compose config',
+    'docker compose -f compose.yaml config',
+    'docker-compose -p proj --profile dev config',
+    'docker compose config --no-interpolate',
+    'docker compose config web',
+    'docker compose config > resolved.yml',
+    'docker compose config -q; docker compose config',
+  ])('%s is blocked as a container environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-docker' });
+  });
+
+  test.each([
+    'docker exec app env FOO=1 make test',
+    'docker exec app ls -la',
+    'docker compose up -d',
+    'docker compose exec lab herdr config check',
+    'docker compose --project-name p --file f.yaml exec --tty=false lab herdr config check',
+    'docker config ls',
+    'docker compose config --quiet',
+    'docker compose config -q',
+    'docker compose -f a.yml -f b.yml config --services',
+    'docker compose config --volumes',
+    'docker compose config --profiles',
+    'docker compose config --images',
+    'docker compose config --hash=web',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId env-dump-docker-inspect: docker inspect is confirmed, not blocked', () => {
+    expect(checkSecretBash('docker inspect app-db')).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-docker-inspect' });
+    expect(checkSecretBash('docker inspect --format \'{{.State.Status}}\' app-db')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'env-dump-docker-inspect',
+    });
+    expect(checkSecretBash('docker container inspect app-db')).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-docker-inspect' });
+    expect(checkSecretBash('docker network inspect bridge')).toBeNull();
+    expect(checkSecretBash('docker image inspect alpine')).toBeNull();
+  });
+
+  test('a block row beats a confirm row in the same command (first match wins, block rows come first)', () => {
+    expect(checkSecretBash('docker inspect app-db && env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+    expect(checkSecretBash('gh auth token; env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+    expect(checkSecretBash('curl -H "x: $API_TOKEN" u && echo $DB_PASSWORD')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'env-ref-display',
+    });
+  });
+
+  test('ruleId proc-environ: /proc/<pid>/environ is a secret path, for Read and for Bash', () => {
+    expect(checkPath('/proc/self/environ')).toMatchObject({ verdict: 'block', ruleId: 'proc-environ' });
+    expect(checkPath('/proc/thread-self/environ')?.ruleId).toBe('proc-environ');
+    expect(checkPath('/proc/4242/environ')?.ruleId).toBe('proc-environ');
+    expect(checkPath('/proc/4242/task/4242/environ')?.ruleId).toBe('proc-environ');
+    expect(checkPath('proc/self/environ')?.ruleId).toBe('proc-environ');
+    expect(checkSecretBash('cat /proc/self/environ')).toMatchObject({ verdict: 'block', ruleId: 'bash-proc-environ' });
+    expect(checkSecretBash('tr \'\\0\' \'\\n\' < /proc/4242/environ')?.ruleId).toBe('bash-proc-environ');
+  });
+
+  test('ruleId proc-environ: the rest of /proc stays readable', () => {
+    expect(checkPath('/proc/self/status')).toBeNull();
+    expect(checkPath('/proc/cpuinfo')).toBeNull();
+    expect(checkPath('/home/user/notes/proc/self/environ.md')).toBeNull();
+    expect(checkSecretBash('cat /proc/self/status')).toBeNull();
+  });
+});
+
+describe('secret-rules: references to a protected variable (ticket 57)', () => {
+  test('ruleId env-ref-display: a protected variable fed to echo is blocked', () => {
+    expect(checkSecretBash('echo $ATLASSIAN_TOKEN')).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+  });
+
+  test.each([
+    'echo "$API_KEY"',
+    'echo ${GITHUB_TOKEN:-none}',
+    'printf %s "${SONARQUBE_TOKEN}"',
+    'echo "$(printenv DB_PASSWORD)"',
+    'printenv ATLASSIAN_TOKEN',
+    'printenv HOME ATLASSIAN_TOKEN',
+    'printenv "GITHUB_TOKEN"',
+    'docker exec app printenv DB_PASSWORD',
+    'declare -p ATLASSIAN_TOKEN',
+    'typeset -px AWS_SECRET_ACCESS_KEY',
+    'jq -n env.ATLASSIAN_TOKEN',
+    'jq -n \'.a + env.GITHUB_TOKEN\'',
+    'jq -n \'$ENV.GITHUB_TOKEN\'',
+    'node -e "console.log(process.env.ATLASSIAN_TOKEN)"',
+    'node -e "console.log(process.env[\'API_KEY\'])"',
+    'node -e "console.error(process.env?.NPM_TOKEN)"',
+    'node -p "process.env.GITHUB_TOKEN"',
+    'node -pe "process.env.GITHUB_TOKEN"',
+    'bun -e "console.log(Bun.env.NPM_TOKEN)"',
+    'deno eval "console.log(Deno.env.get(\'API_KEY\'))"',
+    'python3 -c "import os;print(os.environ[\'API_KEY\'])"',
+    'python3 -c "import os;print(os.environ[\\"API_KEY\\"])"',
+    'python3 -c "import os;print(os.environ.get(\'API_KEY\'))"',
+    'python3 -c "import os;print(os.getenv(\'API_KEY\'))"',
+    'ruby -e \'puts ENV["ATLASSIAN_TOKEN"]\'',
+    'ruby -e \'puts ENV.fetch("GITHUB_TOKEN")\'',
+    'awk \'BEGIN{print ENVIRON["ATLASSIAN_TOKEN"]}\'',
+    'php -r \'echo getenv("API_KEY");\'',
+    'go run -e \'fmt.Println(os.Getenv("API_KEY"))\'',
+    'echo $AWS_SECRET_ACCESS_KEY',
+    'echo $STRIPE_API_KEY',
+    'echo $ANTHROPIC_API_KEY',
+    'echo $TOKEN',
+  ])('%s is blocked as a display', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+  });
+
+  test('ruleId env-ref: a protected variable that feeds no display is confirmed', () => {
+    expect(checkSecretBash('curl -H "Authorization: Bearer $SONARQUBE_TOKEN" https://sonar.example')).toMatchObject({
+      verdict: 'confirm',
+      ruleId: 'env-ref',
+    });
+  });
+
+  test.each([
+    'curl -H "Authorization: Bearer $GITHUB_TOKEN" https://api.example',
+    'export GH_TOKEN=$GITHUB_TOKEN',
+    'git commit -m "docs: $API_TOKEN usage"',
+    'echo calling && curl -H "x: $API_TOKEN" https://api.example',
+    'echo calling | curl -H "x: $API_TOKEN" https://api.example',
+    'node -e "fetch(url,{headers:{authorization:process.env.API_KEY}})"',
+    'node -e "const k = process.env[\'API_KEY\']; use(k)"',
+    'python3 -c "import os;x=os.environ[\'API_KEY\'];use(x)"',
+    'ruby -e \'k = ENV["GITHUB_TOKEN"]; use(k)\'',
+    'cat > src/db.ts <<\'EOF\'\nexport const password = process.env.DB_PASSWORD;\nEOF',
+    'rg process.env.API_KEY src',
+  ])('%s is confirmed as a reference', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'confirm', ruleId: 'env-ref' });
+  });
+
+  // Decision F1: a name equal to, or ending in `_` plus, one of TOKEN
+  // PASSWORD PASSWD SECRET API_KEY APIKEY PRIVATE_KEY ACCESS_KEY
+  // CREDENTIALS. ONE definition (src/protected-names.ts): the baseline rows
+  // write `{{protected-name}}` and the loader fills it in, so the rows and
+  // isProtectedName() agree on every name below.
+  const PROTECTED_NAMES = [
+    'TOKEN',
+    'GITHUB_TOKEN',
+    'ATLASSIAN_TOKEN',
+    'SONARQUBE_TOKEN',
+    'DEV_DB_PASSWORD',
+    'DB_PASSWD',
+    'STRIPE_API_KEY',
+    'APIKEY',
+    'MY_APIKEY',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_ACCESS_KEY',
+    'ANTHROPIC_API_KEY',
+    'SSH_PRIVATE_KEY',
+    'GOOGLE_CREDENTIALS',
+    'CLIENT_SECRET',
+  ];
+  const UNPROTECTED_NAMES = [
+    'NODE_ENV',
+    'HOME',
+    'PATH',
+    'CLAUDE_CONFIG_DIR',
+    'TOKENIZER_PATH',
+    'MY_TOKEN_FILE',
+    'TOKENS',
+    'MYTOKEN',
+    'SECRET_KEY',
+    'DB_PASS',
+    'GPG_PASSPHRASE',
+    'github_token',
+    'Api_Token',
+  ];
+
+  test.each(PROTECTED_NAMES)('protected name %s: the reference rows and isProtectedName agree', (name) => {
+    expect(isProtectedName(name)).toBe(true);
+    expect(checkSecretBash(`echo $${name}`)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+    expect(checkSecretBash(`echo \${${name}}`)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+    expect(checkSecretBash(`curl -H "x: $${name}" u`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-ref' });
+    expect(checkSecretBash(`node -e "console.log(process.env.${name})"`)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+  });
+
+  test.each(UNPROTECTED_NAMES)('unprotected name %s: the reference rows and isProtectedName agree', (name) => {
+    expect(isProtectedName(name)).toBe(false);
+    expect(checkSecretBash(`echo $${name}`)).toBeNull();
+    expect(checkSecretBash(`echo \${${name}}`)).toBeNull();
+    expect(checkSecretBash(`curl -H "x: $${name}" u`)).toBeNull();
+    expect(checkSecretBash(`node -e "console.log(process.env.${name})"`)).toBeNull();
+  });
+
+  test('the shell length expansion ${#TOKEN} names the variable but reads no value', () => {
+    expect(checkSecretBash('echo ${#TOKEN}')).toBeNull();
+  });
+
+  test.each([
+    'echo $HOME',
+    'echo ${PATH}',
+    'node -e "console.log(process.env.NODE_ENV)"',
+    'node -e "console.log(process.env[\'HOME\'])"',
+    'python3 -c "import os;print(os.environ[\'HOME\'], os.environ.get(\'PATH\', \'\'))"',
+    'ruby -e \'p ENV["HOME"]\'',
+    'awk \'BEGIN{print ENVIRON["HOME"]}\'',
+    'php -r \'echo getenv("HOME");\'',
+    'echo $(printenv PATH)',
+    'ENV=production npm run build',
+    'NODE_ENV=test pnpm test',
+    'cat > Dockerfile <<\'EOF\'\nFROM node:20\nENV NODE_ENV=production\nEOF',
+  ])('benign: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test('ruleId env-ref-whole: the whole environment object is blocked', () => {
+    expect(checkSecretBash('node -p process.env')).toMatchObject({ verdict: 'block', ruleId: 'env-ref-whole' });
+  });
+
+  test.each([
+    'node -e "console.log(process.env)"',
+    'node -e "console.log(JSON.stringify(process.env, null, 2))"',
+    'node -e "console.log(Object.keys(process.env))"',
+    'node -e "const {A} = process.env; console.log(A)"',
+    'node -e "run({...process.env, B: 1})"',
+    'bun -e "console.log(Bun.env)"',
+    'deno eval "console.log(Deno.env.toObject())"',
+    'python3 -c "import os;print(os.environ)"',
+    'python3 -c "import os;print(dict(os.environ))"',
+    'python3 -c "import os;print(os.environ.copy())"',
+    'python3 -c "import os;print(list(os.environ.items()))"',
+    'ruby -e \'puts ENV.to_h\'',
+    'ruby -e \'p ENV\'',
+    'ruby -e \'pp ENV\'',
+    'awk \'BEGIN{for (k in ENVIRON) print k}\'',
+    'git commit -m "fix: read process.env at startup"',
+  ])('%s is blocked as the whole environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-whole' });
+  });
+
+  // A search PATTERN that spells the object is not an access; a command that
+  // is not only searches still is (the except reads the whole command).
+  test.each([
+    'rg \'process.env\' src',
+    'grep -rn os.environ .',
+    'grep -n "BOUNCER_BIN\\|process.env" run.ts | sed -n \'1,6p\'',
+    'cd src && rg \'os.environ\' .',
+    'rg \'process.env\' src | head -20',
+    'git grep -n \'process.env\'',
+    'rtk rg -e \'process.env\'',
+    'cd src && grep -n "env\\b\\|process.env" run.ts cli.ts | head -30; echo ---; grep -rn SCRUB . -l 2>/dev/null | head',
+    'git log -S\'process.env\' --oneline',
+  ])('search: %s is allowed', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test.each([
+    'rg \'process.env\' src && node -p process.env',
+    'grep -rn x . ; python3 -c "import os;print(os.environ)"',
+    'rg process.env $(node -p process.env)',
+    'rg foo | node -p process.env',
+  ])('search then a real access: %s is still blocked', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-whole' });
+  });
+
+  test('a documentation URL that spells the object is not an access', () => {
+    expect(checkUrl('https://docs.python.org/3/library/os.html#os.environ')).toBeNull();
+    expect(checkUrl('https://nodejs.org/docs/latest/api/process.env')).toBeNull();
+  });
+
+  test('ruleId env-ref-computed: a name computed at runtime counts as whole-environment access', () => {
+    expect(checkSecretBash('python3 -c "import os;print(os.environ.get(chr(65)+chr(84)))"')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'env-ref-computed',
+    });
+  });
+
+  test.each([
+    'python3 -c "import os;print(os.environ.get(name))"',
+    'python3 -c "import os;print(os.environ[key])"',
+    'python3 -c "import os;print(os.getenv(k))"',
+    'python3 -c "import os;print(os.getenv(f\'{p}_X\'))"',
+    'python3 -c "import os;print(os.environ.get(\'AT\' + \'LASSIAN_TOKEN\'))"',
+    'node -e "console.log(process.env[name])"',
+    'node -e "console.log(process.env[\'AT\' + \'LASSIAN_TOKEN\'])"',
+    'node -e "console.log(process.env[`${p}_TOKEN`])"',
+    'ruby -e \'puts ENV[name]\'',
+    'ruby -e \'puts ENV.fetch(name)\'',
+    'awk \'BEGIN{print ENVIRON[k]}\'',
+    'php -r \'echo getenv($k);\'',
+    'echo "${!name}"',
+    'printenv "$name"',
+  ])('%s is blocked as a computed name', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-computed' });
   });
 });
 
@@ -709,5 +1236,210 @@ describe('secret-rules: known limits (shell obfuscation bypasses)', () => {
     'cat $(echo Lmlu | base64 -d)nv',
   ])('does NOT detect obfuscated reference: %s', (cmd) => {
     expect(checkSecretBash(cmd)).toBeNull();
+  });
+});
+
+// Review fix pass (ticket 57): precision of `ps`, the compose `-q` family, every
+// reference form through both reference rows, and rows that stay linear.
+describe('secret-rules: environment rows, review fix pass (ticket 57)', () => {
+  // The BSD `e` rides on the FIRST operand of a `ps` at command position:
+  // a later word, a compose service, prose that mentions ps never counts.
+  test.each([
+    'docker compose ps redis',
+    'docker compose ps postgres',
+    'git commit -m \'fix ps output here\'',
+    'echo ps eww',
+    'which ps e',
+    'kubectl get pods | ps',
+    'pgrep -fl postgres | xargs ps -o comm=',
+  ])('benign: %s is not a ps environment dump', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test.each([
+    'time ps eww -p 4242',
+    'FOO=1 ps e',
+    'cd app && ps auxe',
+    'sh -c \'ps e\'',
+    '/bin/ps eww -p 1',
+  ])('%s is blocked as a process environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-ps' });
+  });
+
+  // One name (`API_KEY`), every form the reference rows know, in a display
+  // (block) and in a plain statement (confirm); the same forms with a
+  // computed name are blocked as such.
+  const FORMS = [
+    '$API_KEY',
+    '${API_KEY}',
+    'process.env.API_KEY',
+    'process.env?.API_KEY',
+    'process.env["API_KEY"]',
+    'process.env[\'API_KEY\']',
+    'Bun.env.API_KEY',
+    'Bun.env["API_KEY"]',
+    'Deno.env.get("API_KEY")',
+    'os.environ["API_KEY"]',
+    'os.environ.get("API_KEY")',
+    'os.environ.pop("API_KEY")',
+    'os.environ.setdefault("API_KEY", "x")',
+    'os.getenv("API_KEY")',
+    'environ.get("API_KEY")',
+    'ENV["API_KEY"]',
+    'ENV.fetch("API_KEY")',
+    'ENV.dig("API_KEY")',
+    'ENVIRON["API_KEY"]',
+    'getenv("API_KEY")',
+    'os.Getenv("API_KEY")',
+    'System.getenv("API_KEY")',
+    'env::var("API_KEY")',
+    'env::var_os("API_KEY")',
+  ];
+
+  test.each(FORMS)('form %s: a display blocks, a plain statement confirms', (form) => {
+    expect(checkSecretBash(`echo ${form}`)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
+    expect(checkSecretBash(`x = ${form}`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-ref' });
+  });
+
+  test.each([
+    'process.env[name]',
+    'Bun.env[name]',
+    'os.environ[name]',
+    'ENV[name]',
+    'ENVIRON[name]',
+    'Deno.env.get(name)',
+    'os.environ.get(name)',
+    'os.getenv(name)',
+    'environ.get(name)',
+    'ENV.fetch(name)',
+    'getenv(name)',
+    'os.Getenv(name)',
+    'System.getenv(name)',
+    'env::var(name)',
+  ])('form %s with a computed name is blocked as computed', (form) => {
+    expect(checkSecretBash(`x = ${form}`)).toMatchObject({ verdict: 'block', ruleId: 'env-ref-computed' });
+  });
+
+  // The reviewer's pathological inputs (plus a few of mine): every environment
+  // row, regex and except, must stay far below the seconds a backtracking
+  // regression costs. The assertion is deliberately the lead's 100 ms.
+  const PATHOLOGICAL: ReadonlyArray<readonly [string, string]> = [
+    ['docker exec repeated (24 KB)', 'docker exec '.repeat(2000)],
+    ['a search, 20 KB of spaces, then a substitution', `grep process.env${' '.repeat(20000)}$(true)`],
+    ['jq repeated (15 KB)', 'jq '.repeat(5000)],
+    ['ps repeated (30 KB)', 'ps '.repeat(10000)],
+    ['ps with a word per operand (30 KB)', `ps ${'ab '.repeat(10000)}`],
+    ['ps after separators (30 KB)', '; ps '.repeat(6000)],
+    ['display words repeated (20 KB)', 'echo '.repeat(4000)],
+    ['display words inside a substitution (20 KB)', `echo $(${'echo '.repeat(4000)})`],
+    ['compose options (25 KB)', `docker compose ${'-f a '.repeat(5000)}x`],
+    ['compose config flags (25 KB)', `docker compose config ${'web '.repeat(6000)}-q`],
+    ['env options (18 KB)', `env ${'-i '.repeat(6000)}x`],
+    ['spaces after env (20 KB)', `env${' '.repeat(20000)}x`],
+    ['jq after separators (25 KB)', '; jq '.repeat(5000)],
+    ['jq after pipes (30 KB)', ' | jq '.repeat(5000)],
+    ['docker exec after separators (28 KB)', '; docker exec '.repeat(2000)],
+    ['launchctl after separators (24 KB)', '; launchctl '.repeat(2000)],
+    ['wrappers repeated, then jq (25 KB)', `${'time '.repeat(5000)}jq`],
+    ['wrappers after separators (28 KB)', '; time '.repeat(4000)],
+  ];
+
+  test.each(PATHOLOGICAL)('pathological input stays fast: %s', (_name, input) => {
+    for (const rule of BASELINE.rules.secret.bash.filter((r) => r.id.startsWith('env-'))) {
+      const regex = new RegExp(rule.regex, rule.flags);
+      const except = rule.except === undefined ? null : new RegExp(rule.except, rule.flags);
+      const start = performance.now();
+      if (regex.test(input) && except !== null) except.test(input);
+      expect(performance.now() - start, rule.id).toBeLessThan(100);
+    }
+  });
+});
+
+// Review K1 (ticket 57): `env-dump-launchctl`, `env-dump-docker` and
+// `env-dump-jq` start at command position — the lead-in `env-dump` and
+// `env-dump-ps` already use — so a search or a sentence that spells the
+// command text is not the command. (Words like `then` or `do` in a comment
+// are shell keywords to that lead-in, so the sentences below avoid them.)
+describe('secret-rules: launchctl, docker and jq rows read command position (ticket 57)', () => {
+  test.each([
+    'grep -n "TERM\\|launchctl getenv" docs/reference/policy.md',
+    'git commit -m \'docs: launchctl getenv reads the launchd environment\'',
+    'ls -la # see also launchctl getenv PATH',
+    'git commit -m \'docs: jq -n env dumps the environment\'',
+    'ls -la # see also jq -n env',
+    'grep -rn "jq -n env" scripts',
+    'ls -la # see also docker exec app env',
+    'make test # same as docker compose config',
+    'git log --oneline -S\'docker compose config\' -- docs',
+  ])('benign: %s only spells a command', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test.each([
+    'launchctl getenv PATH',
+    '/bin/launchctl getenv PATH',
+    'cd app && launchctl getenv PATH',
+    'FOO=1 launchctl getenv PATH',
+    'command launchctl getenv PATH',
+    'sh -c \'launchctl getenv PATH\'',
+    'x=$(launchctl getenv PATH)',
+    'if true; then launchctl getenv PATH; fi',
+  ])('%s is blocked as the launchd environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-launchctl' });
+  });
+
+  // A jq after a pipe IS at command position (the lead-in takes a pipe
+  // preceded by whitespace), so a dump fed through a pipeline stays blocked.
+  test.each([
+    'jq -n env',
+    'cat data.json | jq -n env',
+    'curl -s https://api.example.com/x | jq env',
+    'time jq -n env',
+    'FOO=1 jq -n env',
+    '/usr/bin/jq -n \'$ENV\'',
+    'cd app && gojq -n env',
+    'sh -c "jq -n env"',
+    'x=$(jq -n env)',
+  ])('%s is blocked as the jq environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-jq' });
+  });
+
+  test.each([
+    'docker exec app env',
+    '/usr/local/bin/docker exec app env',
+    'cd app && docker compose config',
+    'FOO=1 docker compose config',
+    'command docker exec app printenv',
+    'sh -c \'docker exec app env | sort\'',
+    'x=$(docker compose config)',
+    'if true; then docker-compose exec web env; fi',
+  ])('%s is blocked as a container environment', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-docker' });
+  });
+
+  // The price of command position, said out loud: the lead-in knows a handful
+  // of wrappers (`VAR=value`, rtk, command, exec, nice, time, builtin, proxy,
+  // eval) and a pipe preceded by whitespace; what stands in front of the
+  // command otherwise is not seen. (`env-dump` and `env-dump-ps` have the
+  // same edges; `sudo` is not seen here either, but the command family
+  // blocks it outright.)
+  test.each([
+    'timeout 5 docker exec app env',
+    'env DOCKER_HOST=ssh://build docker exec app env',
+    'watch -n 5 launchctl getenv PATH',
+    'cat data.json|jq -n env',
+    '(docker exec app env)',
+  ])('known limit: %s is not seen', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  // Not a command-position problem: jq IS the command and the text `|env ` sits
+  // inside a string literal of its own program, which a regex cannot tell from
+  // the builtin. Recorded as a known false positive.
+  test('known limit: a jq string literal that holds `|env` still matches', () => {
+    expect(checkSecretBash('jq -r \'.[]|select(.cmd|test("nice -n 5|env FOO=1"))\' cases.json')).toMatchObject({
+      verdict: 'block',
+      ruleId: 'env-dump-jq',
+    });
   });
 });

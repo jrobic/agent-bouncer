@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Environment rows in the secret baseline. The agent's own environment holds
+  what its launcher exported (direnv, a profile, a CI runner) and, until now,
+  every way of reading it was allowed. The rows are a net, not a barrier:
+  Bouncer judges command text and cannot remove a variable.
+  - **Dumps of the whole environment are blocked** (`env-dump`,
+    `env-dump-ps`, `env-dump-launchctl`, `env-dump-jq`, `env-dump-docker`):
+    `env` / `printenv` that run no command, `export` and `export -p`,
+    `declare` / `typeset` with `-x` / `-p`, bare `set`, `compgen -e`,
+    `${!PREFIX@}`, `ps` with the BSD `e` operand or macOS `-E`,
+    `launchctl getenv`, jq's `env` / `$ENV`, `docker exec … env` and
+    `docker compose config` (not with `-q` / `--quiet`, `--services` and the
+    other flags that print no environment). These rows read command position
+    (after `;`, `&&`, a pipe, `$(`, `sh -c`, a wrapper such as `command` or
+    `time`): a search or a sentence that merely spells `launchctl getenv`,
+    `jq -n env` or `docker exec c env` is not the command.
+    `/proc/<pid>/environ` is a secret path
+    (`proc-environ`): the Read tool is covered, not only Bash. `env FOO=1 make`,
+    `set -e`, `export FOO=bar`, `ps -ef` and `ps aux` stay allowed;
+    `docker inspect` asks (`env-dump-docker-inspect`).
+  - **References to a protected variable name** — uppercase, equal to or
+    ending in `_` plus `TOKEN`, `PASSWORD`, `PASSWD`, `SECRET`, `API_KEY`,
+    `APIKEY`, `PRIVATE_KEY`, `ACCESS_KEY` or `CREDENTIALS` — in `$NAME`,
+    `process.env.NAME`, `os.environ[…]`, `ENV[…]`, `getenv(…)` and the like
+    are blocked when they feed a display (`echo`, `printf`, `print`, `puts`,
+    `console.log`: `env-ref-display`) and ask otherwise (`env-ref`:
+    `curl -H "Authorization: Bearer $TOKEN"` is legitimate use). The whole
+    environment object (`process.env`, `os.environ`, `ENV` alone) and a name
+    computed at runtime are blocked (`env-ref-whole`, `env-ref-computed`),
+    because a name rebuilt from pieces would slip past every name rule. A
+    non-protected name (`$HOME`, `process.env.NODE_ENV`) and a search pattern
+    (`rg 'process.env' src`) stay allowed.
+  - The protected-name definition is written once (`src/protected-names.ts`)
+    and documented in `docs/reference/policy.md`, "The environment rows".
+    The long alternations the rows share are load-time fragments
+    (`src/policy/fragments.ts`, a `{{name}}` in a baseline regex): an unknown
+    or unfilled placeholder makes the baseline refuse to load, and `rules
+    lint` rejects any `{{…}}` in an overlay layer.
+
+### Changed
+
+- `credential-printer` (still `confirm`, same id: an overlay that relaxed it
+  keeps working) also covers `gh` / `glab auth status -t`,
+  `glab config get token`, `git credential fill`, `docker-credential-* get`,
+  `npm` / `pnpm config get …_auth[Token]`, `aws configure get` of a secret
+  key or session token, and `aws configure export-credentials`.
+- **Upgrade:** the baseline gains rows with new ids (`env-dump`,
+  `env-dump-ps`, `env-dump-launchctl`, `env-dump-jq`, `env-dump-docker`,
+  `env-dump-docker-inspect`, `env-ref-display`, `env-ref-whole`,
+  `env-ref-computed`, `env-ref`, `proc-environ`). An overlay layer that
+  already carries a row with one of these ids is rejected as a unit: run
+  `bouncer rules lint` and `bouncer doctor` after upgrading. A workflow that
+  inspects containers all day relaxes `env-dump-docker-inspect` with an
+  `[[override]]`.
+
 ## [1.7.0] - 2026-10-13
 
 ### Fixed

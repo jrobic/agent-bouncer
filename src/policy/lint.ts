@@ -7,6 +7,7 @@
 // the vetted set); the overlay's failures are what trigger the
 // loud-warning fallback in load.ts.
 
+import { FRAGMENT_PLACEHOLDER } from './fragments.ts';
 import type { EffectiveRule, FileTagged } from './load.ts';
 import { RELAXABLE_LISTS } from './schema.ts';
 import type { OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
@@ -67,6 +68,15 @@ export function lintRegexSource(pattern: string, flags?: string): LintIssue[] {
   if (BACKREFERENCE.test(pattern)) {
     issues.push({
       message: `regex ${JSON.stringify(pattern)} uses a backreference (\\1-\\9) — outside the RE2-like dialect`,
+    });
+  }
+  // `{{name}}` is how a BASELINE row names a shared fragment (fragments.ts);
+  // the fill runs on the embedded baseline only. In an overlay it would
+  // compile — and silently never match what its author meant.
+  if (FRAGMENT_PLACEHOLDER.test(pattern)) {
+    issues.push({
+      message: `regex ${JSON.stringify(pattern)} contains a {{…}} placeholder — placeholders are filled in for baseline rows only, `
+        + `never in an overlay layer: write the whole regex (escape the braces, \\{\\{, to match them literally)`,
     });
   }
   issues.push(...lintFlags(flags));
