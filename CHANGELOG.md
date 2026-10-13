@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   2>/dev/null` pass; every other form (`--bare`, `--template`,
   `--separate-git-dir`, `--shared`, `--object-format`, `--ref-format`, an
   abbreviated long option, grouped short options such as `-qb main`, a glued
-  value such as `-bmain`, `--`, two directories) still asks with
+  value such as `-bmain`, `--`, two directories, a global option other than
+  `-C <dir>` such as `git --bare init` or `git -c … init`) still asks with
   `git-protected`. An allowed `init` is logged as `observe
   git-conditional-init`, so `bouncer audit` keeps showing what the change lets
   through.
@@ -24,7 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   subcommand — `flags`, `value_flags` and `max_positionals` — the inverse of
   `ask_flags`. It is the mechanism behind the `init` entry and is available to
   overlays and the `bouncer-policy` skill. An unknown or abbreviated option
-  asks by construction. Entries are shape-checked on load (any unknown key
+  asks by construction, and so does any global option other than `-C <dir>`
+  written before the subcommand. Entries are shape-checked on load (any unknown key
   rejects the layer), two files of one layer declaring the same `sub` conflict,
   an overlay entry wins over the baseline, and an entry that replaces a
   governed subcommand needs a `reason`, is listed by `bouncer doctor` as an

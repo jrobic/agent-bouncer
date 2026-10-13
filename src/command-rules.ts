@@ -1196,7 +1196,9 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-type GitCommand = { sub: string; rest: string[]; forceConfirm?: true; };
+// `globals` holds the global-option tokens (and their values) written before
+// the subcommand; it is absent when there are none.
+type GitCommand = { sub: string; rest: string[]; globals?: string[]; forceConfirm?: true; };
 
 type RedirectionFilteredTokens = Readonly<{
   tokens: readonly ShellToken[];
@@ -1251,13 +1253,16 @@ export function extractGitSubcommandFromTokens(
   const head = filtered.tokens[i]!.value;
   if (head !== 'git' && !head.endsWith('/git')) return null;
   i++;
+  const globalsStart = i;
   while (i < filtered.tokens.length && filtered.tokens[i]!.value.startsWith('-')) {
     i += GIT_OPTS_WITH_ARG.has(filtered.tokens[i]!.value) ? 2 : 1;
   }
   if (i >= filtered.tokens.length) return null;
+  const globals = filtered.tokens.slice(globalsStart, i).map((token) => token.value);
   return {
     sub: filtered.tokens[i]!.value,
     rest: filtered.tokens.slice(i + 1).map((token) => token.value),
+    ...(globals.length > 0 ? { globals } : {}),
     ...(prefix.ambiguous || filtered.forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1494,14 +1499,8 @@ function safeGrammarTokenMatches(token: SafeGrammarToken, value: string): boolea
   return token === '*' ? !value.startsWith('-') : token === value;
 }
 
-// `safe_flags` is an allow-list over the tokens after the subcommand, read
-// lexically (ADR-0001: no git call, no filesystem read). Every token must
-// be one of: a `flags` option, verbatim; a `value_flags` option verbatim
-// followed by a value that does not start with `-`; `--name=value` for a
-// LONG `value_flags` option with a non-empty value; or a positional (no
-// leading `-`), within `max_positionals`. Abbreviated long options, grouped
-// short options, glued short values and `--` match none of these and so
-// ask — which is why this is an allow-list rather than a deny-list.
+// `safe_flags` is read lexically (ADR-0001): no git call, no filesystem
+// read. Token semantics: SafeFlagsRule in policy/schema.ts.
 function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boolean {
   let positionals = 0;
   for (let index = 0; index < rest.length; index++) {
@@ -1526,7 +1525,13 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
   return positionals > rule.max_positionals;
 }
 
-function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: CommandGitPolicy): boolean {
+// `-C` always consumes the next token, so global tokens that are only
+// `-C <dir>` pairs sit at every even index.
+function hasOnlyChdirGlobals(globals: readonly string[]): boolean {
+  return globals.every((token, index) => index % 2 === 1 || token === '-C');
+}
+
+function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: CommandGitPolicy): boolean {
   if (git.safe_subcommands.includes(sub)) return false;
 
   const askFlags = git.ask_flags.find((e: AskFlagsRule) => e.sub === sub);
@@ -1555,8 +1560,11 @@ function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: Co
     return !matches;
   }
 
+  // An allow-list stays one only if it also covers what precedes the
+  // subcommand: `git --bare init` acts like `git init --bare`. The sole
+  // global option tolerated is `-C <dir>`; any other asks.
   const safeFlags = git.safe_flags.find((e: SafeFlagsRule) => e.sub === sub);
-  if (safeFlags) return safeFlagsNeedConfirm(safeFlags, rest);
+  if (safeFlags) return !hasOnlyChdirGlobals(globals ?? []) || safeFlagsNeedConfirm(safeFlags, rest);
 
   if (sub === 'checkout') return checkGitCheckoutNeedsConfirm(rest);
   if (sub === 'restore') return checkGitRestoreNeedsConfirm(rest);
@@ -1568,7 +1576,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed) continue;
-    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) {
+    if (parsed.forceConfirm || gitSubcommandNeedsConfirm(parsed, git)) {
       return {
         verdict: 'confirm',
         ruleId: 'git-protected',
@@ -1594,7 +1602,7 @@ function classifyGitAllowWith(cmd: string, git: CommandGitPolicy): Verdict | nul
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (!parsed || parsed.forceConfirm) continue;
-    if (gitSubcommandNeedsConfirm(parsed.sub, parsed.rest, git)) continue;
+    if (gitSubcommandNeedsConfirm(parsed, git)) continue;
     if (git.safe_subcommands.includes(parsed.sub)) continue;
     return {
       verdict: 'observe',

@@ -2535,6 +2535,84 @@
       ]
     },
     {
+      "id": "git-init-global-bare-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --bare init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-bare-with-directory-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --bare init /tmp/x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-git-dir-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --git-dir=/tmp/x/.git init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-work-tree-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git --work-tree=/tmp/x init"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-global-config-option-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -c init.templateDir=/tmp/t init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-init-chdir-combined-with-another-global-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git -C /tmp/x --bare init -q"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "fd-exec-destructive-short",
       "toolName": "Bash",
       "toolInput": {

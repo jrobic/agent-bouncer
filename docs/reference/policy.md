@@ -505,6 +505,15 @@ options, grouped short options, glued short values and `--` match none of
 the four cases, so they ask by construction — which is why the form is an
 allow-list rather than a deny-list.
 
+The same allow-list reasoning covers what is written before the
+subcommand. Global options such as `--bare`, `--git-dir`, `--work-tree`,
+`-c` or `--no-pager` act on the command as if they followed it
+(`git --bare init` is `git init --bare`), so for a subcommand decided by
+`safe_flags` the only global option tolerated is `-C <dir>`, alone or
+repeated; any other asks with `git-protected`. The other three forms,
+and `safe_subcommands`, keep ignoring global options. Environment
+prefixes (`GIT_TEMPLATE_DIR=… git init`) are not read by any form.
+
 Against the baseline `init` row:
 
 | Accepted | Why |
@@ -513,7 +522,7 @@ Against the baseline `init` row:
 | `git init --quiet /tmp/x`, `git init -q .` | one positional |
 | `git init -q -b develop .` | `-b` consumes `develop`; `.` is the positional |
 | `git init --initial-branch=main` | `--name=value` of a long `value_flags` option |
-| `git -C /tmp/x init -q` | options before the subcommand are not its arguments |
+| `git -C /tmp/x init -q` | `-C <dir>` is the one global option `safe_flags` tolerates before the subcommand |
 | `git init -q 2>/dev/null` | a redirection is not an argument |
 
 | Refused (`git-protected`) | Why |
@@ -525,6 +534,8 @@ Against the baseline `init` row:
 | `git init -b`, `git init -b -q`, `git init --initial-branch=` | no value, a value starting with `-`, an empty value |
 | `git init --` | the end-of-options marker is an unknown token |
 | `git init /tmp/a /tmp/b` | more positionals than `max_positionals` |
+| `git --bare init`, `git --git-dir=/tmp/x/.git init`, `git --work-tree=/tmp/x init`, `git -c init.templateDir=/tmp/t init -q` | a global option other than `-C <dir>` |
+| `git -C /tmp/x --bare init -q` | `-C` combined with another global option |
 
 ## The two algorithm-driven tables
 
