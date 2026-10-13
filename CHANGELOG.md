@@ -77,23 +77,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `name=value`, which allows that one value (`core.pager=cat`,
   `core.hooksPath=/dev/null`, `GIT_EDITOR=true`). The baseline lists identity,
   colour, signing and locale settings, `-C`, `--no-pager` and the like, and the
-  harmless value of the editor, pager, hooks and fsmonitor keys; everything
-  else asks, `PATH`, `HOME`, `GIT_SSH_COMMAND` and `GIT_CONFIG_GLOBAL`
-  included. A `--config-env` setting is judged by its key only, as its value
-  is read from the environment when git runs. `--config-env` joins the global
-  options that take a value, so `git --config-env core.pager=X diff` is no
+  harmless value of the editor, pager, hooks, fsmonitor and `GIT_TRACE` keys
+  (`GIT_TRACE` only at `0`, `1`, `2`, `true` or `false`: any other value is a
+  file git appends its trace to; the other `GIT_TRACE*` variables are not
+  listed); everything else asks, `PATH`, `HOME`, `GIT_SSH_COMMAND` and
+  `GIT_CONFIG_GLOBAL` included. A `--config-env` setting is judged by its key
+  only, as its value is read from the environment when git runs. `--config-env`
+  joins the global options that take a value, so `git --config-env
+  core.pager=X diff` is no
   longer read with `core.pager=X` as the subcommand. A subcommand that asks on
   its own keeps `git-protected` (`git -c core.pager=x push`, `git -c user.name=x
   init -q`): the new rule only turns an allow into a confirm. The three lists are
   widened through `[[relax]]` only, reason mandatory, shown by `bouncer doctor`
   and `bouncer rules list`. Known limits: an `export` in the same line or an
-  earlier call is not read, `GIT_TRACE*` and `GIT_INDEX_FILE` are allowed at any
-  value although git writes where they point, and a config file written into a
-  directory named by `--git-dir` or `GIT_DIR` is not seen. Replayed on 20,403
-  distinct commands from real agent sessions that mention git, 9 commands
-  change from allow to confirm: eight are probes and tests (ssh and config
-  experiments, a stub-`git` test), one is `GIT_EDITOR="cp <message file>" git
-  commit --fixup=…`. Details:
+  earlier call is not read, `GIT_INDEX_FILE` is allowed at any value although
+  git writes its index where it points (a new file at most with the
+  subcommands the baseline allows), and a config file written into a
+  directory named by `--git-dir` or `GIT_DIR` is not seen. Replayed on 20,554
+  distinct commands from real agent sessions that mention git, 11 commands
+  change from allow to confirm: ten are probes and tests (ssh, config and
+  trace experiments, a stub-`git` test), one is `GIT_EDITOR="cp <message
+  file>" git commit --fixup=…`. Details:
   [`git-config-exec`](docs/reference/policy.md#git-config-exec-what-may-stand-before-git).
 
 ## [1.9.0] - 2026-10-13

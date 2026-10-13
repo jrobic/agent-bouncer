@@ -708,12 +708,17 @@ has no value. A list that is empty allows nothing.
 | `allowed_global_options` | `-C`, `--no-pager`, `-P`, `-p`, `--paginate`, `--no-replace-objects`, `--literal-pathspecs`, `--glob-pathspecs`, `--noglob-pathspecs`, `--icase-pathspecs`, `--no-optional-locks`, `--no-advice`, `--git-dir`, `--work-tree`, `--bare` |
 | `allowed_config`, any value | `user.*`, `color.*`, `advice.*`, `init.defaultBranch`, `commit.gpgsign`, `tag.gpgsign`, `tag.forceSignAnnotated`, `push.followTags`, `gc.auto`, `core.quotepath` |
 | `allowed_config`, one value | `core.hooksPath=/dev/null`, `core.pager=cat`, `core.fsmonitor=false`, `core.editor=true`, `core.editor=:`, `sequence.editor=true`, `sequence.editor=:` |
-| `allowed_env`, any value | `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_TERMINAL_PROMPT`, `GIT_INDEX_FILE`, `GIT_TRACE*`, `LC_ALL`, `LANG`, `TZ`, `NO_COLOR`, `CI`, `GIT_DIR`, `GIT_WORK_TREE` |
-| `allowed_env`, one value | `GIT_EDITOR=true`, `GIT_EDITOR=:`, `GIT_SEQUENCE_EDITOR=true`, `GIT_SEQUENCE_EDITOR=:`, `GIT_PAGER=cat`, `PAGER=cat` |
+| `allowed_env`, any value | `GIT_AUTHOR_*`, `GIT_COMMITTER_*`, `GIT_TERMINAL_PROMPT`, `GIT_INDEX_FILE`, `LC_ALL`, `LANG`, `TZ`, `NO_COLOR`, `CI`, `GIT_DIR`, `GIT_WORK_TREE` |
+| `allowed_env`, one value | `GIT_EDITOR=true`, `GIT_EDITOR=:`, `GIT_SEQUENCE_EDITOR=true`, `GIT_SEQUENCE_EDITOR=:`, `GIT_PAGER=cat`, `PAGER=cat`, `GIT_TRACE=0`, `GIT_TRACE=1`, `GIT_TRACE=2`, `GIT_TRACE=true`, `GIT_TRACE=false` |
 
 The keys and variables listed with one value are the ones that run a
 program at any other value (`core.pager=less`, `GIT_EDITOR='cp /tmp/m'`) and
-are harmless at the listed one. `--git-dir`, `--work-tree`, `--bare`,
+are harmless at the listed one. `GIT_TRACE` is listed the same way for
+another reason: at any value but the five that switch tracing on or off it
+is a file git appends its trace to, a write no write rule looks at
+(`GIT_TRACE=/tmp/x git status` asks). The other `GIT_TRACE*` variables
+(`GIT_TRACE2`, `GIT_TRACE_PACKET`, `GIT_TRACE_PERFORMANCE`…) are not listed
+and ask; a `[[relax]]` widens them. `--git-dir`, `--work-tree`, `--bare`,
 `GIT_DIR` and `GIT_WORK_TREE` run nothing themselves and are listed so
 that they pass; the subcommand's own verdict still applies.
 
@@ -774,9 +779,10 @@ algorithm, not by a row of the six regex tables).
 - A value is read as literal text: `GIT_EDITOR=$EDITOR git commit` asks
   (the text is not `true`), while `GIT_AUTHOR_NAME=$(…) git commit` passes
   the rule, a variable listed at any value.
-- `GIT_TRACE*` and `GIT_INDEX_FILE` are listed at any value because they run
-  nothing, but git writes to the path they name (`GIT_TRACE=<path>` appends
-  trace lines to that file): the rule does not look at that path.
+- `GIT_INDEX_FILE` is listed at any value because it runs nothing, but git
+  writes its index to the path it names. With a subcommand the baseline
+  allows, that creates a new file at most, and `read-tree`, which can
+  overwrite one, asks on its own; the rule does not look at that path.
 - `--git-dir`, `--work-tree`, `GIT_DIR` and `GIT_WORK_TREE` are listed, but git
   reads the config of the repository they name: a config file planted
   there, like a `.gitconfig` or a `.git/config` written by another tool, is
