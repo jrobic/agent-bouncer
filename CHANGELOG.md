@@ -23,6 +23,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Upgrade:** a personal `ask_flags` overlay becomes stricter without being
   rewritten. A command that spells a listed flag grouped, as `--name=value` or
   abbreviated now asks, where it used to pass.
+- **Upgrade:** a git command can now ask where it used to pass. A `-c`
+  setting, a `--config-env` setting, a global option or an environment prefix
+  (`GIT_SSH_COMMAND=… git ls-remote`, `HOME=… git status`, `PATH=… git …`,
+  `git -c core.fsmonitor=… status`) that is not on the new allow-lists asks
+  with `git-config-exec`. To let one through, add a `[[relax]]` on
+  `command.git.allowed_env`, `command.git.allowed_config` or
+  `command.git.allowed_global_options` with a `reason`; run `bouncer rules
+  lint` and `bouncer doctor` after upgrading; `rules list` shows an added
+  entry as an `overlay-relax command.git.allowed_env …` line.
 
 ### Security
 
@@ -53,6 +62,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   agent command changes verdict: the only ones that do are the probes written
   to exhibit this bypass. Details:
   [`ask_flags`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms).
+- **A git command no longer runs code of the caller's choosing because of what
+  stands before the subcommand.** The git analysis skipped global options and
+  environment assignments and judged only the subcommand, so an allowed one
+  (`status`, `diff`, `commit`, `log`…) executed arbitrary code without a
+  prompt: `git -c core.fsmonitor='<shell>' status` ran the shell command,
+  `git -c core.hooksPath=/tmp/h commit -m x` the hook found there,
+  `GIT_EXTERNAL_DIFF=/x git diff` the program, `git --config-env=core.pager=X
+  diff` and `git --exec-path=/tmp/x status` a pager or a `git-*` helper. Such a
+  command now answers `confirm [git-config-exec]`, a new rule id, unless every
+  item is on an allow-list. Three lists of `command.git` hold them
+  (`allowed_global_options`, `allowed_config`, `allowed_env`): an entry is a
+  name, which allows it at any value (`user.*`, `GIT_AUTHOR_*`), or
+  `name=value`, which allows that one value (`core.pager=cat`,
+  `core.hooksPath=/dev/null`, `GIT_EDITOR=true`). The baseline lists identity,
+  colour, signing and locale settings, `-C`, `--no-pager` and the like, and the
+  harmless value of the editor, pager, hooks and fsmonitor keys; everything
+  else asks, `PATH`, `HOME`, `GIT_SSH_COMMAND` and `GIT_CONFIG_GLOBAL`
+  included. A `--config-env` setting is judged by its key only, as its value
+  is read from the environment when git runs. `--config-env` joins the global
+  options that take a value, so `git --config-env core.pager=X diff` is no
+  longer read with `core.pager=X` as the subcommand. A subcommand that asks on
+  its own keeps `git-protected` (`git -c core.pager=x push`, `git -c user.name=x
+  init -q`): the new rule only turns an allow into a confirm. The three lists are
+  widened through `[[relax]]` only, reason mandatory, shown by `bouncer doctor`
+  and `bouncer rules list`. Known limits: an `export` in the same line or an
+  earlier call is not read, `GIT_TRACE*` and `GIT_INDEX_FILE` are allowed at any
+  value although git writes where they point, and a config file written into a
+  directory named by `--git-dir` or `GIT_DIR` is not seen. Replayed on 20,403
+  distinct commands from real agent sessions that mention git, 9 commands
+  change from allow to confirm: eight are probes and tests (ssh and config
+  experiments, a stub-`git` test), one is `GIT_EDITOR="cp <message file>" git
+  commit --fixup=…`. Details:
+  [`git-config-exec`](docs/reference/policy.md#git-config-exec-what-may-stand-before-git).
 
 ## [1.9.0] - 2026-10-13
 

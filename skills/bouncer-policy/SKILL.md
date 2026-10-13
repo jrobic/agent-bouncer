@@ -24,7 +24,7 @@ Route the explicit argument:
 ## Need mode
 
 1. Get the rule id from a pasted refusal's `<rule-id>: <reason>` prefix. If the human supplied only a command, run `bouncer check "<command>"`. If the harness denies any `bouncer` command line — the check, the lint, the list — ask the human to run that exact line in a terminal (or the harness's shell escape) and paste its output; never bypass; never claim a proof you did not collect. For a non-command family, a neutral dry run is allowed: `bouncer run --harness claude-code < envelope.json`. If no exact id is available, stop and ask. Do not infer one from a keyword search.
-2. Refuse a policy change for `rm-rf-dangerous`, `sudo`, or `git-protected` when it is outside its governed lists. Propose a safer workflow or command form instead; for example, keep `git push` without `--force` at confirmation.
+2. Refuse a policy change for `rm-rf-dangerous`, `sudo`, or `git-protected` when it is outside its governed lists. Propose a safer workflow or command form instead; for example, keep `git push` without `--force` at confirmation. A `git-config-exec` refusal is governed by its three allow-lists: its lever is 2, with the entry taken from the refused command.
 3. Choose the narrowest lever that satisfies the stated need. State its blast radius in one sentence. If a new regex row or a replacement is needed, re-read the target and validate its pattern against the policy dialect before proposing it.
 4. Before a proposal, follow **Inspect active rules**, then show the complete TOML, layer, target path, reason, and blast radius. Follow the gates below.
 
@@ -33,7 +33,7 @@ Route the explicit argument:
 1. Run both `bouncer audit --days 7 --sessions-only --suggest` and `bouncer audit --days 7 --sessions-only`. Use a different window only when the human specifies one.
 2. Present one line per suggested block: rule, count, lever, blast radius, and a keep-or-skip recommendation. The human chooses which blocks to retain.
 3. Act only on **Frequent friction**. **Policy delta** is informational — never act on it. Mention **Dead conditional rules** as a baseline signal for a repository pull request; do not change them here.
-4. Refuse blocks without a policy lever, including `rm-rf-dangerous`, `sudo`, and unguided `git-protected` friction. Propose a safer workflow or command form.
+4. Refuse blocks without a policy lever, including `rm-rf-dangerous`, `sudo`, and unguided `git-protected` friction. Propose a safer workflow or command form. `git-config-exec` friction has lever 2 even though `--suggest` prints no block for it: derive the entry from the audited command.
 5. Before a proposal, follow **Inspect active rules** for each retained block.
 
 ## Inspect active rules
@@ -62,6 +62,15 @@ Use this order. Move to a wider lever only after the human rejects the narrower 
    [[relax]]
    list = "mcp_write.allowed_tools"
    value = "<full-tool-name>"
+   reason = "<reason>"
+   ```
+
+   `[[relax]]` on `command.git.allowed_env`, `command.git.allowed_config` or `command.git.allowed_global_options` answers a `git-config-exec` refusal the same way. `value` is the name the refused command carries (the variable of a `VAR=x git …` prefix, the key of `-c key=value` or `--config-env key=VAR`, a global option such as `--namespace`) for any value, or `name=value` for that one value. Propose `name=value` for a name that runs a program (`GIT_SSH_COMMAND`, `core.sshCommand`, `core.fsmonitor`, `GIT_EXTERNAL_DIFF`, `core.hooksPath`) or that redirects what git runs (`PATH`, `HOME`). Blast radius: that name at the listed value, in front of every git subcommand the policy allows.
+
+   ```toml
+   [[relax]]
+   list = "command.git.allowed_env"
+   value = "<NAME>=<value>"
    reason = "<reason>"
    ```
 
@@ -104,7 +113,7 @@ Use this order. Move to a wider lever only after the human rejects the narrower 
    reason = "<reason>"
    ```
 
-`[[relax]]` may target only `command.git.safe_subcommands`, `command.git.config_read_modes`, `mcp_write.read_prefixes`, or `mcp_write.allowed_tools`. A hardening change is a new row in one of the six regex tables, or a narrowed `[[override]]` replacement. `[[harness]]` changes may declare only `dir` or `persistent`; never add a protocol declaration.
+`[[relax]]` may target only `command.git.safe_subcommands`, `command.git.config_read_modes`, `command.git.allowed_global_options`, `command.git.allowed_config`, `command.git.allowed_env`, `mcp_write.read_prefixes`, or `mcp_write.allowed_tools`. A hardening change is a new row in one of the six regex tables, or a narrowed `[[override]]` replacement. `[[harness]]` changes may declare only `dir` or `persistent`; never add a protocol declaration.
 
 ```toml
 [[rules.<table>]]

@@ -31,6 +31,9 @@
 //   • Native interpreters: `python -c "open('/etc/passwd').read()"`,
 //     same for node, ruby, perl, etc.
 //   • Renamed fork-bomb: `f(){f|f&};f` (signature-only match)
+//   • Exported variable: `export GIT_EXTERNAL_DIFF=x && git diff` — the
+//     `git-config-exec` rule reads only the assignments written in front of
+//     the git command itself
 //
 // Treat this as protection against accidental destruction and the most
 // obvious exfiltration patterns — not against an adversarial caller.
