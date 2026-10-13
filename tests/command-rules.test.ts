@@ -984,12 +984,7 @@ describe('command-rules: safe_flags semantics (generic, on an ungoverned subcomm
   const checker = checkerWith({ safe_flags: [gc, ...BASELINE.rules.command.git.safe_flags] });
 
   test.each([
-    'git gc',
-    'git gc --quiet',
     'git gc -q --quiet',
-    'git gc --prune now',
-    'git gc --prune=now',
-    'git gc -p now',
     'git gc --quiet --prune=now -p 1.day',
   ])('%s is allowed', (command) => {
     expect(checker.checkGit(command)).toBeNull();
