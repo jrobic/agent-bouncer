@@ -9,7 +9,7 @@
 // `__BOUNCER_BIN__` is the ONE substitution point: a bare, single-quoted
 // placeholder the shim's own `BOUNCER` constant falls back to, swapped
 // for a real absolute path at PRINT time (`harness shim`'s own call
-// site, `process.execPath`, or `doctor`'s `wiring:shim` re-rendering the
+// site, or `doctor`'s `wiring:shim` re-rendering the
 // installed copy's own already-baked path for its drift comparison).
 // `BOUNCER_BIN` still overrides it at the shim's own RUNTIME — the baked
 // literal is only ever the fallback.

@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpDir } from './tmp.ts';
 
 const PROJECT_ROOT = new URL('..', import.meta.url).pathname;
+const BUILT_BINARY = join(PROJECT_ROOT, 'dist', 'bouncer');
 
 type SourceCliResult = {
   readonly exitCode: number;
@@ -19,11 +23,55 @@ async function runSourceCli(args: readonly string[]): Promise<SourceCliResult> {
 }
 
 describe('bouncer harness shim', () => {
-  test('bakes the source process path by default', async () => {
-    const result = await runSourceCli(['harness', 'shim', 'pi-agent']);
+  describe('without --bin, on the compiled binary run through a symlink', () => {
+    let builtOnce: Promise<void> | undefined;
+    async function ensureBuilt(): Promise<void> {
+      builtOnce ??= (async () => {
+        const build = Bun.spawn(['bun', 'run', 'build'], { cwd: PROJECT_ROOT, stdout: 'ignore', stderr: 'ignore' });
+        expect(await build.exited).toBe(0);
+      })();
+      return builtOnce;
+    }
 
-    expect(result).toMatchObject({ exitCode: 0, stderr: '' });
-    expect(result.stdout).toContain(`const BOUNCER = process.env.BOUNCER_BIN ?? ${JSON.stringify(process.execPath)};`);
+    async function printThrough(argv: readonly string[], env: Record<string, string>): Promise<SourceCliResult> {
+      const child = Bun.spawn([...argv], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      return { exitCode, stdout, stderr };
+    }
+
+    function linkedBouncer(): { readonly binDir: string; readonly link: string; } {
+      const binDir = join(tmpDir('bouncer-shim-invoked-'), 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const link = join(binDir, 'bouncer');
+      symlinkSync(BUILT_BINARY, link);
+      return { binDir, link };
+    }
+
+    test('bakes the symlink path it was invoked through, absolute', async () => {
+      await ensureBuilt();
+      const { link } = linkedBouncer();
+
+      const result = await printThrough([link, 'harness', 'shim', 'pi-agent'], {});
+
+      expect(result).toMatchObject({ exitCode: 0, stderr: '' });
+      expect(result.stdout).toContain(`const BOUNCER = process.env.BOUNCER_BIN ?? ${JSON.stringify(link)};`);
+    });
+
+    test('bakes the symlink path it was found at through PATH, by bare name', async () => {
+      await ensureBuilt();
+      const { binDir, link } = linkedBouncer();
+
+      const result = await printThrough(['/bin/sh', '-c', 'bouncer harness shim pi-agent'], {
+        PATH: `${binDir}:${process.env.PATH ?? ''}`,
+      });
+
+      expect(result).toMatchObject({ exitCode: 0, stderr: '' });
+      expect(result.stdout).toContain(`const BOUNCER = process.env.BOUNCER_BIN ?? ${JSON.stringify(link)};`);
+    });
   });
 
   test('bakes the literal absolute path supplied with --bin', async () => {

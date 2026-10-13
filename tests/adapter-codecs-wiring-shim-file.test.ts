@@ -59,6 +59,7 @@ function scratchAgentDir(): string {
 }
 
 async function writeExecutableBouncer(dir: string): Promise<string> {
+  await mkdir(dir, { recursive: true });
   const path = join(dir, 'fake-bouncer');
   await writeFile(path, '#!/bin/sh\nexit 0\n', 'utf8');
   await chmod(path, 0o755);
@@ -124,6 +125,42 @@ describe('shim-file wiring: a stable symlink baked through --bin', () => {
     } finally {
       delete process.env.PI_CODING_AGENT_DIR;
     }
+  });
+});
+
+describe('shim-file wiring: a versioned Homebrew Cellar path baked into the shim', () => {
+  async function cellarBakedDoctor(prefixName: string): Promise<{ readonly prefix: string; readonly report: DoctorReport; }> {
+    const agentDir = scratchAgentDir();
+    const prefix = join(agentDir, prefixName);
+    const cellarBin = await writeExecutableBouncer(join(prefix, 'Cellar', 'bouncer', '9.9.9', 'bin'));
+    const printed = await printShimWithBin(cellarBin);
+    expect(printed).toMatchObject({ exitCode: 0, stderr: '' });
+    await writeShimFile(agentDir, printed.stdout);
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    try {
+      return { prefix, report: await runDoctorChecks(undefined, cleanLoadResult(), PI_AGENT_HARNESS) };
+    } finally {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+  }
+
+  test('wiring:shim passes, wiring:binary fails naming the stable --bin to reprint with', async () => {
+    const { prefix, report } = await cellarBakedDoctor('brew');
+
+    expect(report.checks.find((c) => c.id === 'wiring:shim')).toMatchObject({ ok: true });
+    const binary = report.checks.find((c) => c.id === 'wiring:binary')!;
+    expect(binary.ok).toBe(false);
+    expect(binary.message).toContain('brew upgrade');
+    expect(binary.message).toContain(`bouncer harness shim pi-agent --bin ${prefix}/bin/fake-bouncer`);
+  });
+
+  test('a prefix that is not a plain path gets the instruction without a pasteable command', async () => {
+    const { report } = await cellarBakedDoctor('my brew');
+
+    const binary = report.checks.find((c) => c.id === 'wiring:binary')!;
+    expect(binary.ok).toBe(false);
+    expect(binary.message).toContain('brew upgrade');
+    expect(binary.message).not.toContain('--bin /');
   });
 });
 

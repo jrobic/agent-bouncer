@@ -682,7 +682,9 @@ ledger. `"shim-file"` (ticket 15c, ADR-0006 § 7): an IN-PROCESS harness
 checks that `<configDir>/extensions/bouncer.ts` exists and is
 byte-identical to what `bouncer harness shim <id>` prints today
 (`wiring:shim`) and that the shim's own baked `BOUNCER` path resolves to
-an executable (`wiring:binary`); and (ticket 56), when `witness` is an
+an executable that is not a versioned Homebrew Cellar path
+(`<prefix>/Cellar/<formula>/<version>/bin/<exe>`, which `brew upgrade`
+removes) (`wiring:binary`); and (ticket 56), when `witness` is an
 `agent` directory (`~/.omp/agent`), the same byte-for-byte check for every
 omp profile beside it, each `<witness's parent>/profiles/*/agent`
 (`wiring:shim (profile <name>)` — omp loads none of the default

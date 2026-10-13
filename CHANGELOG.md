@@ -62,6 +62,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   inspects containers all day relaxes `env-dump-docker-inspect` with an
   `[[override]]`.
 
+## [1.7.0] - 2026-10-13
+
+### Fixed
+
+- `bouncer harness shim pi-agent` without `--bin` baked Bun's resolved binary
+  path, so under Homebrew the printed pi/omp extension pointed into
+  `…/Cellar/bouncer/<version>/bin/bouncer` — a directory `brew upgrade`
+  removes, after which the shim failed closed on every tool call. It now bakes
+  the path bouncer was invoked through (`/opt/homebrew/bin/bouncer`, or the
+  symlink found on `PATH`), falling back to the resolved path when that cannot
+  be told; `--bin` is unchanged. `bun run src/cli.ts` still bakes `bun`'s path.
+- `doctor --harness pi-agent` now fails `wiring:binary` for a shim that bakes
+  a versioned Homebrew Cellar path, even while the file still exists, and
+  names the reprint command with `--bin <prefix>/bin/bouncer`. The Homebrew
+  caveats now say to print through `$(brew --prefix)/bin/bouncer` instead of
+  claiming the path changes on upgrade.
+- **Upgrade:** a shim printed under Homebrew without `--bin` bakes
+  `…/Cellar/bouncer/<old version>/bin/bouncer`, which this very upgrade
+  removes. Check before `brew upgrade`:
+  `grep 'const BOUNCER' <dir>/extensions/bouncer.ts`. If it names a Cellar
+  path, reprint it first with
+  `bouncer harness shim pi-agent --bin "$(brew --prefix)/bin/bouncer" > <dir>/extensions/bouncer.ts`.
+  Already upgraded? pi/omp block every tool call until the reprint: run the
+  same command from a plain shell, then restart the session.
+
 ## [1.6.0] - 2026-10-12
 
 ### Added
@@ -242,7 +267,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/jrobic/agent-bouncer/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/jrobic/agent-bouncer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/jrobic/agent-bouncer/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/jrobic/agent-bouncer/compare/v1.3.0...v1.4.0

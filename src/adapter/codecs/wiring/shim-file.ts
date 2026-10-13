@@ -17,7 +17,8 @@
 // - `wiring:binary` — that baked `BOUNCER` path resolves to an
 //   executable file (the one thing the shim itself cannot verify at
 //   spawn time without literally trying, which is exactly what its own
-//   fail-closed spawn-failure branch already covers live).
+//   fail-closed spawn-failure branch already covers live), outside a
+//   versioned Homebrew Cellar directory.
 
 import { access, constants as fsConstants, readdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -111,7 +112,11 @@ export function checkShim(result: ShimReadResult, shimPath: string, harnessId: s
   return { id, ok: true, message: `${shimPath} matches the printed shim` };
 }
 
-export async function checkShimBinary(result: ShimReadResult): Promise<DoctorCheck> {
+// `brew upgrade` deletes `<prefix>/Cellar/<formula>/<old version>`;
+// `<prefix>/bin/<exe>` survives it.
+const CELLAR_BIN_PATH = /^(.*)\/Cellar\/[^/]+\/[^/]+\/bin\/([^/]+)$/;
+
+export async function checkShimBinary(result: ShimReadResult, harnessId: string): Promise<DoctorCheck> {
   const id = 'wiring:binary';
   if (result.kind !== 'ok') {
     return { id, ok: false, message: 'cannot verify — the shim itself is unreadable/missing (see wiring:shim)' };
@@ -122,7 +127,6 @@ export async function checkShimBinary(result: ShimReadResult): Promise<DoctorChe
   }
   try {
     await access(bouncerPath, fsConstants.X_OK);
-    return { id, ok: true, message: `${bouncerPath} is executable` };
   } catch {
     return {
       id,
@@ -130,6 +134,21 @@ export async function checkShimBinary(result: ShimReadResult): Promise<DoctorChe
       message: `${bouncerPath} is not executable (or does not exist) — every tool call would fail closed`,
     };
   }
+  const cellar = CELLAR_BIN_PATH.exec(bouncerPath);
+  if (cellar !== null) {
+    const [, prefix, exe] = cellar;
+    const stable = `${prefix}/bin/${exe}`;
+    const reprint = PASTE_SAFE_PATH.test(stable)
+      ? `reprint it with \`bouncer harness shim ${harnessId} --bin ${stable}\``
+      : `reprint it with \`bouncer harness shim ${harnessId}\` and \`--bin\` set to the stable bin/${exe} symlink next to that Cellar directory`;
+    const risk = 'the next `brew upgrade` removes it and every tool call then fails closed';
+    return {
+      id,
+      ok: false,
+      message: `${printable(bouncerPath)} is a versioned Homebrew Cellar path — ${risk}; ${reprint}`,
+    };
+  }
+  return { id, ok: true, message: `${bouncerPath} is executable` };
 }
 
 // Ticket 56 — omp profiles.
