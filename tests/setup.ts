@@ -24,6 +24,24 @@
 // now lives in tests/tmp.ts, the one file under tests/ that creates
 // temporary directories — see installGlobalFallbacks()'s own doc comment
 // there for the fallback-reassignment and exit-cleanup contract.
+//
+// Ticket 58: the env-value guard reads the hook process's own environment, and
+// `run()` defaults to `process.env`. A development account's environment holds
+// real credentials (that is the point of the guard), so the suite must neither
+// depend on them nor carry them: every variable with a protected name
+// (src/protected-names.ts) is dropped from this test process before any test
+// file loads — in-process `run()` calls, and every child a test spawns with
+// `env: { ...process.env, … }` (what the suite's spawns do), inherit that.
+// A child spawned with NO `env` option still gets the shell's original
+// environment (Bun does not see a `delete`): the suite's few such children
+// (CLI rendering, skill, doctor) judge no write, and a new one that does must
+// pass an env — that rule is this comment, nothing enforces it. A test that
+// needs a protected variable hands the guard a fake environment
+// (`run(…, { env })`, `createDispatcher(policy, env)`) rather than setting one
+// on this process.
+import { protectedNamesIn } from '../src/protected-names.ts';
 import { installGlobalFallbacks } from './tmp.ts';
+
+for (const name of protectedNamesIn(process.env)) delete process.env[name];
 
 installGlobalFallbacks();

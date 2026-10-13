@@ -159,6 +159,9 @@ export async function logVerdict(
     build: buildIdentity(build),
     policy: policyDigest(effectivePolicy, activeOverrides, activeRelaxations),
     ...(truncated ? { target_truncated: true } : {}),
+    // The env-value guard's variable NAMES (ticket 58) — never a value; see
+    // Verdict.envVars. Absent on every other verdict.
+    ...(verdict.envVars !== undefined ? { env_vars: verdict.envVars } : {}),
     ...(mode !== undefined ? { mode } : {}),
   }, harness, loaded);
 }

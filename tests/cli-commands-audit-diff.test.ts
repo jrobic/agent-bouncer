@@ -148,6 +148,23 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     expect(section).toContain('sudo');
   });
 
+  test('a shadow env-value entry (extra env_vars field) goes through --diff like any other verdict line', async () => {
+    const dir = freshAccountDir();
+    await writeBouncerLog(dir, [
+      shadowVerdict({
+        tool_name: 'Write',
+        family: 'write-secret',
+        rule_id: 'env-value',
+        target: '/tmp/out.ts',
+        env_vars: ['FAKE_API_TOKEN'],
+      }),
+    ]);
+
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: true });
+    expect(ok).toBe(true);
+    expect(sectionOf(text, 'bouncer would deny/ask, TS allowed')).toContain('env-value');
+  });
+
   test('a matched pair with different verdicts reports a verdict divergence, naming both sides', async () => {
     const dir = freshAccountDir();
     await writeBouncerLog(dir, [

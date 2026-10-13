@@ -7,16 +7,19 @@
 // wiring (Read/Edit/Write/Grep/Glob/MultiEdit field names, `mcp__*`
 // scoping) out of this module and into policy/harness/claude-code.toml.
 //
-// createDispatcher(policy) builds a dispatcher bound to a SPECIFIC policy
+// createDispatcher(policy, env) builds a dispatcher bound to a SPECIFIC policy
 // (baseline, or a merged baseline+overlay+override set from
-// src/policy/load.ts) — this is what makes the compiled binary actually
-// respect an account's overlay: run.ts loads the current policy once per
-// invocation and dispatches through the checkers built from it, never
+// src/policy/load.ts) and to the process environment the env-value guard
+// reads protected values from — this is what makes the compiled binary
+// actually respect an account's overlay: run.ts loads the current policy once
+// per invocation and dispatches through the checkers built from it, never
 // through a module-level baseline-only binding. `inspectPreToolUse` etc.
-// exported below are the baseline-bound convenience form, for callers that
-// don't need overlay awareness (the fixture set, most tests).
+// exported below are the baseline-bound convenience form (policy: the
+// baseline, environment: none), for callers that don't need overlay or
+// environment awareness (most tests).
 
 import { createCommandChecker } from '../command-rules.ts';
+import { createCheckEnvValue, type EnvRecord } from '../env-value-rules.ts';
 import { createCheckMcpWrite } from '../mcp-write-rules.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { RulesPolicy } from '../policy/schema.ts';
@@ -78,16 +81,21 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
 /**
  * Builds a full dispatcher — {inspectPreToolUse, classifyObserve,
  * inspectUserPromptSubmit} — bound to the given policy (baseline, or a
- * merged baseline+overlay+override set from src/policy/load.ts). This is
- * what the adapter's run.ts uses for real, per-invocation, overlay-aware
- * dispatch.
+ * merged baseline+overlay+override set from src/policy/load.ts) and to the
+ * process environment the env-value guard (ticket 58) reads protected values
+ * from. This is what the adapter's run.ts uses for real, per-invocation,
+ * overlay-aware dispatch. `env` is required, never defaulted: a call site that
+ * has no environment to offer says so with `{}` (the baseline-bound exports
+ * below, the fixture set, `check`, replay), and a path that forgot to pass one
+ * cannot compile — the guard must not vanish by omission.
  */
-export function createDispatcher(policy: RulesPolicy): Dispatcher {
+export function createDispatcher(policy: RulesPolicy, env: EnvRecord): Dispatcher {
   const command = createCommandChecker(policy.command);
   const secret = createSecretChecker(policy.secret, policy.command.git.config_read_modes);
   const protectedWrite = createProtectedWriteChecker(policy.protected_write, policy.harness);
   const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write);
   const scanSecretsBound = createScanSecrets(policy.write_secret);
+  const checkEnvValueBound = createCheckEnvValue(policy.write_secret, env);
   const scanPromptBound = createScanPrompt(policy.prompt);
 
   function inspectCommandFamily(call: NeutralCall): FamilyVerdict | null {
@@ -163,10 +171,20 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
     return null;
   }
 
-  function inspectWriteSecretFamily(call: NeutralCall): FamilyVerdict | null {
+  // The regex scan of the call's `text` (Write/Edit-shaped content).
+  function inspectWriteSecretFamily(call: NeutralCall, target: string): FamilyVerdict | null {
     if (call.text === null) return null;
-    const target = call.paths[0] ?? `(${call.toolName})`;
     const verdict = scanSecretsBound(call.text, target);
+    return verdict ? { family: 'write-secret', verdict } : null;
+  }
+
+  // The exact VALUE of a protected environment variable, in clear/base64/hex
+  // (src/env-value-rules.ts). Same surface as the regex scan above — the
+  // call's `text` — and the same family: it is `write_secret` with a value
+  // instead of a regex.
+  function inspectEnvValue(call: NeutralCall, target: string): FamilyVerdict | null {
+    if (call.text === null) return null;
+    const verdict = checkEnvValueBound(call.text, target);
     return verdict ? { family: 'write-secret', verdict } : null;
   }
 
@@ -193,7 +211,16 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
     const protectedWriteHit = await inspectProtectedWriteFamily(call);
     if (protectedWriteHit) hits.push(protectedWriteHit);
 
-    const writeSecretHit = inspectWriteSecretFamily(call);
+    // What a write-shaped verdict names as its target: the path, or the tool
+    // when the call carries none. Computed once for both text inspections.
+    const target = call.paths[0] ?? `(${call.toolName})`;
+
+    // Ahead of the regex scan: on a tie (both block) the first hit wins, and
+    // the one that names the variable is the more specific of the two.
+    const envValueHit = inspectEnvValue(call, target);
+    if (envValueHit) hits.push(envValueHit);
+
+    const writeSecretHit = inspectWriteSecretFamily(call, target);
     if (writeSecretHit) hits.push(writeSecretHit);
 
     const mcpWriteHit = inspectMcpWriteFamily(call);
@@ -222,7 +249,9 @@ export function createDispatcher(policy: RulesPolicy): Dispatcher {
   return { inspectPreToolUse, classifyObserve, inspectUserPromptSubmit };
 }
 
-const BASELINE_DISPATCHER = createDispatcher(BASELINE.rules);
+// No environment: the baseline-bound exports below carry no protected value
+// to look for, so the env-value guard is silent through them.
+const BASELINE_DISPATCHER = createDispatcher(BASELINE.rules, {});
 
 /** Uses the embedded baseline (no overlay awareness) — for callers that
  * don't need it: the fixture set, most tests. */

@@ -86,8 +86,10 @@ the target harness's own declaration (`policy/harness/<id>.toml`'s
 (the default, `claude-code`), which reproduces the pre-ADR-0006 binary
 byte for byte.
 
-`run` reads stdin and local policy files, writes guarded verdicts to the local
-JSONL audit log, and makes no network request in the decision path.
+`run` reads stdin, local policy files and its own process environment (to
+look up the values of protected variables for [the env-value row](policy.md#the-env-value-row)
+— a value reaches no output), writes guarded verdicts to the local JSONL audit
+log, and makes no network request in the decision path.
 
 ```sh
 bouncer run [--harness <id>] < envelope.json

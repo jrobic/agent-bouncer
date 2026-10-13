@@ -219,9 +219,14 @@ const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '16 credential-printer \\bgh\\s+auth\\s+token\\b|\\b(?:gh|glab)\\s+auth\\s+status\\b[^|;&\\n]*\\s(?:--show-token|-[a-zA-Z]*t[a-zA-Z]*)\\b|\\bop\\s+read\\b|\\bop\\s+item\\s+get\\b[^|;&\\n]*\\s(?:--reveal|--fields)\\b|\\bgcloud\\s+auth\\s+print-(?:access|identity)-token\\b|\\baws\\s+sts\\s+(?:get-session-token|assume-role)\\b|\\bvault\\s+(?:read|kv\\s+get)\\b|\\bdoppler\\s+secrets\\s+download\\b|\\bglab\\s+config\\s+get\\b[^|;&\\n]*\\btoken\\b|\\bgit\\s+credential\\s+fill\\b|\\bdocker-credential-[A-Za-z0-9._-]+\\s+get\\b|\\b(?:npm|pnpm)\\s+config\\s+get\\b[^|;&\\n]*_auth(?:Token)?\\b|\\baws\\s+configure\\s+(?:get\\b[^|;&\\n]*\\baws_(?:secret_access_key|session_token)\\b|export-credentials\\b) ',
 ];
 
-// policy/write-secret.toml `rules.write_secret` — an identity control: 8
-// entries, none of which this port touches (no signature added, removed,
-// or widened).
+// policy/write-secret.toml `rules.write_secret` — an identity control for the
+// first 8 entries (no signature added, removed, or widened by the port), plus
+// ticket 58's ninth row: `env-value`, recognised by the engine
+// (`special = "env_value"`, src/env-value-rules.ts) and never by its regex,
+// which only gates which texts the guard looks at. The row's `special` is not
+// part of the digest text: it is pinned by behaviour instead — the guard only
+// fires through that `special` (tests/adapter-run-env-value.test.ts, the
+// `env-value` write-secret case and fixtures/write-secret.json).
 const EXPECTED_WRITE_SECRET_DIGEST: readonly string[] = [
   '0 private-key -----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY----- ',
   '1 aws-access-key-id \\bAKIA[0-9A-Z]{16}\\b ',
@@ -231,6 +236,7 @@ const EXPECTED_WRITE_SECRET_DIGEST: readonly string[] = [
   '5 google-api-key \\bAIza[0-9A-Za-z_-]{35}\\b ',
   '6 stripe-secret-key \\b(?:sk|rk)_live_[A-Za-z0-9]{24,}\\b ',
   '7 jwt \\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b ',
+  '8 env-value [\\s\\S] ',
 ];
 
 // policy/prompt.toml `rules.prompt` — the other identity control. The
@@ -258,7 +264,7 @@ describe('guards-digest: tamper lock — the five tabular guards', () => {
     expect(ruleDigest(BASELINE.rules.secret.bash)).toEqual([...EXPECTED_SECRET_DIGEST]);
   });
 
-  test('write_secret matches the frozen ordered digest (8 entries, identity control)', () => {
+  test('write_secret matches the frozen ordered digest (8 token shapes + the env-value row)', () => {
     expect(ruleDigest(BASELINE.rules.write_secret)).toEqual([...EXPECTED_WRITE_SECRET_DIGEST]);
   });
 

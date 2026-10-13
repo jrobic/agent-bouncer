@@ -19,7 +19,10 @@ export interface RegexRule {
   // An engine-recognized structural matcher. It receives the effective
   // compiled row: `"git_remote_url"` owns its Git predicate, while
   // `"docker_destructive"` applies the row's regex and exception to
-  // executable Docker candidates. Replaces object-identity branches.
+  // executable Docker candidates, and `"env_value"` (write_secret's
+  // `env-value` row) uses them to gate which texts the env-value guard looks
+  // at once it has found a protected value (src/env-value-rules.ts). Replaces
+  // object-identity branches.
   readonly special?: string;
   // A per-row static override of the family's default verdict (e.g.
   // secret.path rows default to "block"; a row that should only confirm

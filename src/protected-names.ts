@@ -40,3 +40,12 @@ const PROTECTED_NAME = new RegExp(`^${PROTECTED_NAME_SOURCE}$`);
 export function isProtectedName(name: string): boolean {
   return PROTECTED_NAME.test(name);
 }
+
+/**
+ * The protected names an environment holds — what a caller deletes to hand a
+ * child, or the rest of a process, an environment without them (the test
+ * preload, the protocol capture script).
+ */
+export function protectedNamesIn(env: Readonly<Record<string, unknown>>): string[] {
+  return Object.keys(env).filter(isProtectedName);
+}
