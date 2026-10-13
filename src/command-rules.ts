@@ -1205,9 +1205,11 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-// `globals` holds the global-option tokens (and their values) written before the subcommand;
-// `assignments` the `NAME=value` words written before `git`.
-type GitCommand = { sub: string; rest: string[]; globals?: string[]; assignments?: string[]; forceConfirm?: true; };
+// `globals` holds the global options written before the subcommand, each with
+// the value it took from the next token; `assignments` the `NAME=value` words
+// written before `git`.
+type GitGlobalOption = { option: string; value?: string; };
+type GitCommand = { sub: string; rest: string[]; globals?: GitGlobalOption[]; assignments?: string[]; forceConfirm?: true; };
 
 type RedirectionFilteredTokens = Readonly<{
   tokens: readonly ShellToken[];
@@ -1262,12 +1264,19 @@ export function extractGitSubcommandFromTokens(
   const head = filtered.tokens[i]!.value;
   if (head !== 'git' && !head.endsWith('/git')) return null;
   i++;
-  const globalsStart = i;
+  const globals: GitGlobalOption[] = [];
   while (i < filtered.tokens.length && filtered.tokens[i]!.value.startsWith('-')) {
-    i += GIT_OPTS_WITH_ARG.has(filtered.tokens[i]!.value) ? 2 : 1;
+    const option = filtered.tokens[i]!.value;
+    if (GIT_OPTS_WITH_ARG.has(option)) {
+      const value = filtered.tokens[i + 1]?.value;
+      globals.push(value === undefined ? { option } : { option, value });
+      i += 2;
+    } else {
+      globals.push({ option });
+      i++;
+    }
   }
   if (i >= filtered.tokens.length) return null;
-  const globals = filtered.tokens.slice(globalsStart, i).map((token) => token.value);
   const assignments = filtered.tokens
     .slice(0, prefix.index)
     .map((token) => token.value)
@@ -1565,10 +1574,8 @@ function askFlagMatches(flags: readonly string[], token: string): boolean {
   });
 }
 
-// `-C` always consumes the next token, so global tokens that are only
-// `-C <dir>` pairs sit at every even index.
-function hasOnlyChdirGlobals(globals: readonly string[]): boolean {
-  return globals.every((token, index) => index % 2 === 1 || token === '-C');
+function hasOnlyChdirGlobals(globals: readonly GitGlobalOption[]): boolean {
+  return globals.every(({ option }) => option === '-C');
 }
 
 function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: CommandGitPolicy): boolean {
@@ -1639,15 +1646,13 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, git: Comman
     }
   }
 
-  const options = globals ?? [];
-  for (let index = 0; index < options.length; index++) {
-    const option = options[index]!;
+  for (const { option, value: nextToken } of globals ?? []) {
     const equals = option.startsWith('--') ? option.indexOf('=') : -1;
     const name = equals === -1 ? option : option.slice(0, equals);
 
     if (name === '-c' || name === '--config-env') {
       // `-c` and a separate `--config-env` take their setting from the next token.
-      const setting = equals === -1 ? (options[++index] ?? '') : option.slice(equals + 1);
+      const setting = equals === -1 ? (nextToken ?? '') : option.slice(equals + 1);
       const settingEquals = setting.indexOf('=');
       const key = settingEquals === -1 ? setting : setting.slice(0, settingEquals);
       // `--config-env=key=VAR` reads the value from VAR when git runs.
@@ -1660,7 +1665,6 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, git: Comman
       const shown = option.includes('=') ? option.slice(0, option.indexOf('=')) : option;
       return `global option ${shown} is not on the git-config-exec allow-list`;
     }
-    if (GIT_OPTS_WITH_ARG.has(option)) index++;
   }
   return null;
 }
