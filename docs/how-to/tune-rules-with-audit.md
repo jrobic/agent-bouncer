@@ -69,6 +69,12 @@ manual policy changes.
    unchanged. Regex-rule suggestions apply to the entire rule; inspect
    its scope before copying.
 
+   A Git subcommand the baseline already governs — one of the four
+   declarative tables, or `checkout` and `restore` — gets no such block:
+   relaxing `safe_subcommands` for it would cancel its conditional rule.
+   A `#`-comment names the governing form instead and says to substitute
+   it with an overlay entry (`docs/reference/policy.md`, § `rules.command.git`).
+
 3. Read every suggestion before touching your overlay. `--suggest` never
    writes to `<configDir>/bouncer/policy.toml` or any other file — it
    only prints to stdout. Do not act on **Policy delta**; it only explains

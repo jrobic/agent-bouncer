@@ -20,6 +20,7 @@ import {
 } from '../src/adapter/audit.ts';
 import type { AuditEntry } from '../src/adapter/audit.ts';
 import { createCheckMcpWrite } from '../src/mcp-write-rules.ts';
+import { gitGoverningForms } from '../src/policy/git-forms.ts';
 import { resolvableRuleIds } from '../src/policy/lint.ts';
 import { loadPolicyFromOverlayText } from '../src/policy/load.ts';
 
@@ -456,6 +457,36 @@ describe('renderSuggestions', () => {
     const result = loadPolicyFromOverlayText(text);
     expect(result.warnings).toEqual([]);
     expect(result.policy.command.git.safe_subcommands).not.toContain('push');
+  });
+
+  describe('a git subcommand the policy already governs is never offered a blanket safe_subcommands relax', () => {
+    const governedGitSubs = gitGoverningForms(BASELINE_POLICY.command.git);
+
+    test.each([
+      ['init', 'git init --bare /tmp/x', 'a `safe_flags` entry'],
+      ['branch', 'git branch -D old-branch', 'an `ask_flags` entry'],
+      ['worktree', 'git worktree remove w', 'a `safe_first_arg` entry'],
+      ['apply', 'git apply p.diff', 'a `safe_grammar` entry'],
+      ['checkout', 'git checkout -f', 'its engine rule'],
+    ])('%s: a comment names the governing form, and no [[relax]] block is emitted', (sub, target, governing) => {
+      const clusters = clusterEntries([entry({ target }), entry({ target })]);
+      const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
+
+      expect(text).not.toContain('[[relax]]');
+      expect(text).not.toContain('safe_subcommands"');
+      expect(text).toContain(`# git-protected: git ${sub} is governed by ${governing}`);
+      expect(text).toContain('substitute');
+      expect(text).toContain('fired 2x');
+      expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
+    });
+
+    test('a subcommand no table governs still gets the commented blanket relax', () => {
+      const clusters = clusterEntries([entry({ target: 'git gc --aggressive' })]);
+      const text = renderSuggestions(clusters, resolvable, { days: 30, governedGitSubs });
+
+      expect(text).toContain('# [[relax]]');
+      expect(text).toContain('# value = "gc"');
+    });
   });
 
   test('emits a [[override]] relax snippet for a resolvable regex-rule id', () => {

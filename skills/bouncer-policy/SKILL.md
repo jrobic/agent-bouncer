@@ -86,7 +86,7 @@ Use this order. Move to a wider lever only after the human rejects the narrower 
    reason = "<reason>"
    ```
 
-5. `[[relax]]` on `command.git.safe_subcommands` affects every form of the named Git subcommand, including `--force`; keep this block commented exactly as `--suggest` emits it until the human uncomments it.
+5. `[[relax]]` on `command.git.safe_subcommands` affects every form of the named Git subcommand, including `--force`; keep this block commented exactly as `--suggest` emits it until the human uncomments it. Never use it for a subcommand the baseline already governs (`init`, `branch`, …): `--suggest` names the governing form for those, and the lever is a substitute entry (lever 4 for `safe_flags`).
 
    ```toml
    [[relax]]

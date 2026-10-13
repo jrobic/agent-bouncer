@@ -266,10 +266,30 @@ describe('runAudit: current-policy replay', () => {
     expect(sectionOf(report.text, 'Conditional rules that fired')).toContain('git-conditional-init');
     expect(sectionOf(report.text, 'Dead conditional rules')).not.toContain('git-conditional-init');
 
-    // The allowed shape is no longer friction, so it is not suggested for relaxation.
+    // The allowed shape is no longer friction, so it is not suggested at all;
+    // the shape that still asks is governed by safe_flags, so it is named,
+    // not offered a blanket relax.
     const suggestion = await runAudit({ days: 30, suggest: true, diff: false });
-    expect(suggestion.text).toContain('git init --bare');
+    expect(suggestion.text).toContain('# git-protected: git init is governed by a `safe_flags` entry');
+    expect(suggestion.text).not.toContain('[[relax]]');
     expect(suggestion.text).not.toContain('git init -q');
+  });
+
+  test('--suggest names the governing form for governed git subcommands and still offers a relax for an ungoverned one', async () => {
+    const dir = freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git init --bare /tmp/scratch.git' }),
+      verdictLine({ target: 'git branch -D old-branch' }),
+      verdictLine({ target: 'git gc --aggressive' }),
+    ]);
+
+    const { text } = await runAudit({ days: 30, suggest: true, diff: false });
+    expect(text).toContain('# git-protected: git init is governed by a `safe_flags` entry');
+    expect(text).toContain('# git-protected: git branch is governed by an `ask_flags` entry');
+    expect(text).not.toContain('# value = "init"');
+    expect(text).not.toContain('# value = "branch"');
+    expect(text).toContain('# value = "gc"');
+    expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
   });
 
   test('retains a legacy-truncated entry as logged and counts it separately from replay', async () => {
