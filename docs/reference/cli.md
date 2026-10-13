@@ -517,6 +517,19 @@ carrying it stays identical across accounts and machines):
 [pass] wiring:binary — /path/to/dist/bouncer is executable
 ```
 
+`wiring:binary` also fails a shim whose baked path is a versioned Homebrew
+Cellar path, `<prefix>/Cellar/<formula>/<version>/bin/<exe>`, even while that
+file is executable: the next `brew upgrade` removes it and the shim then
+fails closed on every tool call. The message names the reprint command with
+the stable `<prefix>/bin/<exe>` symlink when that path is safe to paste. A
+Cellar path that is already gone reports the ordinary "not executable (or
+does not exist)" line instead:
+
+```
+[pass] wiring:shim — extensions/bouncer.ts matches the printed shim
+[fail] wiring:binary — /opt/homebrew/Cellar/bouncer/1.6.0/bin/bouncer is a versioned Homebrew Cellar path — the next `brew upgrade` removes it and every tool call then fails closed; reprint it with `bouncer harness shim pi-agent --bin /opt/homebrew/bin/bouncer`
+```
+
 **omp profiles (ticket 56):** omp runs a profile (`OMP_PROFILE`,
 `PI_PROFILE`, `--profile`) with its own agent directory,
 `~/.omp/profiles/<name>/agent`, and loads no extension from `~/.omp/agent`
@@ -830,16 +843,19 @@ Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7,
 ticket 15c: pi-agent and omp — they share one printed file) — the dumb,
 policy-free extension that forwards the harness's own tool-call/session-
 start event to `bouncer run --harness <id>` and returns bouncer's stdout
-to the harness as is. By default, `BOUNCER` is baked to THIS process's
-absolute path (`process.execPath`) at print time, overridable at the
-shim's own RUNTIME by `BOUNCER_BIN`.
+to the harness as is. By default, `BOUNCER` is baked to the path bouncer
+was invoked through, without `realpath` resolution: `bouncer` found on
+`PATH` or `/opt/homebrew/bin/bouncer` bakes that stable symlink, not the
+versioned Cellar path behind it. When that path does not lead to the
+running binary, the default is the binary's resolved path
+(`process.execPath`). Overridable at the shim's own RUNTIME by
+`BOUNCER_BIN`.
 
-Use `--bin <absolute path>` when the printing binary lives at a
-versioned path such as a Homebrew Cellar release. The literal path is
-baked without `realpath` resolution, so a stable symlink such as
-`/opt/homebrew/bin/bouncer` remains the shim's fallback. `doctor
---harness pi-agent` re-renders against that installed literal path and
-then checks whether it resolves to an executable.
+Use `--bin <absolute path>` to bake a path of your choosing — for instance
+when the printing binary is not the one the shim should call. The literal
+path is baked without `realpath` resolution. `doctor --harness pi-agent`
+re-renders against the installed literal path and then checks whether it
+resolves to an executable that is not a versioned Homebrew Cellar path.
 
 ```sh
 bouncer harness shim <id> [--bin <absolute path>]
@@ -847,14 +863,14 @@ bouncer harness shim <id> [--bin <absolute path>]
 
 **Flags:**
 
-- `--bin <absolute path>` — bake this literal absolute path instead of
-  `process.execPath`; when present, the flag accepts exactly one value.
+- `--bin <absolute path>` — bake this literal absolute path instead of the
+  invoked path; when present, the flag accepts exactly one value.
 
 Missing values, relative paths, repeated flags, and other extra
-arguments are usage errors. The default remains `process.execPath`;
-always run the command through the compiled binary you intend to keep
-installed, never `bun run src/cli.ts` (that bakes in `bun`'s own path
-instead of a useful one).
+arguments are usage errors. Always run the command through the compiled
+binary you intend to keep installed, never `bun run src/cli.ts` (there
+`argv0` is `bun`, so the default bakes `bun`'s own path instead of a
+useful one).
 
 **Output:** the shim source, verbatim, with a trailing newline (no extra
 one added on top of it — `doctor --harness <id>`'s own `wiring:shim`

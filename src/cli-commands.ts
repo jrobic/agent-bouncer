@@ -745,10 +745,8 @@ export async function runHarnessList(): Promise<CommandResult> {
 /**
  * `bouncer harness shim <id> [--bin <absolute path>]` (ADR-0006 § 7,
  * ticket 15c) — prints the embedded shim for an in-process harness
- * (pi-agent today), `BOUNCER` baked to `bouncerPath`. The CLI defaults
- * that path to this process's own absolute path (`process.execPath`),
- * but may preserve a stable symlink path passed through `--bin`.
- * `BOUNCER_BIN` still overrides it at the shim's own runtime. A usage
+ * (pi-agent today), `BOUNCER` baked to `bouncerPath`. `BOUNCER_BIN`
+ * still overrides it at the shim's own runtime. A usage
  * error (never a crash) for a harness with no printable shim — a
  * stdin-json hook harness (claude-code, codex), or an id nothing embeds
  * at all.
@@ -760,7 +758,7 @@ export async function runHarnessList(): Promise<CommandResult> {
  * redirected this exact output into — a second, `console.log`-added
  * newline would make every install "drift" by construction.
  */
-export function runHarnessShim(harnessId: string, bouncerPath = process.execPath): CommandResult {
+export function runHarnessShim(harnessId: string, bouncerPath: string): CommandResult {
   const rendered = renderShim(harnessId, bouncerPath);
   if (rendered === undefined) {
     return { text: `bouncer: harness ${JSON.stringify(harnessId)} has no printable shim`, ok: false };

@@ -28,7 +28,7 @@
 // future re-capture against a newer binary — see the 15a/15b report for
 // how to re-run it.
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderShim } from '../src/adapter/shim.ts';
@@ -617,13 +617,18 @@ function main(): void {
       // reason that has nothing to do with what this fixture proves
       // (SessionStart rendering). `process.execPath` (this capture
       // process's own Bun binary) is a genuinely executable file
-      // wherever this ever runs; the healthy case's stdout is `null`
-      // regardless of WHICH real path was baked, so this choice is
-      // never itself part of the committed fixture's byte contract.
+      // wherever this ever runs (through a symlink: a Homebrew Bun's own
+      // path is a Cellar path, which `wiring:binary` fails); the healthy
+      // case's stdout is `null` regardless of WHICH real path was baked, so
+      // this choice is never itself part of the committed fixture's byte
+      // contract.
       const shimCase = testCase.settings as { shimHealthy: boolean; } | undefined;
       if (shimCase?.shimHealthy === true) {
+        const stableBin = join(configDir, 'bin', 'bouncer');
         mkdirSync(join(configDir, 'extensions'), { recursive: true });
-        writeFileSync(join(configDir, CAPTURE.settingsFile), renderShim('pi-agent', process.execPath)!);
+        mkdirSync(join(configDir, 'bin'), { recursive: true });
+        symlinkSync(process.execPath, stableBin);
+        writeFileSync(join(configDir, CAPTURE.settingsFile), renderShim('pi-agent', stableBin)!);
       }
     }
 

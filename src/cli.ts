@@ -24,6 +24,7 @@ import {
   runRulesList,
   runSkill,
 } from './cli-commands.ts';
+import { invokedBouncerPath } from './invoked-path.ts';
 
 // Reads stdin and runs it, with the read itself inside the same fail-open
 // contract as a malformed envelope: an unreadable stdin (a broken pipe, a
@@ -161,8 +162,15 @@ async function main(): Promise<void> {
         console.error(`${HOOK_NAME}: harness shim requires an id argument, e.g. harness shim pi-agent`);
         process.exit(1);
       }
-      let bouncerPath = process.execPath;
-      if (shimArgs.length > 0) {
+      let bouncerPath: string;
+      if (shimArgs.length === 0) {
+        bouncerPath = invokedBouncerPath({
+          argv0: process.argv0,
+          execPath: process.execPath,
+          path: process.env.PATH,
+          cwd: process.cwd(),
+        });
+      } else {
         const [flag, value] = shimArgs;
         if (shimArgs.length !== 2 || flag !== '--bin' || value === undefined) {
           console.error(`${HOOK_NAME}: harness shim --bin accepts exactly one absolute path`);

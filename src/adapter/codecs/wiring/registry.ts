@@ -124,7 +124,7 @@ const SHIM_FILE_CODEC: WiringCodec = {
     const path = pathOverride ?? shimPathFor(harness);
     const result = await readShimFile(path);
     const profileChecks = pathOverride === undefined ? await checkProfileShims(harness) : [];
-    return { checks: [checkShim(result, path, harness.id), await checkShimBinary(result), ...profileChecks] };
+    return { checks: [checkShim(result, path, harness.id), await checkShimBinary(result, harness.id), ...profileChecks] };
   },
   formatCanonicalCanaryEntry: async (_pathOverride, harness) => ({
     error: 'shim-file wiring has no canary entry — the printed shim already fails closed on its own '
