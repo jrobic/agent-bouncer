@@ -1532,9 +1532,9 @@ const NUMERIC_SHORT_GROUP = /^-\d+$/;
 function askFlagMatches(flags: readonly string[], token: string): boolean {
   if (flags.includes(token)) return true;
   if (!token.startsWith('-')) return false;
+  const equals = token.indexOf('=');
 
   if (token.startsWith('--')) {
-    const equals = token.indexOf('=');
     const name = equals === -1 ? token : token.slice(0, equals);
     if (equals !== -1 && flags.includes(name)) return true;
     if (name.length <= 2) return false;
@@ -1542,7 +1542,6 @@ function askFlagMatches(flags: readonly string[], token: string): boolean {
   }
 
   if (NUMERIC_SHORT_GROUP.test(token)) return false;
-  const equals = token.indexOf('=');
   const end = equals === -1 ? token.length : equals;
   return flags.some((flag) => {
     if (flag.length !== 2 || flag[0] !== '-' || flag[1] === '-') return false;
