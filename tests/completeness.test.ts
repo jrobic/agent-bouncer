@@ -68,9 +68,9 @@ const ids = (rules: readonly RegexRule[]) => rules.map((r) => r.id);
 
 describe('completeness: every effective rule carries a behavioural case', () => {
   test('command rules', () => {
-    // Three ids are decided in code rather than by a table row:
-    // `rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`
-    // (the git policy).
+    // Four ids are decided in code rather than by a table row:
+    // `rm-rf-dangerous`, `sudo` (privilege escalation), `git-protected`
+    // and `git-config-exec` (both the git policy).
     expectRuleIdsToMatch(
       'command',
       [
@@ -78,6 +78,7 @@ describe('completeness: every effective rule carries a behavioural case', () => 
         'rm-rf-dangerous',
         'sudo',
         'git-protected',
+        'git-config-exec',
       ],
       coveredRuleIds('command-rules.test.ts'),
     );

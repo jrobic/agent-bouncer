@@ -380,6 +380,82 @@ config_read_modes = [
     "list",
   ]
 
+# `git-config-exec`: what may stand before the git subcommand without asking.
+# A subcommand this section allows still runs any program named by a `-c`
+# setting, `--config-env`, `--exec-path` or an environment prefix (`git -c
+# core.fsmonitor=<shell> status`, `GIT_EXTERNAL_DIFF=<program> git diff`), so
+# each of them asks unless it is listed here. A subcommand that asks anyway
+# keeps `git-protected`. An overlay widens these three lists through
+# `[[relax]]` only (reason mandatory); see docs/reference/policy.md §
+# git-config-exec.
+#
+# Global options, by name. `--git-dir`, `--work-tree` and `--bare` run nothing
+# and are listed so that they pass; the subcommand's own verdict still
+# applies. `-c` and `--config-env` are not here: their settings are judged by
+# `allowed_config`.
+allowed_global_options = [
+    "-C",
+    "--no-pager",
+    "-P",
+    "-p",
+    "--paginate",
+    "--no-replace-objects",
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
+    "--no-optional-locks",
+    "--no-advice",
+    "--git-dir",
+    "--work-tree",
+    "--bare",
+  ]
+# Config keys for `-c` and `--config-env`. `key` allows any value (a trailing
+# `*` makes it a prefix), `key=value` allows that one value. Keys are compared
+# without regard to case, values exactly.
+allowed_config = [
+    "user.*",
+    "color.*",
+    "advice.*",
+    "init.defaultBranch",
+    "commit.gpgsign",
+    "tag.gpgsign",
+    "tag.forceSignAnnotated",
+    "push.followTags",
+    "gc.auto",
+    "core.quotepath",
+    "core.hooksPath=/dev/null",
+    "core.pager=cat",
+    "core.fsmonitor=false",
+    "core.editor=true",
+    "core.editor=:",
+    "sequence.editor=true",
+    "sequence.editor=:",
+  ]
+# Environment variables for a prefix, same entry grammar, names compared
+# exactly. `GIT_DIR` and `GIT_WORK_TREE` are the variable forms of the
+# `--git-dir` and `--work-tree` options listed above.
+allowed_env = [
+    "GIT_AUTHOR_*",
+    "GIT_COMMITTER_*",
+    "GIT_TERMINAL_PROMPT",
+    "GIT_INDEX_FILE",
+    "GIT_TRACE*",
+    "LC_ALL",
+    "LANG",
+    "TZ",
+    "NO_COLOR",
+    "CI",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_EDITOR=true",
+    "GIT_EDITOR=:",
+    "GIT_SEQUENCE_EDITOR=true",
+    "GIT_SEQUENCE_EDITOR=:",
+    "GIT_PAGER=cat",
+    "PAGER=cat",
+  ]
+
 [[rules.command.git.ask_flags]]
 sub = "branch"
 flags = [

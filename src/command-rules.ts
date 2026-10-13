@@ -421,7 +421,11 @@ export const GIT_OPTS_WITH_ARG: ReadonlySet<string> = new Set([
   '--namespace',
   '--super-prefix',
   '--exec-path',
+  '--config-env',
 ]);
+
+// A `NAME=value` word in front of a command: an environment assignment.
+const ENV_ASSIGNMENT = /^\w+=/;
 
 const GIT_SHA = /^[0-9a-f]{7,64}$/i;
 
@@ -1196,8 +1200,9 @@ function dockerDestructiveMatches(rule: CompiledRule, command: string): boolean 
 // (`command git …`), env assignments (`GIT_SEQUENCE_EDITOR=… git …`), and global
 // options (`git -C <path> …`). Returns null when the segment is not a git
 // command (so `echo git push` is ignored — git is an argument, not the verb).
-// `globals` holds the global-option tokens (and their values) written before the subcommand.
-type GitCommand = { sub: string; rest: string[]; globals?: string[]; forceConfirm?: true; };
+// `globals` holds the global-option tokens (and their values) written before the subcommand;
+// `assignments` the `NAME=value` words written before `git`.
+type GitCommand = { sub: string; rest: string[]; globals?: string[]; assignments?: string[]; forceConfirm?: true; };
 
 type RedirectionFilteredTokens = Readonly<{
   tokens: readonly ShellToken[];
@@ -1258,10 +1263,15 @@ export function extractGitSubcommandFromTokens(
   }
   if (i >= filtered.tokens.length) return null;
   const globals = filtered.tokens.slice(globalsStart, i).map((token) => token.value);
+  const assignments = filtered.tokens
+    .slice(0, prefix.index)
+    .map((token) => token.value)
+    .filter((value) => ENV_ASSIGNMENT.test(value));
   return {
     sub: filtered.tokens[i]!.value,
     rest: filtered.tokens.slice(i + 1).map((token) => token.value),
     ...(globals.length > 0 ? { globals } : {}),
+    ...(assignments.length > 0 ? { assignments } : {}),
     ...(prefix.ambiguous || filtered.forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1280,7 +1290,7 @@ export function consumeCommandPrefixes(
   while (i < tokens.length) {
     const token = tokens[i];
     if (token === undefined) break;
-    if (/^\w+=/.test(token.value)) {
+    if (ENV_ASSIGNMENT.test(token.value)) {
       i++;
       continue;
     }
@@ -1296,7 +1306,7 @@ export function consumeCommandPrefixes(
     while (i < tokens.length) {
       const option = tokens[i];
       if (option === undefined) break;
-      if (policy.acceptsAssignments && /^\w+=/.test(option.value)) {
+      if (policy.acceptsAssignments && ENV_ASSIGNMENT.test(option.value)) {
         i++;
         continue;
       }
@@ -1594,6 +1604,56 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
   return true;
 }
 
+// Whether `name` is on one of the `git-config-exec` allow-lists, for a setting
+// of that `value` (null when it has none, or when it is only known at run
+// time). Entry grammar: CommandGitPolicy.allowed_config. A `*` only means
+// something at the end of an entry without a value.
+function onAllowList(entries: readonly string[], name: string, value: string | null, foldCase: boolean): boolean {
+  const subject = foldCase ? name.toLowerCase() : name;
+  return entries.some((entry) => {
+    const equals = entry.indexOf('=');
+    const entryName = equals === -1 ? entry : entry.slice(0, equals);
+    const pattern = foldCase ? entryName.toLowerCase() : entryName;
+    if (equals !== -1) return subject === pattern && value === entry.slice(equals + 1);
+    return pattern.endsWith('*') ? subject.startsWith(pattern.slice(0, -1)) : subject === pattern;
+  });
+}
+
+// What, in the words written around `git`, can make it run a program the
+// policy does not list: the first environment assignment, then the first
+// global option, `-c` or `--config-env` setting, as a short phrase for the
+// verdict's reason; null when every one is allowed. Read lexically, like the
+// rest of the git policy — git is not called and no file is read.
+function gitConfigExecOffender({ globals, assignments }: GitCommand, git: CommandGitPolicy): string | null {
+  for (const assignment of assignments ?? []) {
+    const equals = assignment.indexOf('=');
+    const name = assignment.slice(0, equals);
+    if (!onAllowList(git.allowed_env, name, assignment.slice(equals + 1), false)) return `environment variable ${name}`;
+  }
+
+  const options = globals ?? [];
+  for (let index = 0; index < options.length; index++) {
+    const option = options[index]!;
+    const equals = option.startsWith('--') ? option.indexOf('=') : -1;
+    const name = equals === -1 ? option : option.slice(0, equals);
+
+    if (name === '-c' || name === '--config-env') {
+      // `-c` and a separate `--config-env` take their setting from the next token.
+      const setting = equals === -1 ? (options[++index] ?? '') : option.slice(equals + 1);
+      const settingEquals = setting.indexOf('=');
+      const key = settingEquals === -1 ? setting : setting.slice(0, settingEquals);
+      // `--config-env=key=VAR` reads the value from VAR when git runs.
+      const value = name === '-c' && settingEquals !== -1 ? setting.slice(settingEquals + 1) : null;
+      if (!onAllowList(git.allowed_config, key, value, true)) return `${name} ${key}`;
+      continue;
+    }
+
+    if (!git.allowed_global_options.includes(name)) return `global option ${name}`;
+    if (GIT_OPTS_WITH_ARG.has(option)) index++;
+  }
+  return null;
+}
+
 function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
   for (const tokens of tokenizeShellSegments(cmd).segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
@@ -1603,6 +1663,17 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
         verdict: 'confirm',
         ruleId: 'git-protected',
         reason: `git ${parsed.sub} can rewrite history, mutate a remote, or discard work — confirm before running`,
+        target: cmd,
+      };
+    }
+    // Judged after the subcommand, so that a subcommand that asks keeps
+    // `git-protected` and this rule only turns an allow into a confirm.
+    const offender = gitConfigExecOffender(parsed, git);
+    if (offender !== null) {
+      return {
+        verdict: 'confirm',
+        ruleId: 'git-config-exec',
+        reason: `${offender} can make git run an arbitrary program and is not on the allow-list — confirm before running`,
         target: cmd,
       };
     }

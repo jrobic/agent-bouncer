@@ -1097,6 +1097,68 @@ describe('command-rules: ask_flags matching (generic, on an ungoverned subcomman
   });
 });
 
+// The baseline's mechanism matrix (keys, pairs, --config-env, --exec-path,
+// prefixes, wrappers) lives in fixtures/command.json as the conformance
+// contract and is not repeated here: these tests cover what a fixture cannot
+// say — the words the human reads on the prompt, a subcommand the baseline
+// never allows, and the shapes of a list ENTRY the baseline has no instance
+// of (an overlay can write them).
+describe('command-rules: git-config-exec (what a fixture cannot say)', () => {
+  const git = BASELINE.rules.command.git;
+  const withGit = (overrides: Partial<typeof git>) => createCommandChecker({ ...BASELINE.rules.command, git: { ...git, ...overrides } });
+
+  test('ruleId git-config-exec: the prompt names what is not on the allow-list', () => {
+    for (
+      const [command, offender] of [
+        ['git -c core.fsmonitor=x status', '-c core.fsmonitor'],
+        ['git --config-env=core.pager=X diff', '--config-env core.pager'],
+        ['git --config-env core.pager=X diff', '--config-env core.pager'],
+        ['git --exec-path=/tmp/x status', '--exec-path'],
+        ['git --namespace x status', '--namespace'],
+        ['env GIT_EXTERNAL_DIFF=/x git diff', 'GIT_EXTERNAL_DIFF'],
+      ] as const
+    ) {
+      const verdict = checkGit(command);
+      expect(verdict).toMatchObject({ verdict: 'confirm', ruleId: 'git-config-exec', target: command });
+      expect(verdict?.reason).toContain(offender);
+    }
+  });
+
+  // `rebase`, `clone` and `read-tree` ask on their own in the baseline, so
+  // no baseline fixture can show that the prefix is not what asks.
+  test.each([
+    'GIT_EDITOR=true git rebase --continue',
+    'GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash main',
+    'GIT_TERMINAL_PROMPT=0 git clone https://h/r',
+    'GIT_INDEX_FILE=/tmp/i git read-tree HEAD',
+  ])('an allowed prefix does not ask once its subcommand is allowed: %s', (command) => {
+    const checker = withGit({ safe_subcommands: [...git.safe_subcommands, 'rebase', 'clone', 'read-tree'] });
+    expect(checker.checkGit(command)).toBeNull();
+  });
+
+  test('an entry splits at its first =, so a value may hold one, and a * is a prefix only without a value', () => {
+    const checker = withGit({
+      allowed_env: ['GIT_SSH_COMMAND=ssh -o BatchMode=yes', 'WILD_*=1'],
+      allowed_config: ['core.sshCommand=ssh -o BatchMode=yes'],
+    });
+    const ssh = (value: string) => `GIT_SSH_COMMAND='${value}' git ls-remote ssh://h/r`;
+    expect(checker.checkGit(ssh('ssh -o BatchMode=yes'))).toBeNull();
+    expect(checker.checkGit(ssh('ssh -o BatchMode=no'))?.ruleId).toBe('git-config-exec');
+    expect(checker.checkGit('git -c core.sshCommand=\'ssh -o BatchMode=yes\' ls-remote ssh://h/r')).toBeNull();
+    expect(checker.checkGit('git -c core.sshCommand=\'ssh -o BatchMode=no\' ls-remote ssh://h/r')?.ruleId).toBe('git-config-exec');
+    // `WILD_*=1` names the literal variable `WILD_*`, not a prefix
+    expect(checker.checkGit('WILD_X=1 git status')?.ruleId).toBe('git-config-exec');
+  });
+
+  test('an entry list that is empty allows nothing, not everything', () => {
+    const checker = withGit({ allowed_global_options: [], allowed_config: [], allowed_env: [] });
+    expect(checker.checkGit('git -C /tmp/x status')?.ruleId).toBe('git-config-exec');
+    expect(checker.checkGit('git -c user.name=t status')?.ruleId).toBe('git-config-exec');
+    expect(checker.checkGit('CI=1 git status')?.ruleId).toBe('git-config-exec');
+    expect(checker.checkGit('git status')).toBeNull();
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');

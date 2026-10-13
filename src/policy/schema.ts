@@ -112,6 +112,25 @@ export interface SafeFlagsRule {
 export interface CommandGitPolicy {
   readonly safe_subcommands: readonly string[];
   readonly config_read_modes: readonly string[];
+  // `git-config-exec`. What may stand before the subcommand without asking,
+  // judged for every git subcommand once its own verdict is allow (see
+  // docs/reference/policy.md § git-config-exec). Everything not listed asks.
+  //
+  // Global options by name (`--no-pager`, `-C`, `--git-dir`): the name of
+  // `--name=value` is what is looked up, and a value taken from the next
+  // token is skipped. `-c` and `--config-env` are not options of this list:
+  // each setting they carry is judged by `allowed_config`.
+  readonly allowed_global_options: readonly string[];
+  // Config keys a `-c key=value` or `--config-env=key=VAR` may set. An entry
+  // is a key, any value (`user.name`; a trailing `*` makes it a prefix,
+  // `user.*`), or `key=value`, that one value (`core.pager=cat`). The key is
+  // compared without regard to case, as git does; the value exactly. A
+  // `--config-env` value is read from the environment when git runs, so only
+  // an any-value entry can allow it.
+  readonly allowed_config: readonly string[];
+  // Environment variables a prefix (`VAR=x git …`, `env VAR=x git …`) may
+  // set; same entry grammar as `allowed_config`, the name compared exactly.
+  readonly allowed_env: readonly string[];
   readonly ask_flags: readonly AskFlagsRule[];
   readonly safe_first_arg: readonly SafeFirstArgRule[];
   readonly safe_grammar: readonly SafeGrammarRule[];
