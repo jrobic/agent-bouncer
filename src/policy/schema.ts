@@ -40,6 +40,18 @@ export interface RegexRule {
 
 export interface AskFlagsRule {
   readonly sub: string;
+  // The options that ask (never the safe ones). Each token after the
+  // subcommand is read the way git reads options (gitcli(7)), so a flag is
+  // also hit by `--name=value` when `--name` is listed; by `--x`, with or
+  // without `=value`, when it is a strict prefix of a listed long option;
+  // and by a single-dash group such as `-qD` holding a listed `-D` among
+  // its letters before any `=`, unless the token is a number (`-12`). `--`
+  // and `-` are options only when listed; an entry that is neither `-x` nor
+  // `--name` matches its exact spelling only. Known limit: the options that
+  // take a value are unknown here, so a value glued to an option (`-cfix`)
+  // or in the next token starting with `-` (`--sort -committerdate`) can
+  // read as options and ask once too often, never once too few. See
+  // docs/reference/policy.md § ask_flags.
   readonly flags: readonly string[];
   // When set, also ask if more than this many non-flag, non-redirection
   // tokens are present — symbolic-ref's "at most one ref name" rule.
