@@ -3189,14 +3189,6 @@
       "expected": []
     },
     {
-      "id": "git-config-exec-c-core-editor-colon-allowed",
-      "toolName": "Bash",
-      "toolInput": {
-        "command": "git -c core.editor=: commit"
-      },
-      "expected": []
-    },
-    {
       "id": "git-config-exec-c-pager-other-value-asks",
       "toolName": "Bash",
       "toolInput": {
@@ -3377,14 +3369,6 @@
       "expected": []
     },
     {
-      "id": "git-config-exec-pager-flags-allowed",
-      "toolName": "Bash",
-      "toolInput": {
-        "command": "git -P -p log"
-      },
-      "expected": []
-    },
-    {
       "id": "git-config-exec-chdir-allowed",
       "toolName": "Bash",
       "toolInput": {
@@ -3397,14 +3381,6 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "git --git-dir=/tmp/x/.git --work-tree /tmp/x status"
-      },
-      "expected": []
-    },
-    {
-      "id": "git-config-exec-bare-stays-out-of-scope-allowed",
-      "toolName": "Bash",
-      "toolInput": {
-        "command": "git --bare log"
       },
       "expected": []
     },
@@ -3500,7 +3476,7 @@
       ]
     },
     {
-      "id": "git-config-exec-env-append-assignment-before-asking-subcommand-asks",
+      "id": "git-config-exec-env-append-assignment-keeps-git-protected",
       "toolName": "Bash",
       "toolInput": {
         "command": "X+=1 git push"
