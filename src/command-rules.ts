@@ -1699,8 +1699,9 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: Conf
   }
 
   for (const { option, value: nextToken } of globals ?? []) {
-    const equals = option.startsWith('--') ? option.indexOf('=') : -1;
-    const name = equals === -1 ? option : option.slice(0, equals);
+    const equals = option.indexOf('=');
+    // Only a long option is `--name=value`; a glued short one stays a single token.
+    const name = equals !== -1 && option.startsWith('--') ? option.slice(0, equals) : option;
 
     if (name === '-c' || name === '--config-env') {
       // `-c` and a separate `--config-env` take their setting from the next token.
@@ -1714,7 +1715,7 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: Conf
     }
 
     if (!lists.globalOptions.has(name)) {
-      const shown = option.includes('=') ? option.slice(0, option.indexOf('=')) : option;
+      const shown = equals === -1 ? option : option.slice(0, equals);
       return `global option ${shown} is not on the git-config-exec allow-list`;
     }
   }
