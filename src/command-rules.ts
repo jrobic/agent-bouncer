@@ -1524,6 +1524,38 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
   return positionals > rule.max_positionals;
 }
 
+// Whether `token`, an argument after the subcommand, is one of the
+// `ask_flags` `flags` as git itself would read it (gitcli(7)) — the exact
+// spelling is only one of four ways to write the same option:
+//   (a) the listed spelling, `-D` / `--force`;
+//   (b) `--name=value`: the name before the `=` is what is compared;
+//   (c) an abbreviation: `--forc`, any strict prefix of a listed long
+//       option, however short, since git resolves an unambiguous one and
+//       an ambiguous one is only an error. (b) and (c) compose: git takes
+//       `--force-c=x` as `--force-create=x`;
+//   (d) a group of short options (`-qD`, no `=`, not a number) holding a
+//       listed short option as ANY of its letters.
+// The list stays a list of FORBIDDEN options. Known, accepted limit of (d):
+// a value glued to an option (`-cfix`) reads as more letters, so one of
+// its letters can coincide with a listed option — a confirmation too many,
+// never one too few. `--` is the end-of-options marker, not an
+// abbreviation, and is only matched when it is itself listed.
+function askFlagMatches(flags: readonly string[], token: string): boolean {
+  if (flags.includes(token)) return true;
+  if (!token.startsWith('-') || token.length < 2) return false;
+
+  if (token.startsWith('--')) {
+    const equals = token.indexOf('=');
+    const name = equals === -1 ? token : token.slice(0, equals);
+    if (equals !== -1 && flags.includes(name)) return true;
+    if (name.length <= 2) return false;
+    return flags.some((flag) => flag.length > name.length && flag.startsWith(name));
+  }
+
+  if (token.includes('=') || /^-\d+$/.test(token)) return false;
+  return flags.some((flag) => flag.length === 2 && flag[0] === '-' && flag[1] !== '-' && token.includes(flag[1]!, 1));
+}
+
 // `-C` always consumes the next token, so global tokens that are only
 // `-C <dir>` pairs sit at every even index.
 function hasOnlyChdirGlobals(globals: readonly string[]): boolean {
@@ -1535,7 +1567,7 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
 
   const askFlags = git.ask_flags.find((e: AskFlagsRule) => e.sub === sub);
   if (askFlags) {
-    if (rest.some((t) => askFlags.flags.includes(t))) return true;
+    if (rest.some((t) => askFlagMatches(askFlags.flags, t))) return true;
     if (askFlags.max_positionals !== undefined && positionalArgs(rest).length > askFlags.max_positionals) {
       return true;
     }

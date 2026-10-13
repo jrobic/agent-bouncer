@@ -1054,6 +1054,48 @@ describe('command-rules: safe_flags semantics (generic, on an ungoverned subcomm
   });
 });
 
+// The baseline's grouped / `=value` / abbreviated matrix lives in
+// fixtures/command.json as the conformance contract and is not repeated
+// here: these tests cover what a baseline fixture cannot say — the shapes of
+// a list ENTRY the baseline has no instance of (an overlay can write them).
+describe('command-rules: ask_flags matching (generic, on an ungoverned subcommand)', () => {
+  const checker = createCommandChecker({
+    ...BASELINE.rules.command,
+    git: {
+      ...BASELINE.rules.command.git,
+      ask_flags: [{ sub: 'gc', flags: ['-ff', '-q', '--aggressive', 'go'] }],
+    },
+  });
+
+  test.each([
+    'git gc -ff',
+    'git gc go',
+    'git gc -xq',
+    'git gc -qq',
+    'git gc -5q',
+    'git gc --aggr',
+    'git gc --aggr=1',
+  ])('ruleId git-protected: %s asks', (command) => {
+    expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test.each([
+    // a multi-letter single-dash entry matches itself only, not its letters
+    'git gc -f',
+    'git gc -fx',
+    // a bare word is exact only, never a prefix
+    'git gc g',
+    // not options at all: stdin marker, end-of-options marker, a number
+    'git gc -',
+    'git gc --',
+    'git gc -5',
+    // a longer option that merely starts with a listed one is not the listed one
+    'git gc --aggressive-all',
+  ])('%s stays allowed', (command) => {
+    expect(checker.checkGit(command)).toBeNull();
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');
