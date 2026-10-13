@@ -209,12 +209,9 @@ problems, active policy relaxations) reaches you two ways, both fixed
 rules the shim always runs (never a per-harness choice):
 
 1. `ctx.ui.notify` — an immediate, best-effort toast. Confirmed live: it
-   renders as a startup warning banner under `pi` 0.84.1's TUI. Not
-   independently isolated under `omp` 18.1.10's TUI (the one live `omp`
-   run that showed a startup banner used a shim build where the second
-   path below was already live too, and only that second path left hard
-   proof in the session's own transcript) — present or absent for this
-   toast specifically on `omp` is unconfirmed either way.
+   renders as a startup warning banner under `pi` 0.84.1's TUI (ticket
+   15c) and as a `Warning:` line in the chat under `omp` 18.10.3's TUI
+   (2026-10-13).
 2. A message queued for the session's FIRST `before_agent_start` turn
    (`customType: "bouncer-doctor"`, `display: true`) — delivered exactly
    once, then cleared. Confirmed live two ways: headless (`-p`), on
@@ -227,6 +224,14 @@ rules the shim always runs (never a per-harness choice):
    during probe 2 was this path, not (provably) the toast above. This
    is why a wiring or policy problem is never silent even in a headless
    session, on either binary.
+
+Both are folded for display: you see the notice's headline lines and a
+count of its indented detail lines (one per active override or
+relaxation, failing check or warning). Press ctrl+o to expand the
+`bouncer-doctor` message to the full text, and again to fold it back; the
+toast itself cannot expand. The model always receives the full text.
+Measured live on `omp` 18.10.3 and `pi` 0.84.1. `bouncer doctor --harness
+pi-agent` prints the same details in a terminal.
 
 ## `PI_CODING_AGENT_DIR` for a second account
 

@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The pi/omp session-start doctor notice is folded. The `Warning:` toast and
+  the `bouncer-doctor` message show its headline lines and a count of the
+  detail lines under them (one per active override or relaxation, failing
+  check or warning) instead of every line twice. Press ctrl+o to expand the
+  message to the full text, and again to fold it back; the toast does not
+  expand. The model still receives the full notice. Measured live on omp
+  18.10.3 and pi 0.84.1.
+- **Upgrade:** the shim's bytes changed, so reprint it for each install —
+  `bouncer harness shim pi-agent > <dir>/extensions/bouncer.ts` (the same
+  `--bin` as at install time; `~/.pi/agent`, `~/.omp/agent` and each omp
+  profile's agent dir) — and restart the session. `bouncer doctor --harness pi-agent`
+  reports `[fail] wiring:shim` until the installed copy matches again.
+
 ## [1.9.0] - 2026-10-13
 
 ### Added
