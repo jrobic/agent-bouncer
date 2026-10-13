@@ -82,7 +82,7 @@ Every entry in the six regex tables below shares this shape:
 |---|---|---|
 | `rules.command.bash` | command | destructive/exfiltration/escalation shell patterns; proxy execution through file finders, pipeline executors, and preprocessors |
 | `rules.secret.path` | secret | file paths that read as secret-bearing |
-| `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
+| `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials, credential printers) or print or reference the process environment (the [environment rows](#the-environment-rows)); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
 | `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
 | `rules.protected_write` | protected-write | paths whose mutation changes harness behavior, persistence, or shell startup |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
@@ -112,6 +112,118 @@ beyond the session.
 When `direnv allow` names a guarded path such as `.envrc`, the secret family
 judges that path first; its block verdict wins over `direnv-trust`'s confirm.
 
+### The environment rows
+
+The agent's own environment holds what its launcher exported (direnv, a
+profile, a CI runner), so a command that prints it, or names one of its
+secrets, puts the value in the transcript. Baseline rows in
+`rules.secret.bash` (and one in `rules.secret.path`) refuse the three ways an
+agent reads its environment. They are a **net, not a barrier**: Bouncer
+judges command text and cannot remove a variable, and a test or a script the
+agent launches inherits that environment and uses it on purpose. The
+structural fix is the launcher's — keep the secrets out of the agent's
+environment, behind an injection wrapper the agent cannot reach. Where that
+exists these rows still catch the accidental read; where it does not they
+are an incomplete guard (see [Known limits](#known-limits)).
+
+**1. Dumps of the whole environment — `block`.**
+
+| Row | Refuses |
+|---|---|
+| `env-dump` | at command position (also after `&&`, `;`, `\|` or a newline, inside `$(…)`, backticks and `sh -c`): `env` with nothing to run (`env`, `env -i`, `env -u NAME`, `env -0`, `env --`, `env FOO=1`); `printenv` with no name; `export` and `export -p`; `declare` / `typeset` with only `-x` / `-p` flags, or none; `set` alone; `compgen -e` and `compgen -A export`; `${!PREFIX@}` and `${!PREFIX*}` (the names of the matching variables) |
+| `env-dump-ps` | `ps` at command position with the BSD `e` as its first operand (`ps e`, `ps eww`, `ps auxe`) or macOS `-E`; `docker compose ps postgres` and prose that says "ps output" are not `ps` |
+| `env-dump-launchctl` | `launchctl getenv` (at command position) |
+| `env-dump-jq` | jq's `env` and `$ENV` builtins (jq at command position) |
+| `env-dump-docker` | `docker exec … env` or `printenv` with nothing after it; `docker compose config` as the compose subcommand — not with `-q` / `--quiet`, `--services`, `--volumes`, `--profiles`, `--images` or `--hash`, which print no environment (a positive list of printing flags: the dialect has no lookaround). `docker` at command position |
+| `proc-environ` (`rules.secret.path`) | `/proc/<pid>/environ` — `self`, `thread-self`, a pid, `task/<tid>/environ`. The Read tool is covered, and Bash through the path scan (`bash-proc-environ`) |
+
+"Command position" is one lead-in shared by `env-dump`, `env-dump-ps`,
+`env-dump-launchctl`, `env-dump-jq` and `env-dump-docker`
+(`{{command-position}}`, `src/policy/fragments.ts`): the start of the text;
+after `;`, `&`, a newline, `{`, a backtick, `$(`, `<(` or `>(`; after a pipe
+preceded by whitespace (`curl … | jq -n env` is a dump, `a|env|b` in a search
+pattern is not a pipeline); after `then`, `do` and the like; inside `sh -c`;
+behind the wrappers `VAR=value`, `rtk`, `command`, `exec`, `nice`, `time`,
+`builtin`, `proxy` and `eval`. `ps`, `jq`, `docker` and `launchctl` may carry
+a path (`/usr/bin/jq`). A search or a sentence that merely spells the command
+— `grep 'launchctl getenv' docs`, a commit message that says `jq -n env`, a
+trailing `# see docker exec c env` — is not the command.
+
+Not matched: an `env` that runs a command (`env FOO=1 make test`),
+`set -euo pipefail`, `set -x`, `export FOO=bar`, `declare -x FOO=bar`,
+`printenv HOME`, `ps -ef`, `ps -e` and `ps aux` (they print no environment),
+`git remote set-url`, `npm config set`, a jq `.env` field accessor, a
+`{env: …}` object key and `env.NAME`. `docker inspect`
+(`env-dump-docker-inspect`) is a **`confirm`**: it prints `Config.Env`, but
+inspecting a container is everyday work.
+
+**2. References to a protected variable name.** A name is protected when it
+is uppercase and equals, or ends in `_` plus, one of `TOKEN`, `PASSWORD`,
+`PASSWD`, `SECRET`, `API_KEY`, `APIKEY`, `PRIVATE_KEY`, `ACCESS_KEY`,
+`CREDENTIALS`. The suffix ends the name: `GITHUB_TOKEN`, `DB_PASSWORD`,
+`STRIPE_API_KEY`, `AWS_SECRET_ACCESS_KEY` and `ANTHROPIC_API_KEY` match;
+`NODE_ENV`, `HOME`, `PATH`, `TOKENIZER_PATH`, `MY_TOKEN_FILE`, `SECRET_KEY`,
+`DB_PASS` and any lowercase name do not. There is no client-specific list and
+no per-layer list: the definition is baseline, public and universal.
+
+The definition is written once, in `src/protected-names.ts`
+(`PROTECTED_NAME_SOURCE`, and `isProtectedName()` for code that holds a name
+as a string). A baseline row that needs it writes `{{protected-name}}` in its
+regex and the loader fills it in at load time, once — as it fills the git
+`config_read_modes` list — so `bouncer rules list` shows the effective regex.
+The long alternations the environment rows share are fragments of the same
+kind (`src/policy/fragments.ts`): the reference forms (`{{env-reference}}`,
+built from `{{env-object}}` and `{{env-call}}`), the command-position lead-in
+(`{{command-position}}`, `{{shell-c}}`) and jq's builtin (`{{jq-lead}}`,
+`{{jq-env}}`). A `{{name}}` that no fragment defines, or that survives the
+fill, makes the baseline refuse to load (a typo would silently disable its
+rule). An overlay row writes its own whole regex — layers add rows, never
+data into a row — and lint rejects any `{{…}}` in an overlay (escape the
+braces, `\{\{`, to match them literally). Anything else that has to recognise
+a protected name imports the definition from there; a second copy would
+drift.
+
+The forms recognised: `$NAME` and `${NAME}` (shell); `process.env.NAME`,
+`process.env["NAME"]`, `Bun.env.NAME`, `Deno.env.get("NAME")`;
+`os.environ["NAME"]`, `os.environ.get("NAME")`, `os.getenv("NAME")`;
+`ENV["NAME"]`, `ENV.fetch("NAME")`; awk's `ENVIRON["NAME"]`; `getenv("NAME")`,
+`os.Getenv`, `env::var` (C family, PHP, Go, Rust); and, by the nature of the
+command, `printenv … NAME`, `declare -p … NAME` and jq's `env.NAME` /
+`$ENV.NAME`.
+
+| Row | Verdict | When |
+|---|---|---|
+| `env-ref-display` | `block` | the reference feeds a display: `echo`, `printf`, `print`, `println`, `puts`, `pp`, `console.log` (also `info`, `warn`, `error`, `debug`) or `node` / `bun -p` earlier in the same statement (no `;`, `&`, `\|` or newline between; a `\`-newline continuation does not end the statement, and the scan reaches at most 400 characters ahead), or the form prints by nature (`printenv NAME`, …). `echo $NAME \| cmd` is a display too: the regex cannot follow the pipe |
+| `env-ref-whole` | `block` | the environment object used as a whole — `process.env`, `Bun.env`, `Deno.env.toObject()`, `os.environ`, awk's `ENVIRON`, Ruby's `ENV` printed or enumerated (`p ENV`, `ENV.to_h`) — dumped, iterated, or spread into a child's environment |
+| `env-ref-computed` | `block` | a name computed at runtime: `os.environ.get(<expr>)`, `process.env[<expr>]`, `ENV[<expr>]`, `getenv(<expr>)`, shell `${!name}`, `printenv $name`. A literal name is a closed string right after the bracket or parenthesis; anything else (a call, a variable, `'AT' + 'LASSIAN_TOKEN'`) is computed, because a name rebuilt from pieces would slip past every name rule |
+| `env-ref` | `confirm` | any other reference — `curl -H "Authorization: Bearer $SONARQUBE_TOKEN" …`, `export GH_TOKEN=$GITHUB_TOKEN`, a heredoc or a commit message that spells a protected name (prose is command text) |
+
+A reference to a non-protected name stays allowed: `echo $HOME`,
+`process.env.NODE_ENV`, `os.environ["HOME"]`. A **search pattern** is not an
+access: `env-ref-whole` carries an `except` that lets `rg 'process.env' src`
+and `grep -rn os.environ .` through, provided the whole command is a sequence
+of searches (`rg`, `grep`, `git grep` / `log` / `diff` / `show`, …) and
+harmless readers, `cd` and a literal `echo`, with no command substitution —
+`rg 'process.env' src && node -p process.env` is still blocked. A fetched URL
+that names `process.env` or `os.environ`, or ends in an `env` word, is not an
+access either.
+
+**3. `credential-printer` completed.** The one existing row (`confirm`) also
+covers `gh` / `glab auth status -t`, `glab config get token`,
+`git credential fill`, `docker-credential-* get`,
+`npm` / `pnpm config get …_auth[Token]`, `aws configure get` of a secret key
+or a session token, and `aws configure export-credentials`. It keeps its id:
+an overlay that relaxed it keeps working.
+
+**Order is behaviour.** The first matching row of a table wins, so every
+block row sits before the confirm rows (`env-dump-docker-inspect`, `env-ref`,
+`credential-printer`): a confirm placed first would hide a block later in the
+same command. **Relaxing:** each row has its own id for `[[override]]`
+([Override a baseline rule](../how-to/override-a-baseline-rule.md)), so a
+workflow that inspects containers all day relaxes `env-dump-docker-inspect`
+alone, and one that really needs `docker compose config` relaxes
+`env-dump-docker`.
+
 
 ### Infrastructure mutation rows
 
@@ -131,8 +243,36 @@ elsewhere"` without removing the baseline guard.
 
 - A sops command hidden behind a package script or launched by direnv is not
   seen; production-decryption scripts remain human-run.
-- Plaintext inherited from the agent's launch environment is outside this
-  guard's scope.
+- Plaintext inherited from the agent's launch environment cannot be removed
+  by any row. The [environment rows](#the-environment-rows) only refuse the
+  commands that print or reference it — a net, not a barrier: a test or a
+  script the agent launches inherits the environment and may print it, and a
+  value that already reached the agent's context stays there. The structural
+  fix is the launcher's (secrets kept out of the agent's environment).
+- The environment rows read command text. Not covered: a variable name or a
+  command built at run time (`eval`, a base64-decoded command, a pid in
+  `/proc/$$/environ`); Perl `%ENV`, PHP `$_ENV` and Python's bare `environ`
+  after `from os import environ`; `docker run … env`, `podman`,
+  `kubectl exec … -- env`, `yq` `env()`; `readonly -p` and `compgen -v`;
+  `ps` options ahead of the BSD operand (`ps -p 1 eww`); `ps`, `jq`,
+  `docker` or `launchctl` behind something the command-position lead-in does
+  not know — a wrapper (`timeout 5 docker exec c env`, `watch`, `xargs`,
+  `env VAR=value docker …`; `sudo` is blocked outright by the command
+  family), a bare `( … )` subshell, a pipe with no space before it
+  (`a|jq -n env`), `docker exec c ps eww`; a `docker compose config` flag the
+  printing-flag list does not know.
+- Prose is command text: a commit message or a heredoc that spells
+  `process.env` or a protected variable fires the whole-environment (block)
+  or the reference (confirm) row, and a line that holds only `set`, `env` or
+  `export` in a heredoc (SQL, YAML) fires `env-dump`, as does the JavaScript
+  object shorthand `{ env }` (a brace opens a command position; `node -e
+  "spawn(cmd, { env })"`). `echo $TOKEN | docker login --password-stdin` is
+  blocked because `echo` is a display; a jq program that holds `env` in a
+  string literal or as a variable name (`test("a|env b")`, `--arg env prod`)
+  matches `env-dump-jq`: jq is the command there, so command position does
+  not help; a search is excepted only when
+  the whole command is searches and harmless readers (`awk` and the
+  interpreters are not).
 - A non-default `SOPS_AGE_KEY_FILE` is a human choice and needs a personal
   overlay row.
 - A command hidden inside a finder or pipeline executor's `sh -c` argument is
@@ -1157,4 +1297,4 @@ Other `baseline`-provenance lines have no suffix because the embedded
 baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/harness.ts, src/protected-write-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/shim.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/fragments.ts, src/policy/harness.ts, src/protected-write-rules.ts, src/protected-names.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/shim.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts

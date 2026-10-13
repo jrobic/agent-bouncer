@@ -33,6 +33,7 @@ import promptData from '../../policy/prompt.toml';
 import protectedWriteData from '../../policy/protected-write.toml';
 import secretData from '../../policy/secret.toml';
 import writeSecretData from '../../policy/write-secret.toml';
+import { fillFragments, FRAGMENT_PLACEHOLDER } from './fragments.ts';
 import { deriveHarnessRules, parseBaselineHarness } from './harness.ts';
 import type { HarnessDeclaration, RawPolicyFile, RegexRule, RulesPolicy } from './schema.ts';
 
@@ -135,8 +136,31 @@ function withConfigValuesFilledIn(rules: RulesPolicy): RulesPolicy {
   };
 }
 
-export function assertUniqueRuleIds(rules: RulesPolicy): RulesPolicy {
-  const ruleFamilies: readonly [string, readonly RegexRule[]][] = [
+// Shared regex fragments (src/policy/fragments.ts) are written once and shared,
+// never copied into a row: a baseline `secret.bash` regex (or `except`) spells
+// one `{{name}}` — the protected-name definition (src/protected-names.ts)
+// among them — and it is filled in here, once, at load time, same precedent
+// as `config_read_modes` above. The placeholder is the baseline's own
+// spelling: an overlay row writes its own whole regex (layers add rows, never
+// data into a row) and lint rejects a `{{…}}` there.
+function withFragmentsFilledIn(rules: RulesPolicy): RulesPolicy {
+  return {
+    ...rules,
+    secret: {
+      ...rules.secret,
+      bash: rules.secret.bash.map((rule) => ({
+        ...rule,
+        regex: fillFragments(rule.regex),
+        ...(rule.except === undefined ? {} : { except: fillFragments(rule.except) }),
+      })),
+    },
+  };
+}
+
+// The six regex tables, once: the id check and the placeholder check read the
+// same list.
+function regexTables(rules: RulesPolicy): readonly [string, readonly RegexRule[]][] {
+  return [
     ['command.bash', rules.command.bash],
     ['secret.path', rules.secret.path],
     ['secret.bash', rules.secret.bash],
@@ -144,8 +168,32 @@ export function assertUniqueRuleIds(rules: RulesPolicy): RulesPolicy {
     ['write_secret', rules.write_secret],
     ['prompt', rules.prompt],
   ];
+}
+
+// A `{{…}}` that survives the fill — a mistyped fragment name, or a
+// placeholder in a table the fill does not touch — would compile to a regex
+// that silently never matches: refuse to load instead. Checked on EVERY
+// table, after the fill, like the other import-time assertions.
+export function assertNoUnfilledPlaceholders(rules: RulesPolicy): RulesPolicy {
+  for (const [family, entries] of regexTables(rules)) {
+    for (const rule of entries) {
+      const field = [['regex', rule.regex], ['except', rule.except]].find(([, text]) =>
+        text !== undefined && FRAGMENT_PLACEHOLDER.test(text)
+      );
+      if (field !== undefined) {
+        throw new Error(
+          `baseline rule ${JSON.stringify(rule.id)} (${family}) has an unfilled placeholder in its ${field[0]} — `
+            + `a {{name}} that no fragment in src/policy/fragments.ts defines would never match`,
+        );
+      }
+    }
+  }
+  return rules;
+}
+
+export function assertUniqueRuleIds(rules: RulesPolicy): RulesPolicy {
   const familyById = new Map<string, string>();
-  for (const [family, entries] of ruleFamilies) {
+  for (const [family, entries] of regexTables(rules)) {
     for (const rule of entries) {
       const existing = familyById.get(rule.id);
       if (existing !== undefined) {
@@ -157,4 +205,6 @@ export function assertUniqueRuleIds(rules: RulesPolicy): RulesPolicy {
   return rules;
 }
 
-export const BASELINE: RawPolicyFile = { rules: assertUniqueRuleIds(withConfigValuesFilledIn(mergedRules)) };
+export const BASELINE: RawPolicyFile = {
+  rules: assertNoUnfilledPlaceholders(assertUniqueRuleIds(withFragmentsFilledIn(withConfigValuesFilledIn(mergedRules)))),
+};

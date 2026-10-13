@@ -178,13 +178,26 @@ const EXPECTED_COMMAND_DIGEST: readonly string[] = [
   '31 harness-self-config \\bclaude\\b\\s+(?:mcp\\s+(?:add|remove)|plugin\\s+(?:install|enable|disable|uninstall)|config\\s+set)\\b ',
 ];
 
-// policy/secret.toml `rules.secret.bash`. Seven entries, each with its own
-// id. The git-config pair remains split: `bash-git-leak-credential` (index
-// 2: credential/signingkey, unconditional) and `bash-git-leak-remote-url`
-// (index 3: remote.*.url, read-excepted, marked `special`) cannot disable
-// each other. `keychain-dump` and `credential-printer` each own their
-// independent override target, so a consumer can relax a printer without
-// weakening the macOS keychain boundary.
+// policy/secret.toml `rules.secret.bash`. Seventeen entries, each with its
+// own id. The git-config pair remains split: `bash-git-leak-credential`
+// (index 2: credential/signingkey, unconditional) and
+// `bash-git-leak-remote-url` (index 3: remote.*.url, read-excepted, marked
+// `special`) cannot disable each other. `keychain-dump` and
+// `credential-printer` each own their independent override target, so a
+// consumer can relax a printer without weakening the macOS keychain
+// boundary.
+//
+// Ticket 57 added the environment rows (6-15): `env-dump*` refuse the
+// commands that print an environment, `env-ref*` the references to a
+// protected variable name. ORDER IS BEHAVIOUR: the first matching row wins,
+// so every block row (6-13) sits before the two confirm rows
+// (`env-dump-docker-inspect`, `env-ref`) and `credential-printer` stays
+// last — a confirm placed first would hide a block later in the same
+// command. Shared fragments (src/policy/fragments.ts) and the protected-name
+// definition (src/protected-names.ts) are filled into the rows at load time,
+// so their expansion is part of the frozen text below: changing the suffix
+// list moves exactly `env-ref-display` and `env-ref`, changing a shared
+// fragment moves every row that spells it, on purpose.
 const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '0 sops-decrypt \\bsops(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt|decrypt|exec-env|exec-file|edit)(?:\\s|$)|(?:^|[;&|(]\\s*)(?:(?:[A-Za-z_][A-Za-z0-9_]*=\\S*|rtk|command|exec|env|nice|time|builtin|proxy)\\s+)*sops\\s+[^\\s;&|\\-][^\\s;&|]*\\s*(?:$|[;&|)]) ',
   '1 age-decrypt \\b(?:age|rage)(?:\\s+[^;&|\\n]*)?\\s(?:-d|--decrypt)(?:\\s|$) ',
@@ -192,7 +205,17 @@ const EXPECTED_SECRET_DIGEST: readonly string[] = [
   '3 bash-git-leak-remote-url \\bgit\\s+config\\b[^\\n]*\\bremote\\.[^\\s]+\\.url\\b ',
   '4 bash-url-creds \\b(?:https?|git|ssh|ftp):\\/\\/[^\\s/@:]+:[^\\s/@]+@ ',
   '5 keychain-dump \\bsecurity\\s+(?:find-(?:generic|internet)-password|export|dump-keychain)\\b  except=^\\s*security\\s+find-generic-password(?:\\s+-(?:a|c|C|D|G|j|l|s)\\s+[^\\s|;&<>-][^\\s|;&<>]*)*(?:\\s+[^\\s|;&<>-][^\\s|;&<>]*)?\\s*$',
-  '6 credential-printer \\bgh\\s+auth\\s+token\\b|\\bglab\\s+auth\\s+status\\b[^|;&\\n]*\\s--show-token\\b|\\bop\\s+read\\b|\\bop\\s+item\\s+get\\b[^|;&\\n]*\\s(?:--reveal|--fields)\\b|\\bgcloud\\s+auth\\s+print-(?:access|identity)-token\\b|\\baws\\s+sts\\s+(?:get-session-token|assume-role)\\b|\\bvault\\s+(?:read|kv\\s+get)\\b|\\bdoppler\\s+secrets\\s+download\\b ',
+  '6 env-dump (?:^|[;&\\n{\\x60]|\\$\\(|[<>]\\(|[ \\t]\\|\\|?|\\b(?:then|do|else|elif|if|while|until)[ \\t]|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27]?)[ \\t]*(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\\s;&|()<>]*|rtk|command|exec|nice|time|builtin|proxy|eval)[ \\t]+)*(?:(?:(?:[\\w./~-]*/)?env(?:[ \\t]+(?:-[i0v]+|--(?:ignore-environment|null|debug)|-u[ \\t]*[^\\s;&|()<>]+|--unset[= ][^\\s;&|()<>]+|-C[ \\t]*[^\\s;&|()<>]+|--chdir[= ][^\\s;&|()<>]+|--|[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\\x27[^\\x27]*\\x27|[^\\s;&|()<>"\\x27][^\\s;&|()<>]*)?))*|(?:[\\w./~-]*/)?printenv(?:[ \\t]+(?:-0|--null))*|export(?:[ \\t]+-p)*|(?:declare|typeset)(?:[ \\t]+-[a-zA-Z]*[xp][a-zA-Z]*)*|set)[ \\t]*(?:$|[;&|)}`\\n#<>]|\\d[<>])|compgen[ \\t]+(?:-[a-zA-Z]*e[a-zA-Z]*|-A[ \\t]+export)(?:[ \\t]|$|[;&|)}`\\n#<>]))|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27](?:env|printenv|export|set|declare|typeset)[ \\t]*["\\x27]|\\$\\{![A-Za-z_][A-Za-z0-9_]*[@*]\\}  except=^[ \\t]*[A-Za-z][A-Za-z0-9+.-]*://\\S*[ \\t]*$',
+  '7 env-dump-ps (?:^|[;&\\n{\\x60]|\\$\\(|[<>]\\(|[ \\t]\\|\\|?|\\b(?:then|do|else|elif|if|while|until)[ \\t]|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27]?)[ \\t]*(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\\s;&|()<>]*|rtk|command|exec|nice|time|builtin|proxy|eval)[ \\t]+)*(?:[\\w./~-]*/)?ps[ \\t]+(?:[a-zA-Z]*e[a-zA-Z]*(?:[ \\t]|$|[;&|)}`"\\x27])|(?:[^\\s|;&]+[ \\t]+){0,40}-[a-zA-Z]*E[a-zA-Z]*(?:[ \\t]|$|[;&|)}`"\\x27])) ',
+  '8 env-dump-launchctl (?:^|[;&\\n{\\x60]|\\$\\(|[<>]\\(|[ \\t]\\|\\|?|\\b(?:then|do|else|elif|if|while|until)[ \\t]|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27]?)[ \\t]*(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\\s;&|()<>]*|rtk|command|exec|nice|time|builtin|proxy|eval)[ \\t]+)*(?:[\\w./~-]*/)?launchctl[ \\t]+getenv\\b ',
+  '9 env-dump-jq (?:^|[;&\\n{\\x60]|\\$\\(|[<>]\\(|[ \\t]\\|\\|?|\\b(?:then|do|else|elif|if|while|until)[ \\t]|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27]?)[ \\t]*(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\\s;&|()<>]*|rtk|command|exec|nice|time|builtin|proxy|eval)[ \\t]+)*(?:[\\w./~-]*/)?\\b(?:go)?jq\\b(?:[^;&|\\n"\\x27]|\\x27[^\\x27]*\\x27|"[^"]*"){0,200}(?:[ \\t]|\\x27(?:[^\\x27]*[^.\\w$\\x27-])?|"(?:[^"]*[^.\\w$"-])?)(?:env|\\$ENV)(?:$|["\\x27|)\\]\\[ \\t]|\\.[^A-Za-z_]) ',
+  '10 env-dump-docker (?:^|[;&\\n{\\x60]|\\$\\(|[<>]\\(|[ \\t]\\|\\|?|\\b(?:then|do|else|elif|if|while|until)[ \\t]|\\b(?:ba|z|da|k)?sh[ \\t]+(?:-[a-zA-Z]+[ \\t]+)*-[a-zA-Z]*c[ \\t]+["\\x27]?)[ \\t]*(?:(?:[A-Za-z_][A-Za-z0-9_]*=[^\\s;&|()<>]*|rtk|command|exec|nice|time|builtin|proxy|eval)[ \\t]+)*(?:[\\w./~-]*/)?docker(?:\\b[^;&|\\n]{0,150}\\bexec\\b[^;&|\\n]{0,150}[ \\t](?:env|printenv)(?:[ \\t]+(?:-\\S+|--)){0,10}|(?:[ \\t]+compose|-compose)(?:[ \\t]+(?:(?:-f|-p|--(?:file|project-name|project-directory|env-file|profile|parallel|progress|ansi))[ \\t]+\\S+|-\\S+)){0,20}[ \\t]+config(?:[ \\t]+(?:--(?:no-interpolate|no-normalize|no-consistency|no-path-resolution|no-env-resolution|resolve-image-digests|lock-image-digests|environment|dry-run)|(?:--format|--output|-o)(?:[ \\t]+|=)\\S+|[^-\\s;&|)`][^\\s;&|)`]*)){0,30})[ \\t]*(?:$|[;&|)}`\\n#<>]|\\d[<>]) ',
+  '11 env-ref-display (?:\\b(?:echo|[Pp]rint(?:f|ln)?|puts|pp|console\\.(?:log|info|warn|error|debug)|(?:node|bun)[ \\t]+(?:-[^\\s;&|]+[ \\t]+){0,10}(?:-p|-pe|--print))\\b(?:\\\\\\n|[^;&|\\n]){0,400}(?:\\$\\{?|\\b(?:process\\.env|Bun\\.env)\\??\\.|\\b(?:process\\.env|Bun\\.env|os\\.environ|ENV|ENVIRON)[ \\t]*\\??\\.?\\[[ \\t]*\\\\{0,3}["\\x27]|\\b(?:os\\.environ\\.(?:get|pop|setdefault)|environ\\.get|[Gg]et_?[Ee]nv|Deno\\.env\\.get|ENV\\.(?:fetch|dig)|env::var(?:_os)?)[ \\t]*\\([ \\t]*\\\\{0,3}["\\x27])|\\bprintenv\\b(?:\\\\\\n|[^;&|\\n]){0,400}?[ \\t]["\\x27]?|\\b(?:declare|typeset)[ \\t]+-[a-zA-Z]*p[a-zA-Z]*(?:\\\\\\n|[^;&|\\n]){0,400}?[ \\t]["\\x27]?|\\b(?:go)?jq\\b[^;&\\n]{0,400}[^.\\w$-](?:env|\\$ENV)\\.["]?)(?:[A-Z0-9_]*_)?(?:TOKEN|PASSWORD|PASSWD|SECRET|API_KEY|APIKEY|PRIVATE_KEY|ACCESS_KEY|CREDENTIALS)\\b ',
+  '12 env-ref-whole (?:^|[^\\w.#/$-]|\\.\\.\\.)(?:(?:process\\.env|Bun\\.env)(?:[^\\w.\\[?$]|$)|Deno\\.env\\.toObject\\b|os\\.environ(?:[^\\w.\\[$]|$|\\.(?:copy|items|keys|values|iteritems|iterkeys|itervalues|as_dict|to_dict|update|clear|popitem)\\b)|ENV\\.(?:to_h|to_hash|to_a|each|each_pair|keys|values|inspect|to_s|select|filter|reject|map|sort|dup|clone|slice|merge|update|replace|filter_map|collect)\\b|(?:puts|print|pp?)[ \\t(]+ENV(?:[^\\w.\\[$=:/-]|$)|ENVIRON(?:[^\\w.\\[$=:/\\s-]|$))  except=^[ \\t]*(?:(?:(?:cd|pushd)[ \\t]+(?:"[^"$`]*"|\\x27[^\\x27]*\\x27|[^\\s;&|"\\x27$`]+)[ \\t]*|echo(?:[ \\t]+(?:"[^"$`]*"|\\x27[^\\x27]*\\x27|[^\\s;&|"\\x27$`]+))*[ \\t]*|(?:rtk[ \\t]+)?(?:git[ \\t]+(?:-[^\\s;&|]+[ \\t]+)*(?:grep|log|diff|show)|(?:[\\w./~-]*/)?(?:rg|grep|egrep|fgrep|ag|ack|ls|cat|head|tail|sed|wc|sort|uniq|cut|tr|nl|less|stat|pwd|true))\\b(?:[^;&|\\n"\\x27`$]|\\$[^(]|&[>0-9]|"(?:[^"$`]|\\$[^(])*"|\\x27[^\\x27]*\\x27)*)(?:(?:;|&&|\\|\\|?)[ \\t]*|$))+$|^[ \\t]*[A-Za-z][A-Za-z0-9+.-]*://\\S*[ \\t]*$',
+  '13 env-ref-computed \\b(?:process\\.env|Bun\\.env|os\\.environ|ENV|ENVIRON)[ \\t]*\\??\\.?\\[[ \\t]*(?:[^ \\t"\\x27\\\\\\]]|\\\\{0,3}["\\x27][^"\\x27\\\\\\]]*\\\\{0,3}["\\x27][ \\t]*[^ \\t\\]])|\\b(?:os\\.environ\\.(?:get|pop|setdefault)|environ\\.get|[Gg]et_?[Ee]nv|Deno\\.env\\.get|ENV\\.(?:fetch|dig)|env::var(?:_os)?)[ \\t]*\\([ \\t]*(?:[^ \\t"\\x27\\\\)]|\\\\{0,3}["\\x27][^"\\x27\\\\)]*\\\\{0,3}["\\x27][ \\t]*[^ \\t,)])|\\$\\{![A-Za-z_][A-Za-z0-9_]*\\}|\\bprintenv[ \\t]+["\\x27]?\\$ ',
+  '14 env-dump-docker-inspect \\bdocker[ \\t]+(?:container[ \\t]+)?inspect\\b ',
+  '15 env-ref (?:\\$\\{?|\\b(?:process\\.env|Bun\\.env)\\??\\.|\\b(?:process\\.env|Bun\\.env|os\\.environ|ENV|ENVIRON)[ \\t]*\\??\\.?\\[[ \\t]*\\\\{0,3}["\\x27]|\\b(?:os\\.environ\\.(?:get|pop|setdefault)|environ\\.get|[Gg]et_?[Ee]nv|Deno\\.env\\.get|ENV\\.(?:fetch|dig)|env::var(?:_os)?)[ \\t]*\\([ \\t]*\\\\{0,3}["\\x27])(?:[A-Z0-9_]*_)?(?:TOKEN|PASSWORD|PASSWD|SECRET|API_KEY|APIKEY|PRIVATE_KEY|ACCESS_KEY|CREDENTIALS)\\b ',
+  '16 credential-printer \\bgh\\s+auth\\s+token\\b|\\b(?:gh|glab)\\s+auth\\s+status\\b[^|;&\\n]*\\s(?:--show-token|-[a-zA-Z]*t[a-zA-Z]*)\\b|\\bop\\s+read\\b|\\bop\\s+item\\s+get\\b[^|;&\\n]*\\s(?:--reveal|--fields)\\b|\\bgcloud\\s+auth\\s+print-(?:access|identity)-token\\b|\\baws\\s+sts\\s+(?:get-session-token|assume-role)\\b|\\bvault\\s+(?:read|kv\\s+get)\\b|\\bdoppler\\s+secrets\\s+download\\b|\\bglab\\s+config\\s+get\\b[^|;&\\n]*\\btoken\\b|\\bgit\\s+credential\\s+fill\\b|\\bdocker-credential-[A-Za-z0-9._-]+\\s+get\\b|\\b(?:npm|pnpm)\\s+config\\s+get\\b[^|;&\\n]*_auth(?:Token)?\\b|\\baws\\s+configure\\s+(?:get\\b[^|;&\\n]*\\baws_(?:secret_access_key|session_token)\\b|export-credentials\\b) ',
 ];
 
 // policy/write-secret.toml `rules.write_secret` — an identity control: 8
@@ -230,7 +253,7 @@ describe('guards-digest: tamper lock — the five tabular guards', () => {
     expect(ruleDigest(BASELINE.rules.command.bash)).toEqual([...EXPECTED_COMMAND_DIGEST]);
   });
 
-  test('secret.bash matches the frozen ordered digest (7 entries, distinct ids)', () => {
+  test('secret.bash matches the frozen ordered digest (17 entries, distinct ids)', () => {
     expect(ruleDigest(BASELINE.rules.secret.bash)).toEqual([...EXPECTED_SECRET_DIGEST]);
   });
 
@@ -331,6 +354,7 @@ const EXPECTED_PATH_DIGEST: readonly string[] = [
   '14 gnupg-dir (^|/)\\.gnupg(/|$) flags= except= verdict=',
   '15 shell-history (^|/)(?:\\.(?:zsh_history|bash_history|zhistory|python_history|node_repl_history|psql_history|mysql_history|lesshst)|fish_history)$ flags= except= verdict=confirm',
   '16 session-transcripts (^|/)\\.claude(?:-[A-Za-z0-9_-]+)?/projects/[^/]+/[^/]+\\.jsonl(?:\\.[\\w-]+)?$ flags= except= verdict=confirm',
+  '17 proc-environ (^|/)proc/(?:self|thread-self|\\d+)/(?:task/\\d+/)?environ$ flags= except= verdict=',
 ];
 
 describe('guards-digest: tamper lock — protected_write and secret.path path guards', () => {
@@ -338,7 +362,7 @@ describe('guards-digest: tamper lock — protected_write and secret.path path gu
     expect(pathRuleDigest(BASELINE.rules.protected_write)).toEqual([...EXPECTED_PROTECTED_WRITE_DIGEST]);
   });
 
-  test('secret.path matches the frozen ordered digest (17 entries + except/verdict fields)', () => {
+  test('secret.path matches the frozen ordered digest (18 entries + except/verdict fields)', () => {
     expect(pathRuleDigest(BASELINE.rules.secret.path)).toEqual([...EXPECTED_PATH_DIGEST]);
   });
 });
