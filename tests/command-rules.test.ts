@@ -1132,6 +1132,21 @@ describe('command-rules: git-config-exec (what a fixture cannot say)', () => {
     expect(reason).not.toContain('program');
   });
 
+  // A name that is on the list, but not at this value, is not "unlisted": the
+  // prompt says so, whichever kind of setting it is, and still never the value.
+  test.each([
+    ['GIT_TRACE=/tmp/SECRETVALUE git status', 'GIT_TRACE'],
+    ['GIT_EDITOR=SECRETVALUE git commit', 'GIT_EDITOR'],
+    ['git -c core.pager=SECRETVALUE diff', 'core.pager'],
+    ['git --config-env core.pager=SECRETVALUE diff', 'core.pager'],
+  ])('a listed name at another value is described as listed only at harmless values: %s', (command, name) => {
+    const reason = checkGit(command)?.reason;
+    expect(reason).toContain(name);
+    expect(reason).toContain('listed only at harmless values');
+    expect(reason).not.toContain('arbitrary program');
+    expect(reason).not.toContain('SECRETVALUE');
+  });
+
   // `rebase`, `clone` and `read-tree` ask on their own in the baseline, so
   // no baseline fixture can show that the prefix is not what asks.
   test.each([

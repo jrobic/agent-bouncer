@@ -1630,7 +1630,9 @@ function gitSubcommandNeedsConfirm({ sub, rest, globals }: GitCommand, git: Comm
 // prefix entry; a `*` only means something at the end of an entry without a
 // value.
 type AllowEntry = Readonly<{ name: string; value: string | null; prefix: boolean; }>;
-type AllowList = Readonly<{ entries: readonly AllowEntry[]; foldCase: boolean; }>;
+// `pairNames` are the names listed only with a value, to tell "listed, but not at
+// this value" from "not listed" when a setting is refused.
+type AllowList = Readonly<{ entries: readonly AllowEntry[]; foldCase: boolean; pairNames: ReadonlySet<string>; }>;
 
 // The three `git-config-exec` lists, ready to be read for every command.
 type ConfigExecLists = Readonly<{
@@ -1641,14 +1643,16 @@ type ConfigExecLists = Readonly<{
 
 function compileAllowList(entries: readonly string[], foldCase: boolean): AllowList {
   const fold = (text: string): string => (foldCase ? text.toLowerCase() : text);
+  const compiled = entries.map((entry): AllowEntry => {
+    const equals = entry.indexOf('=');
+    if (equals !== -1) return { name: fold(entry.slice(0, equals)), value: entry.slice(equals + 1), prefix: false };
+    const name = fold(entry);
+    return name.endsWith('*') ? { name: name.slice(0, -1), value: null, prefix: true } : { name, value: null, prefix: false };
+  });
   return {
     foldCase,
-    entries: entries.map((entry): AllowEntry => {
-      const equals = entry.indexOf('=');
-      if (equals !== -1) return { name: fold(entry.slice(0, equals)), value: entry.slice(equals + 1), prefix: false };
-      const name = fold(entry);
-      return name.endsWith('*') ? { name: name.slice(0, -1), value: null, prefix: true } : { name, value: null, prefix: false };
-    }),
+    entries: compiled,
+    pairNames: new Set(compiled.filter((entry) => entry.value !== null).map((entry) => entry.name)),
   };
 }
 
@@ -1670,18 +1674,27 @@ function onAllowList({ entries, foldCase }: AllowList, name: string, value: stri
   });
 }
 
+// Why `name` is refused by `list`: listed, but only at harmless values, or not
+// listed and so able to make git run any program. `subject` is how the reason
+// introduces it.
+function refusal(list: AllowList, name: string, subject: string): string {
+  const listedOnlyAtValues = list.pairNames.has(list.foldCase ? name.toLowerCase() : name);
+  return listedOnlyAtValues
+    ? `${subject} is listed only at harmless values`
+    : `${subject} can make git run an arbitrary program and is not on the git-config-exec allow-list`;
+}
+
 // What, in the words written around `git`, the policy does not list: the first
 // environment assignment, then the first global option, `-c` or `--config-env`
 // setting, as the verdict's reason; null when every one is allowed. The reason
 // names a variable, a key or an option, never a value. Read lexically, like the
 // rest of the git policy — git is not called and no file is read.
 function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: ConfigExecLists): string | null {
-  const runsProgram = 'can make git run an arbitrary program and is not on the git-config-exec allow-list';
   for (const assignment of assignments ?? []) {
     const equals = assignment.indexOf('=');
     const name = assignment.slice(0, equals);
     if (!onAllowList(lists.env, name, assignment.slice(equals + 1))) {
-      return `environment variable ${name} ${runsProgram}`;
+      return refusal(lists.env, name, `environment variable ${name}`);
     }
   }
 
@@ -1696,7 +1709,7 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: Conf
       const key = settingEquals === -1 ? setting : setting.slice(0, settingEquals);
       // `--config-env=key=VAR` reads the value from VAR when git runs.
       const value = name === '-c' && settingEquals !== -1 ? setting.slice(settingEquals + 1) : null;
-      if (!onAllowList(lists.config, key, value)) return `${name} ${key} ${runsProgram}`;
+      if (!onAllowList(lists.config, key, value)) return refusal(lists.config, key, `${name} ${key}`);
       continue;
     }
 
