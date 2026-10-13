@@ -277,14 +277,35 @@ barrier, like the rows above.
   value. A shared dev password that also sits in a docker-compose file or a
   test fixture blocks that file: that is the guard working, and the reason
   tells the agent to reference the variable instead.
+- **Tool output too (ADR-0008, ticket 59).** The same row, the same names,
+  floor and spellings, redact every tool's **output** before the model sees
+  it: under a harness that declares a post-tool event (Claude Code's
+  `PostToolUse`, pi-agent's `tool_result`), each occurrence becomes
+  `[redacted: NAME]` inside the output's own text, its shape kept (keys,
+  numbers, booleans; image data is left alone). Two variables whose values
+  overlap are named together in one marker (`[redacted: A, B]`); a value
+  contained in a longer one is named by the longer; one value under two
+  names is named by the one that sorts first. A base64 spelling goes with
+  exactly the characters that carry a bit of the value, and its `=` padding
+  when it ends the stream; a neighbour from the base64 alphabet (`/`, `_`,
+  `-`, a letter) stays. The audit log records a `redact`
+  verdict with the names ([Audit log reference](audit-log.md#verdict-entry)).
+  Limits of its own (a failed tool under Claude Code, on-disk copies of the
+  output): see the [Claude Code](../how-to/wire-into-claude-code.md#tool-output-redaction)
+  and [pi-agent](../how-to/wire-into-pi-agent.md) how-tos.
 - **Opting out.** The row is a regular baseline row, listed by `rules list`
   and reachable by `[[override]]` ([Override a baseline rule](../how-to/override-a-baseline-rule.md)):
   `disable` switches the guard off; `relax` softens it to `confirm` or
   `observe` (the variable is still named); `replace` swaps the row's regex,
-  which here only decides **which texts** the guard looks at (the baseline's
-  `[\s\S]` accepts every non-empty text) — it sees the text, never the path,
-  so it cannot exempt a file. The recognition itself
-  (`special = "env_value"`) is the engine's and is not replaceable.
+  which here only decides **which written texts** the guard looks at (the
+  baseline's `[\s\S]` accepts every non-empty text) — it sees the text, never
+  the path, so it cannot exempt a file. **One switch for both uses** (ADR-0008
+  § 5): `disable` or `relax` turns the tool-output redaction off as well.
+  `replace` does not: it governs writes only, and the redaction ignores the
+  row's `regex` and `except` and always scans the whole output, so an override
+  written for the write guard never narrows what is hidden from the model
+  (decision H6). The recognition itself (`special = "env_value"`) is the
+  engine's and is not replaceable.
 
 **Limits.** The guard sees only what its own environment holds, and only these
 spellings:
@@ -300,8 +321,8 @@ spellings:
   one with a trailing newline does not match the same text without it.
 - A variable exported later inside the Bash tool's own shell, or defined only
   by a shell profile the hook never loads, is not in the hook's environment.
-- It is a net for what the agent copies. It does not stop a value reaching the
-  agent's context in the first place.
+- It is a net for what the agent copies. Since ticket 59 a value printed by a
+  tool reaches the model redacted, within the post-tool limits above.
 - It does not redact other families' logs. Every rule other than `env-value`
   logs its `target` verbatim, so a Bash command that carries a literal value
   and is blocked by another rule is written to the audit log as typed.
@@ -982,11 +1003,13 @@ input = "tool_input"
 session = "session_id"
 prompt = "prompt"
 cwd = "cwd"
+response = "tool_response"
 
 [harness.protocol.events]
 pre_tool = "PreToolUse"
 prompt = "UserPromptSubmit"
 session_start = "SessionStart"
+post_tool = "PostToolUse"
 
 [harness.protocol.tools]
 Bash = { role = "command", command = "command" }
@@ -1003,6 +1026,9 @@ ask_probe = "2026-08-16, Claude Code (version unrecorded): an unanswerable ask u
 
 [harness.protocol.output.deny]
 stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":${reason}}}'
+
+[harness.protocol.output.redact]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":${response}}}'
 ```
 
 **`transport`** — the codec that reads the envelope. `"stdin-json"` (the
@@ -1010,7 +1036,7 @@ only one this ticket declares): one JSON object on stdin, no framing.
 
 **`wiring`** — the codec `doctor` uses to prove the hook is actually
 installed. `"hook-file"` (generic): reads `<configDir>/settings.json`,
-checks each of `events.pre_tool`/`prompt`/`session_start` names a command
+checks each of `events.pre_tool`/`prompt`/`session_start`/`post_tool` names a command
 whose executable basename is `bouncer`, whose args contain `run` and —
 for any harness other than `claude-code` — also `--harness <id>` (a bare
 `bouncer run` under a non-default harness would silently judge against
@@ -1047,7 +1073,10 @@ no coherence rule gates it: when declared, its value is attached to
 every logged verdict entry for that call, `docs/reference/audit-log.md`'s
 own `permission` field; logging only, never read for a decision anywhere
 in this codebase — codex.toml declares `permission = "permission_mode"`,
-claude-code.toml declares none).
+claude-code.toml declares none), `response` (ADR-0008 — OPTIONAL, required
+iff `events.post_tool` is declared: the tool's own result in a post-tool
+envelope, walked and rewritten in its own shape — `tool_response` for
+Claude Code, the shim's `content` for pi-agent).
 
 **`[harness.protocol.events]`** — the literal event-name strings `event`
 takes for each event this pipeline understands. `pre_tool` is always
@@ -1055,8 +1084,12 @@ required. `prompt` and `session_start` are OPTIONAL (review round 2
 R2-1) — a harness that never judges a submitted prompt (or has no
 doctor-facing SessionStart surface, ADR-0006 § 7's pi-agent by design)
 declares neither, rather than being forced to name an event field it has
-no real envelope shape for. See "Optional surfaces" below for the
-coherence rules gating each.
+no real envelope shape for. `post_tool` (ADR-0008) is OPTIONAL too: the
+event fired after a tool ran, whose response bouncer rewrites to redact
+protected environment values ([the env-value row](#the-env-value-row));
+a harness that cannot replace a tool result (Codex today) declares none and
+is never reached. See "Optional surfaces" below for the coherence rules
+gating each.
 
 **`[harness.protocol.tools]`** — name → `{role, ...selectors}`. A name is
 an exact tool name or a trailing-`*` glob (`"mcp__*"`); exact rows win
@@ -1163,8 +1196,8 @@ rejects the containing block AS A UNIT on any of:
 
 `on_malformed` (`"allow"` or `"deny"`) governs exactly one case: stdin
 `run()` could not read or parse at all — empty, or not valid JSON.
-A WELL-FORMED envelope naming an event this binary does not judge
-(`PostToolUse`, a missing `hook_event_name`) is a SEPARATE case and
+A WELL-FORMED envelope naming an event this binary does not judge (one
+the declaration does not name, a missing `hook_event_name`) is a SEPARATE case and
 always stays silent regardless of `on_malformed` — it is not malformed,
 it is simply not ours to act on. `"allow"` is Claude Code's own fail-
 open-on-bad-envelope contract, kept explicit per harness — Claude Code's
@@ -1205,13 +1238,29 @@ A minimal declaration — `pre_tool` + `deny` only, no `prompt`/
 `input.cwd` and `output.deny` are the two fields with no optional path:
 every declared harness needs both, unconditionally.
 
+**Optional surface: `post_tool` (ADR-0008 § 3)** — fail-closed by lint,
+the block rejected AS A UNIT on any of:
+
+14. `events.post_tool` declared without `input.response`, or
+    `input.response` declared without `events.post_tool` (a dead selector).
+15. `events.post_tool` declared without a
+    `[harness.protocol.output.redact]` table, or that table present without
+    `events.post_tool` (a dead template).
+16. A `redact` template whose `stdout` does not carry `${response}`, or
+    that sets `exit` — an answer that drops the rewritten response, or exits
+    instead of answering, would show the original output.
+17. `events.post_tool` equal to another declared event name — `run` routes
+    the post-tool event first, so a shared name would never be judged as a
+    tool call.
+
 **`[harness.protocol.output.<action>]`** — one template table per action
 the output table actually maps a verdict to (never `silent`, which
 renders nothing), plus `session_start` when `events.session_start` is
 declared (SessionStart's own doctor announcement, rendered through this
-same mechanism but never reached via the verdict table). Each sets
+same mechanism but never reached via the verdict table) and `redact` when
+`events.post_tool` is declared (the rewritten tool response, ADR-0008). Each sets
 `stdout` (a string), `exit` (an integer process exit code), or both —
-Claude Code's four templates only ever set `stdout`. Placeholders are
+Claude Code's five templates only ever set `stdout`. Placeholders are
 JSON-encoded ON SUBSTITUTION (so an arbitrary reason/context string with
 quotes or newlines never breaks the surrounding JSON literal) — write
 them BARE, `${reason}` never `"${reason}"`: the value already carries
@@ -1221,7 +1270,7 @@ placeholder doubles up and produces invalid JSON. `rules lint` rejects a
 renders every template once with a worst-case probe value and requires
 the result to still parse as JSON when `stdout` looks like a JSON object
 or array literal — both belts reject the containing action's block as a
-unit, the same as any other rule 1–13 failure.
+unit, the same as any other rule 1–17 failure.
 
 **Placeholders — a fixed, PER-TEMPLATE set (review round 2 C-1)**: `run.ts`
 fills exactly these names and no others, so lint rejects any placeholder
@@ -1236,6 +1285,7 @@ forever, silently invalid JSON:
 | `ask` | same three as `deny` |
 | `context` | `${context}` only (the assembled UserPromptSubmit hit-list prose) |
 | `session_start` | `${context}` only (the assembled doctor announcement text) |
+| `redact` | `${response}` only — the rewritten tool response, JSON-encoded as the VALUE it is (an object, an array), not as a string: one rule for every placeholder, `JSON.stringify(value)` (ADR-0008 § 2) |
 
 ### Codecs: the code a declaration names by string
 

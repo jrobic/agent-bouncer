@@ -352,11 +352,13 @@ export interface SuggestionOptions extends AuditReportOptions {
   readonly governedGitSubs: ReadonlyMap<string, GitGoverningForm>;
 }
 
+// `redact` (ADR-0008) is no friction: the tool ran, only its output changed.
 const FRICTION_VERDICTS: Readonly<Record<VerdictKind, boolean>> = {
   block: true,
   confirm: true,
   flag: false,
   observe: false,
+  redact: false,
 };
 const POLICY_TRANSITIONS: readonly PolicyTransition[] = ['resolved', 'softened', 'hardened', 'drift'];
 

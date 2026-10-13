@@ -42,15 +42,16 @@ describe('degradePreToolUseVerdict: one case per mapping', () => {
     expect(degradePreToolUseVerdict('confirm', denyOnly)).toBe('deny');
   });
 
-  test('flag reaching the PreToolUse table is a routing bug, not a silent no-op', () => {
+  test.each(['flag', 'redact'] as const)('%s reaching the PreToolUse table is a routing bug, not a silent no-op', (kind) => {
     // flag verdicts belong to UserPromptSubmit and are rendered through
     // renderAction(protocol, protocol.output.flag, ...) directly (see
-    // tests/adapter-render.test.ts) — they must never reach this table.
-    // Failing loudly here catches a future mis-route instead of silently
-    // doing nothing. dispatch.ts's strictestOf already guards this on the
-    // real PreToolUse path (tests/adapter-dispatch.test.ts); this is
-    // defense in depth against the same bug reaching this function some
-    // other way.
-    expect(() => degradePreToolUseVerdict(verdict('flag', 'ignore-previous').verdict, OUTPUT)).toThrow(/flag/);
+    // tests/adapter-render.test.ts); redact belongs to the post-tool event
+    // (ADR-0008) — neither must ever reach this table. Failing loudly here
+    // catches a future mis-route instead of silently doing nothing.
+    // dispatch.ts's strictestOf already guards this, through the same
+    // isPreToolKind test, on the real PreToolUse path
+    // (tests/adapter-dispatch.test.ts); this is defense in depth against the
+    // same bug reaching this function some other way.
+    expect(() => degradePreToolUseVerdict(verdict(kind, 'misrouted').verdict, OUTPUT)).toThrow(new RegExp(`"${kind}" verdict`));
   });
 });

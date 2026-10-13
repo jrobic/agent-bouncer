@@ -165,7 +165,45 @@
     {
       "id": "unknown-event-silent",
       "argv": [],
-      "stdin": "{\"event\":\"tool_result\",\"toolName\":\"bash\",\"input\":{\"command\":\"echo hi\"}}",
+      "stdin": "{\"event\":\"tool_execution_end\",\"toolName\":\"bash\",\"input\":{\"command\":\"echo hi\"}}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "tool-result-redact",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_result\",\"toolName\":\"bash\",\"input\":{\"command\":\"printenv\"},\"content\":[{\"type\":\"text\",\"text\":\"token=5a71372d6d6164652d75702d30303432\\n\"},{\"type\":\"image\",\"data\":\"iVBORw0KGgo=\",\"mimeType\":\"image/png\"}],\"isError\":true,\"session\":\"capture-session\",\"cwd\":null}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": "{\"content\":[{\"type\":\"text\",\"text\":\"token=[redacted: FAKE_API_TOKEN]\\n\"},{\"type\":\"image\",\"data\":\"iVBORw0KGgo=\",\"mimeType\":\"image/png\"}]}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "tool-result-clean-silent",
+      "argv": [],
+      "stdin": "{\"event\":\"tool_result\",\"toolName\":\"read\",\"input\":{\"path\":\"README.md\"},\"content\":[{\"type\":\"text\",\"text\":\"hello\"}],\"isError\":false,\"session\":\"capture-session\",\"cwd\":null}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "tool-result-shadow-silent",
+      "argv": [
+        "--shadow"
+      ],
+      "stdin": "{\"event\":\"tool_result\",\"toolName\":\"bash\",\"input\":{\"command\":\"printenv\"},\"content\":[{\"type\":\"text\",\"text\":\"Zq7-made-up-0042\"}],\"isError\":false,\"session\":\"capture-session\",\"cwd\":null}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
       "expected": {
         "stdout": null,
         "exit": 0

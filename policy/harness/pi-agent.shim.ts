@@ -14,9 +14,12 @@
 // Carries NO policy (ADR-0006 § 7's own contract, doctrine 2026-09-04
 // "bouncer judges alone"): it forwards pi-agent's own event object to
 // `bouncer run --harness pi-agent` unmodified and returns bouncer's
-// stdout to the harness as is. The three fixed, harness-neutral rules
-// below are the same ones the canary enforces for every OTHER harness's
-// wiring — never a per-harness decision this file gets to make:
+// stdout to the harness as is. Its rules are fixed and harness-neutral —
+// never a per-harness decision this file gets to make: the four numbered
+// below (1–3 the same ones the canary enforces for every OTHER harness's
+// wiring, 4 ADR-0008's post-tool rule), plus `session_start`'s two-way
+// delivery of the doctor notice, described apart further down (its fold
+// is display only, not a rule):
 //   1. bouncer missing, not executable, exiting non-zero, or timing out
 //      (2s) → `{ block: true, reason: "bouncer: … — failing closed" }`.
 //   2. empty stdout → `undefined` (allow — nothing matched).
@@ -30,6 +33,18 @@
 //      string, or a select that rejects or throws → `{ block: true,
 //      reason }`. No timeout: an unanswered dialog waits (a timeout would
 //      silently turn asks into denials).
+//   4. `tool_result` (ADR-0008): every tool's result is relayed before the
+//      model sees it — `{ event: "tool_result", toolName, input, content,
+//      isError, session, cwd }`, never `details` — and bouncer's `{
+//      content }` answer is returned as is; empty stdout → `undefined`
+//      (nothing to redact, the common case); rule 1's failures, or stdout
+//      that is not a JSON object carrying a `content` array → `{ content:
+//      [{ type: "text", text: "bouncer: post-tool check failed — output
+//      withheld" }] }`. The handler never throws: a throwing `tool_result`
+//      handler leaves the ORIGINAL output in place, on both binaries
+//      (measured 2026-10-13, omp 18.10.3 / pi 0.84.1). With
+//      `BOUNCER_PROBE_LOG` set, a `tool_result` line records the output's
+//      shape and size only (block types, byte count) — never its text.
 //
 // The dialog's shape is measured per binary, never assumed iso (ticket
 // 55, live 2026-10-11, re-run 2026-10-12): `omp` 18.9.1 selects instantly
@@ -116,6 +131,14 @@ import { appendFileSync } from 'node:fs';
 // edited by hand.
 const BOUNCER = process.env.BOUNCER_BIN ?? '__BOUNCER_BIN__';
 const TIMEOUT_MS = 2000;
+// Rule 4's answer carries the whole rewritten output back on stdout; the
+// harnesses truncate a tool's content (~50 KB measured) but an image block
+// rides along unchanged, so Node's 1 MiB `spawnSync` default would turn a
+// large answer into a spawn failure (a withheld output). A transport limit,
+// not policy.
+const MAX_STDOUT_BYTES = 64 * 1024 * 1024;
+// Rule 4's answer when the post-tool check cannot be trusted (ADR-0008 § 6).
+const POST_TOOL_WITHHELD = 'bouncer: post-tool check failed — output withheld';
 
 // Ticket 55: the ask dialog's one ALLOWING answer — the label offered as the
 // first option AND the only answer the shim compares against, so the two can
@@ -147,6 +170,21 @@ interface ToolCallEvent {
 interface ToolCallResult {
   block?: boolean;
   reason?: string;
+}
+
+// The slice of pi/omp's `tool_result` event the shim relays (rule 4) —
+// `details` deliberately absent: it never reaches the model.
+interface ToolResultEvent {
+  toolName: string;
+  input: unknown;
+  content: unknown;
+  isError?: boolean;
+}
+
+// A partial patch: omitted fields keep their current values (pi's own
+// `ToolResultEventResult`, honoured identically by omp).
+interface ToolResultPatch {
+  content: unknown[];
 }
 
 interface BeforeAgentStartMessage {
@@ -191,6 +229,7 @@ interface PiExtensionHost {
   on(event: 'tool_call', handler: (event: ToolCallEvent, ctx: PiContext) => Promise<ToolCallResult | undefined>): void;
   on(event: 'session_start', handler: (event: unknown, ctx: PiContext) => Promise<void>): void;
   on(event: 'before_agent_start', handler: (event: unknown, ctx: PiContext) => BeforeAgentStartResult | undefined): void;
+  on(event: 'tool_result', handler: (event: ToolResultEvent, ctx: PiContext) => Promise<ToolResultPatch | undefined>): void;
   // Optional on purpose, like `events`: without it the `bouncer-doctor`
   // message keeps the host's own full rendering.
   registerMessageRenderer?(customType: string, renderer: MessageRenderer): void;
@@ -205,19 +244,34 @@ function failClosed(what: string): SpawnOutcome {
   return { kind: 'fail-closed', reason: `bouncer: ${what} — failing closed` };
 }
 
-// Ticket 15c § probe phase: when `BOUNCER_PROBE_LOG` is set, the exact
-// JSON payload this shim is about to send is appended there (one line)
-// BEFORE the spawn — the probe script's own captured "stdin" evidence,
-// since there is no external wrapper command (unlike a hook-file
-// harness's `hooks.json` entry) to `tee` in front of here. A logging
-// failure (an unwritable path, a full disk) never breaks the real
-// fail-closed contract below — it is swallowed, never surfaced as a
-// reason a tool call was blocked.
+// Ticket 15c § probe phase: when `BOUNCER_PROBE_LOG` is set, the JSON
+// payload this shim is about to send is appended there (one line) BEFORE
+// the spawn — the probe script's own captured "stdin" evidence, since there
+// is no external wrapper command (unlike a hook-file harness's `hooks.json`
+// entry) to `tee` in front of here. A `tool_result` payload is the one
+// exception (rule 4, header comment): it carries the tool's raw output — the
+// very text that may hold a protected value — so its line keeps the
+// envelope fields and only the SHAPE and SIZE of the output (block types,
+// byte count), never the output text. The tool input is left out of that
+// line only because the same call's `tool_call` line already records it as
+// is — that is no protection of the input. A logging failure (an unwritable
+// path, a full disk) never breaks the real fail-closed contract below — it
+// is swallowed, never surfaced as a reason a tool call was blocked.
 function logProbeStdin(payload: Record<string, unknown>): void {
   const path = process.env.BOUNCER_PROBE_LOG;
   if (path === undefined) return;
   try {
-    appendFileSync(path, `${JSON.stringify(payload)}\n`);
+    let record = payload;
+    if (payload['event'] === 'tool_result') {
+      const { content, input: _input, ...fields } = payload;
+      const blocks: unknown[] = Array.isArray(content) ? content : [];
+      record = {
+        ...fields,
+        contentTypes: blocks.map((block) => (block !== null && typeof block === 'object' && 'type' in block ? block.type : typeof block)),
+        contentBytes: Buffer.byteLength(JSON.stringify(content ?? null)),
+      };
+    }
+    appendFileSync(path, `${JSON.stringify(record)}\n`);
   } catch {
     // Swallowed — see this function's own header comment.
   }
@@ -230,6 +284,7 @@ function spawnBouncer(payload: Record<string, unknown>): SpawnOutcome {
     result = spawnSync(BOUNCER, ['run', '--harness', 'pi-agent'], {
       input: JSON.stringify(payload),
       timeout: TIMEOUT_MS,
+      maxBuffer: MAX_STDOUT_BYTES,
       encoding: 'utf8',
     });
   } catch (err) {
@@ -386,6 +441,12 @@ const renderNotice: MessageRenderer = (message, { expanded }, theme) => {
   };
 };
 
+// The session/cwd pair every relayed event carries (pi-agent.toml's
+// `input.session` / `input.cwd` selectors).
+function sessionFields(ctx: PiContext): { session: string | null; cwd: string | null; } {
+  return { session: ctx.sessionManager?.getSessionId?.() ?? null, cwd: ctx.cwd ?? null };
+}
+
 export default function(pi: PiExtensionHost): void {
   // Set by `session_start`, consumed once by the FIRST `before_agent_start`
   // turn, then cleared — see this file's own header comment for why two
@@ -393,13 +454,7 @@ export default function(pi: PiExtensionHost): void {
   let pendingSessionNotice: string | undefined;
 
   pi.on('tool_call', async (event, ctx): Promise<ToolCallResult | undefined> => {
-    const outcome = spawnBouncer({
-      event: 'tool_call',
-      toolName: event.toolName,
-      input: event.input,
-      session: ctx.sessionManager?.getSessionId?.() ?? null,
-      cwd: ctx.cwd ?? null,
-    });
+    const outcome = spawnBouncer({ event: 'tool_call', toolName: event.toolName, input: event.input, ...sessionFields(ctx) });
     if (outcome.kind === 'fail-closed') return { block: true, reason: outcome.reason };
     if (outcome.kind === 'silent') return undefined;
     const { value } = outcome;
@@ -432,7 +487,7 @@ export default function(pi: PiExtensionHost): void {
   });
 
   pi.on('session_start', async (_event, ctx): Promise<void> => {
-    const outcome = spawnBouncer({ event: 'session_start', session: ctx.sessionManager?.getSessionId?.() ?? null, cwd: ctx.cwd ?? null });
+    const outcome = spawnBouncer({ event: 'session_start', ...sessionFields(ctx) });
     if (outcome.kind === 'fail-closed') {
       pendingSessionNotice = outcome.reason;
       ctx.ui.notify(outcome.reason, 'warning');
@@ -451,6 +506,31 @@ export default function(pi: PiExtensionHost): void {
     const content = pendingSessionNotice;
     pendingSessionNotice = undefined;
     return { message: { customType: NOTICE_TYPE, content, display: true } };
+  });
+
+  // Rule 4 (header comment): relay every tool's result, return bouncer's
+  // `{ content }` as is, `undefined` on silence, the withheld content on
+  // any failure. Everything inside the `try` — a throw would reach the
+  // harness, which keeps the ORIGINAL output when a handler throws.
+  pi.on('tool_result', async (event, ctx): Promise<ToolResultPatch | undefined> => {
+    try {
+      const outcome = spawnBouncer({
+        event: 'tool_result',
+        toolName: event.toolName,
+        input: event.input,
+        content: event.content,
+        isError: event.isError ?? false,
+        ...sessionFields(ctx),
+      });
+      if (outcome.kind === 'silent') return undefined;
+      if (outcome.kind === 'parsed') {
+        const { content } = outcome.value;
+        if (Array.isArray(content)) return { content };
+      }
+    } catch {
+      // Falls through to the withheld answer below.
+    }
+    return { content: [{ type: 'text', text: POST_TOOL_WITHHELD }] };
   });
 
   // Last, and never allowed to throw: a renderer that fails to register

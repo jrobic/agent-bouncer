@@ -176,6 +176,12 @@ texts the guard looks at. It cannot exempt a path or a file, and it cannot
 change what counts as a protected value. For a dev password that a compose file
 or a test fixture legitimately repeats, use `relax` to `confirm` or `disable`.
 
+The same row also redacts every tool's **output** before the model sees it
+(ADR-0008). `disable` and `relax` turn that redaction off too. `replace`
+applies to writes only: the redaction ignores the row's `regex` and `except`
+and always scans the whole output, so an override written for the write guard
+never narrows what is hidden from the model.
+
 ## The limit: four rules aren't override-able
 
 `rm-rf-dangerous`, `sudo` (privilege escalation), `git-protected`

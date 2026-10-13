@@ -6,8 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Tool output is redacted before the model sees it** (ADR-0008). After
+  every tool — Bash, Read, Grep, MCP tools, every tool — Bouncer replaces each
+  occurrence of the value of a protected environment variable (the 1.9.0
+  `env-value` definition: protected names, at least 8 characters, in clear,
+  base64 or hex) by `[redacted: NAME]`, keeping the output's own shape. Under
+  Claude Code it is a new `PostToolUse` hook (`updatedToolOutput`); under
+  pi/omp the shim relays every `tool_result` and returns Bouncer's `{ content
+  }`. Nothing found, nothing changes. Each redaction is logged with the tool
+  name and the variable names (a new verdict, `redact`; the value reaches no
+  log field, message or stderr line); `--shadow` logs it and prints nothing.
+  One switch: an `[[override]]` that disables or relaxes `env-value` turns
+  redaction off too; a `replace` of `env-value` governs writes only — the
+  redaction always scans the whole output. When the check itself fails, the
+  output is withheld — `bouncer: post-tool check failed — output withheld` —
+  under pi/omp on every failure, under Claude Code only on a failure Bouncer
+  catches itself.
+  **Limits:** the tool already ran (only the model's context is protected);
+  under Claude Code a tool that fails (a non-zero Bash exit included) and any
+  failure of the hook process itself (crash, timeout, missing binary) leave
+  the original output in front of the model; Claude Code's large-output files
+  (`tool-results/*.txt`), omp's session artifacts and the pi/omp `details`
+  kept in session files hold the original on disk; images are not matched.
+  Details: [Claude Code](docs/how-to/wire-into-claude-code.md#tool-output-redaction),
+  [pi-agent](docs/how-to/wire-into-pi-agent.md#tool-output-redaction).
+- `bouncer doctor` checks the new `PostToolUse` entry (`wiring:PostToolUse`):
+  missing, or with a matcher that leaves a tool out, it is `[fail]` and names
+  the entry to paste; the session-start notice lists it like any other wiring
+  failure. A harness declaration may now declare a post-tool event
+  (`events.post_tool`, `input.response`, an `output.redact` template with the
+  structured `${response}` placeholder), kept consistent by `bouncer rules
+  lint` (`docs/reference/policy.md`).
+
 ### Changed
 
+- **Upgrade (Claude Code):** add the `PostToolUse` entry to every
+  `settings.json` Bouncer is wired into — `{"hooks":[{"type":"command",
+  "command":"<bouncer> run"}]}` under `hooks.PostToolUse`, no matcher — until
+  `bouncer doctor` is `[pass]` again (it prints the entry on its
+  `[fail] wiring:PostToolUse` line). Until then no tool output is redacted and
+  every session starts with a wiring notice.
 - The pi/omp session-start doctor notice is folded. The `Warning:` toast and
   the `bouncer-doctor` message show its headline lines and a count of the
   detail lines under them (one per active override or relaxation, failing
@@ -15,11 +55,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   message to the full text, and again to fold it back; the toast does not
   expand. The model still receives the full notice. Measured live on omp
   18.10.3 and pi 0.84.1.
-- **Upgrade:** the shim's bytes changed, so reprint it for each install —
+- **Upgrade (pi/omp):** the shim's bytes changed (the folded notice above and
+  the `tool_result` relay that redacts tool output), so reprint it for each
+  install and each omp profile —
   `bouncer harness shim pi-agent > <dir>/extensions/bouncer.ts` (the same
-  `--bin` as at install time; `~/.pi/agent`, `~/.omp/agent` and each omp
-  profile's agent dir) — and restart the session. `bouncer doctor --harness pi-agent`
-  reports `[fail] wiring:shim` until the installed copy matches again.
+  `--bin` as at install time; `~/.pi/agent`, `~/.omp/agent`,
+  `~/.omp/profiles/<name>/agent`) — and restart the session. `bouncer doctor
+  --harness pi-agent` reports `[fail] wiring:shim` until the installed copy
+  matches again.
 - **Upgrade:** a personal `ask_flags` overlay becomes stricter without being
   rewritten. A command that spells a listed flag grouped, as `--name=value` or
   abbreviated now asks, where it used to pass.
@@ -32,6 +75,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `command.git.allowed_global_options` with a `reason`; run `bouncer rules
   lint` and `bouncer doctor` after upgrading; `rules list` shows an added
   entry as an `overlay-relax command.git.allowed_env …` line.
+
+### Fixed
+
+- `bouncer run` exited as soon as it had written its answer, and a pipe write
+  is asynchronous on macOS: an answer larger than the pipe buffer (64 KiB under
+  a node reader) reached the harness truncated. No verdict was ever that large;
+  a redacted tool output can be, so `run` now exits once stdout is flushed.
 
 ### Security
 

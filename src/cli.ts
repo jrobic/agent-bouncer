@@ -94,7 +94,12 @@ async function main(): Promise<void> {
     // wiring-configuration failure, not a verdict shadow ever suppresses
     // — it propagates even under --shadow (stdout stays gated on shadow
     // regardless, unaffected here since that path never sets stdout).
-    if (stdout !== null && !shadow) process.stdout.write(stdout);
+    // Exit only once stdout is flushed: a pipe write is asynchronous on
+    // macOS, and `process.exit` right after it drops what the pipe has not
+    // taken yet — harmless for a verdict of a few hundred bytes, a truncated
+    // (unparseable) answer for a post-tool rewrite of a large output
+    // (ADR-0008), which Claude Code would then ignore.
+    if (stdout !== null && !shadow) await new Promise<void>((resolve) => process.stdout.write(stdout, () => resolve()));
     process.exit(exit ?? 0);
   }
 

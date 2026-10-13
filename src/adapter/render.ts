@@ -1,6 +1,7 @@
 // Renders a harness action's declared template (ADR-0006 § 3) — the one
 // place that knows the `${reason}`/`${context}`/`${rule}`/`${verdict}`
-// placeholder grammar. Every other module in this adapter deals in the
+// placeholder grammar, and ADR-0008's structured `${response}`. Every other
+// module in this adapter deals in the
 // abstract HarnessAction/Verdict vocabulary; a template string is TOML
 // data, never a second Claude-Code-shaped stdout builder (the pre-15a
 // src/adapter/envelopes.ts).
@@ -30,15 +31,18 @@ const SILENT: RenderResult = { stdout: null };
 // surrounding text is typically a JSON literal (Claude Code's four are),
 // and JSON-encoding is what keeps an arbitrary reason/context string
 // (quotes, newlines, backslashes) from producing invalid JSON on the way
-// out, independent of what a rule author happened to write.
-function renderTemplateString(template: string, values: Readonly<Record<string, string | undefined>>): string {
+// out, independent of what a rule author happened to write. One rule for
+// every placeholder, `JSON.stringify(value)`: a string placeholder becomes
+// a JSON string, ADR-0008's `${response}` the JSON encoding of whatever
+// value the rewritten response is (an object, an array).
+function renderTemplateString(template: string, values: Readonly<Record<string, unknown>>): string {
   return template.replace(/\$\{(\w+)\}/g, (match, key: string) => {
     const value = values[key];
     return value === undefined ? match : JSON.stringify(value);
   });
 }
 
-function renderTemplate(template: HarnessTemplate, values: Readonly<Record<string, string | undefined>>): RenderResult {
+function renderTemplate(template: HarnessTemplate, values: Readonly<Record<string, unknown>>): RenderResult {
   return {
     stdout: template.stdout === undefined ? null : renderTemplateString(template.stdout, values),
     ...(template.exit === undefined ? {} : { exit: template.exit }),
@@ -81,4 +85,18 @@ export function renderSessionStart(protocol: HarnessProtocol, context: string | 
   if (context === null) return SILENT;
   const template = protocol.templates.session_start;
   return template === undefined ? SILENT : renderTemplate(template, { context });
+}
+
+/**
+ * Renders the harness's `redact` template (ADR-0008) around a rewritten
+ * tool response — the redacted one, or the withheld one when the check
+ * failed. Lint requires the template whenever `events.post_tool` is
+ * declared, the only path that calls this; a missing one throws rather than
+ * rendering silence (ADR-0008 § 6: a post-tool answer is never silence — the
+ * caller falls back to the withheld answer, then to exit 2).
+ */
+export function renderRedaction(protocol: HarnessProtocol, response: unknown): RenderResult {
+  const template = protocol.templates.redact;
+  if (template === undefined) throw new Error('renderRedaction: the harness declares no redact template');
+  return renderTemplate(template, { response });
 }

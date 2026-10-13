@@ -13,9 +13,11 @@
 // allow; `"deny"` renders that harness's own `deny` template
 // (`envelope-malformed: unreadable or malformed hook envelope — failing
 // closed`) and logs a policy-warning. A WELL-FORMED envelope naming an
-// event this binary does not judge (`PostToolUse`, a missing
-// `hook_event_name`) is a SEPARATE case — never malformed, always silent
-// regardless of `on_malformed` (dispatchByEvent's own whitelist, below).
+// event this binary does not judge (one the harness's declaration does
+// not name, a missing `hook_event_name`) is a SEPARATE case — never
+// malformed, always silent regardless of `on_malformed` (dispatchByEvent's
+// own whitelist, below). The post-tool event (ADR-0008) is judged only
+// where the declaration names one (`events.post_tool`, runPostTool below).
 //
 // Fail-CLOSED for an unusable harness declaration (ADR-0006 § 6): an id no
 // layer declares, or declared without a usable `protocol`, or whose block
@@ -40,10 +42,10 @@
 // restart or session reload needed.
 
 import { type BuildInfo, currentBuild } from '../build-info.ts';
-import { createEnvValueScanner, type EnvRecord, namesOf, withheldNotice } from '../env-value-rules.ts';
+import { createEnvValueGuard, createEnvValueScanner, type EnvRecord, namesOf, withheldNotice } from '../env-value-rules.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { LoadResult } from '../policy/load.ts';
-import type { HarnessDeclaration, HarnessProtocol } from '../policy/schema.ts';
+import type { HarnessDeclaration, HarnessProtocol, RulesPolicy } from '../policy/schema.ts';
 import { parseStdinJson } from './codecs/stdin-json.ts';
 import { DEFAULT_HARNESS_ID, HOOK_NAME } from './constants.ts';
 import { degradePreToolUseVerdict } from './degrade.ts';
@@ -53,7 +55,8 @@ import { buildSessionStartContext, type DoctorReport, runDoctorChecks } from './
 import { type LogMode, logPolicyWarnings, logSessionStartShadow, logVerdict, toLogMode } from './log.ts';
 import { buildNeutralCall } from './neutral-call.ts';
 import { loadCurrentPolicy } from './policy.ts';
-import { assembleFlagContext, reasonText, renderAction, renderSessionStart } from './render.ts';
+import { type RedactedResponse, redactResponse, withheldResponse } from './post-tool.ts';
+import { assembleFlagContext, reasonText, renderAction, renderRedaction, renderSessionStart } from './render.ts';
 
 export interface RunResult {
   readonly stdout: string | null;
@@ -161,12 +164,11 @@ async function runPreToolUse(
     await logVerdict(hit.family, context, hit.verdict, harness, loaded, mode, build);
     if (shadow) return SILENT;
     const action = degradePreToolUseVerdict(hit.verdict.verdict, protocol.output);
-    const rendered = renderAction(protocol, action, {
+    return renderAction(protocol, action, {
       reason: reasonText(hit.verdict),
       rule: hit.verdict.ruleId,
       verdict: hit.verdict.verdict,
     });
-    return { stdout: rendered.stdout, ...(rendered.exit === undefined ? {} : { exit: rendered.exit }) };
   }
 
   // Nothing to block or confirm — check whether a conditional rule still
@@ -205,8 +207,7 @@ async function runUserPromptSubmit(
     await logVerdict('prompt', context, hit, harness, loaded, mode, build);
   }
   if (shadow) return SILENT;
-  const rendered = renderAction(protocol, protocol.output.flag, { context: assembleFlagContext(hits) });
-  return { stdout: rendered.stdout, ...(rendered.exit === undefined ? {} : { exit: rendered.exit }) };
+  return renderAction(protocol, protocol.output.flag, { context: assembleFlagContext(hits) });
 }
 
 // doctor's own event — deliberately NOT routed through dispatchByEvent
@@ -248,8 +249,7 @@ export async function runSessionStart(
       if (context !== null) await logSessionStartShadow(context, harness, loaded);
       return SILENT;
     }
-    const rendered = renderSessionStart(protocol, context);
-    return { stdout: rendered.stdout, ...(rendered.exit === undefined ? {} : { exit: rendered.exit }) };
+    return renderSessionStart(protocol, context);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try {
@@ -288,8 +288,7 @@ async function handleMalformedEnvelope(
     // Logging must never be what crashes the hook either.
   }
   if (shadow) return SILENT;
-  const rendered = renderAction(protocol, 'deny', { reason, rule: 'envelope-malformed' });
-  return { stdout: rendered.stdout, ...(rendered.exit === undefined ? {} : { exit: rendered.exit }) };
+  return renderAction(protocol, 'deny', { reason, rule: 'envelope-malformed' });
 }
 
 // Explicit whitelist, not "prompt or else pre_tool": an event this
@@ -320,27 +319,31 @@ async function dispatchByEvent(
 }
 
 /**
- * Executes against the current policy's dispatcher, then retries once with
- * the embedded baseline on any construction or dispatch failure. `run` and
- * `ping` share this path so a runnable baseline has one definition. `env` is
- * the environment the env-value guard reads (ticket 58): both dispatchers are
- * built over the SAME record, so the guard survives the retry.
+ * Binds the current policy (`bind`) and executes; on any binding or
+ * execution failure, retries once against the embedded baseline. Every path
+ * that acts on the loaded policy goes through here — `run` (a full dispatcher
+ * for a tool call or a prompt; only the env-value guard for a post-tool
+ * event, ADR-0008) and `ping` — so a runnable baseline has one definition.
+ * The environment the env-value guard reads (ticket 58) is captured by the
+ * caller's `bind`: the SAME record for both attempts, so the guard survives
+ * the retry.
  */
-export async function withDispatcherLikeRun<T>(
+export async function withPolicyLikeRun<B, T>(
   loaded: LoadResult,
-  env: EnvRecord,
-  execute: (dispatcher: Dispatcher, effectiveLoaded: LoadResult | undefined) => Promise<T> | T,
+  bind: (policy: RulesPolicy) => B,
+  execute: (bound: B, effectiveLoaded: LoadResult | undefined) => Promise<T> | T,
   onRetry?: (error: unknown) => Promise<void>,
 ): Promise<T> {
   try {
-    return await execute(createDispatcher(loaded.policy, env), loaded);
+    return await execute(bind(loaded.policy), loaded);
   } catch (error) {
     if (onRetry !== undefined) await onRetry(error);
-    return execute(createDispatcher(BASELINE.rules, env), undefined);
+    return execute(bind(BASELINE.rules), undefined);
   }
 }
 
 const RETRY_WARNING = 'dispatch failed, retrying with the embedded baseline';
+const POST_TOOL_FAILURE_WARNING = 'post-tool check failed, output withheld';
 
 // The retry's policy-warning is free text, and whatever threw may have been
 // holding a protected value (ticket 58): an error that embeds the text being
@@ -348,15 +351,122 @@ const RETRY_WARNING = 'dispatch failed, retrying with the embedded baseline';
 // scanner the guard uses; a message that carries a value is replaced by a fixed
 // notice (the variable NAMES are allowed in it). A scanner that cannot be built
 // (the environment itself is what failed) proves nothing about the message,
-// so it is withheld too.
-function retryWarning(err: unknown, env: EnvRecord): string {
+// so it is withheld too. The post-tool failure warning (ADR-0008) follows the
+// same rule: it may be holding a tool's output.
+function scrubbedWarning(what: string, err: unknown, env: EnvRecord): string {
   const message = err instanceof Error ? err.message : String(err);
   try {
     const names = namesOf(createEnvValueScanner(env)(message));
-    if (names.length === 0) return `${RETRY_WARNING}: ${message}`;
-    return `${RETRY_WARNING} ${withheldNotice('error message', names)}`;
+    if (names.length === 0) return `${what}: ${message}`;
+    return `${what} ${withheldNotice('error message', names)}`;
   } catch {
-    return `${RETRY_WARNING} (error message withheld: the environment could not be scanned)`;
+    return `${what} (error message withheld: the environment could not be scanned)`;
+  }
+}
+
+// One scrubbed policy-warning, never what crashes the hook.
+async function logScrubbedWarning(
+  what: string,
+  err: unknown,
+  env: EnvRecord,
+  harness: HarnessDeclaration,
+  mode: LogMode | undefined,
+): Promise<void> {
+  try {
+    await logPolicyWarnings([scrubbedWarning(what, err, env)], harness, undefined, mode);
+  } catch {
+    // Logging must never be what crashes the hook either.
+  }
+}
+
+// ADR-0008 § 6: never silence after a failure — the answer is the response
+// in its own shape with every text that could hold a value withheld; if even
+// that cannot be rendered, exit 2 with one stderr line (the shim withholds on
+// any non-zero exit; Claude Code shows the original, the documented limit).
+function withheldAnswer(protocol: HarnessProtocol, response: unknown): RunResult {
+  try {
+    return renderRedaction(protocol, withheldResponse(response));
+  } catch {
+    console.error(`${HOOK_NAME}: post-tool check failed and the withheld answer could not be rendered — failing closed`);
+    return { stdout: null, exit: 2 };
+  }
+}
+
+// ADR-0008: the post-tool event — the tool already ran; its response (the
+// declaration's `input.response` selector) is walked in its own shape and
+// every protected value replaced. Nothing found → silent (the common case:
+// no rewrite at all). A find is logged with the variable NAMES (verdict
+// `redact`, the governing env-value row's id, `target` "(tool output)" — the
+// output itself is never logged), then rendered through the `redact`
+// template; `--shadow` logs and prints nothing. Only the env-value guard is
+// bound, not a full dispatcher, through the same current-policy-then-baseline
+// retry as every other path and over the same environment record. A walk
+// that fails on both, or a render that fails, answers with the withheld
+// response, never silence; a logging failure never costs the answer.
+async function runPostTool(
+  envelope: Record<string, unknown>,
+  harness: HarnessDeclaration,
+  protocol: HarnessProtocol,
+  loaded: LoadResult,
+  env: EnvRecord,
+  shadow: boolean,
+  build: BuildInfo,
+): Promise<RunResult> {
+  // `input.response` is guaranteed defined here: lint keeps it in lockstep
+  // with `events.post_tool`, the only way this function is reached.
+  const selector = protocol.input.response!;
+  if (!Object.hasOwn(envelope, selector)) return SILENT;
+  const response = envelope[selector];
+  const mode = toLogMode(shadow);
+  const withhold = async (error: unknown): Promise<RunResult> => {
+    await logScrubbedWarning(POST_TOOL_FAILURE_WARNING, error, env, harness, mode);
+    return shadow ? SILENT : withheldAnswer(protocol, response);
+  };
+
+  let outcome: { readonly redacted: RedactedResponse; readonly effectiveLoaded: LoadResult | undefined; };
+  try {
+    outcome = await withPolicyLikeRun(
+      loaded,
+      (policy) => createEnvValueGuard(policy.write_secret, env).redact,
+      (redact, effectiveLoaded) => ({ redacted: redactResponse(response, redact), effectiveLoaded }),
+      (error) => logScrubbedWarning(RETRY_WARNING, error, env, harness, mode),
+    );
+  } catch (error) {
+    return withhold(error);
+  }
+
+  const { redacted: { response: rewritten, found }, effectiveLoaded } = outcome;
+  if (found === undefined) return SILENT;
+
+  const permission = permissionField(envelope, protocol);
+  try {
+    await logVerdict(
+      'write-secret',
+      {
+        toolName: stringField(envelope, protocol.input.tool) ?? null,
+        sessionId: stringField(envelope, protocol.input.session) ?? null,
+        ...(permission !== undefined ? { permission } : {}),
+      },
+      {
+        verdict: 'redact',
+        ruleId: found.ruleId,
+        reason: `tool output carried the value of a protected environment variable — replaced by [redacted: NAME]`,
+        target: '(tool output)',
+        envVars: found.names,
+      },
+      harness,
+      effectiveLoaded,
+      mode,
+      build,
+    );
+  } catch {
+    // Logging must never be what costs the answer: the redaction stands.
+  }
+  if (shadow) return SILENT;
+  try {
+    return renderRedaction(protocol, rewritten);
+  } catch (error) {
+    return withhold(error);
   }
 }
 
@@ -414,20 +524,19 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
     return runSessionStart(harness, protocol, loaded, shadow, runDoctorChecks, build);
   }
 
-  // Taken once; every dispatcher construction reads this record (see RunOptions.env).
+  // Taken once; every policy binding reads this record (see RunOptions.env).
   const env = options?.env ?? process.env;
+  // ADR-0008: routed before dispatchByEvent, which judges calls — the
+  // post-tool event rewrites a response, and its failure is never silence.
+  if (protocol.events.post_tool !== undefined && eventName === protocol.events.post_tool) {
+    return runPostTool(input, harness, protocol, loaded, env, shadow, build);
+  }
   try {
-    return await withDispatcherLikeRun(
+    return await withPolicyLikeRun(
       loaded,
-      env,
+      (policy) => createDispatcher(policy, env),
       (dispatcher, effectiveLoaded) => dispatchByEvent(input, eventName, harness, protocol, dispatcher, effectiveLoaded, shadow, build),
-      async (err) => {
-        try {
-          await logPolicyWarnings([retryWarning(err, env)], harness, undefined, mode);
-        } catch {
-          // Logging must never be what crashes the hook either.
-        }
-      },
+      (error) => logScrubbedWarning(RETRY_WARNING, error, env, harness, mode),
     );
   } catch {
     // The baseline dispatcher is the vetted, tested set — it should

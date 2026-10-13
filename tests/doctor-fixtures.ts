@@ -52,6 +52,8 @@ export const HEALTHY_HOOKS = {
   ],
   UserPromptSubmit: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
   SessionStart: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+  // ADR-0008: no matcher — every tool's output is redacted.
+  PostToolUse: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
 };
 
 // Ticket 15b: the same shared-fixture discipline, for codex-hooks

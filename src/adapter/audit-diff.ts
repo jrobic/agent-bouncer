@@ -344,9 +344,10 @@ export function diffWindowedLogs(
 
   shadowEntries.forEach((be, i) => {
     if (usedBouncer.has(i)) return;
-    // "observe"/"flag" are bouncer's OWN silent-allow verdicts — an
-    // unmatched one agrees with a TS side that also allowed silently
-    // (nothing logged there either), not a divergence to report.
+    // "observe"/"flag" are bouncer's OWN silent-allow verdicts, and
+    // "redact" (ADR-0008) let the tool run too — an unmatched one agrees
+    // with a TS side that also allowed (nothing logged there either), not a
+    // divergence to report.
     if (!NON_SILENT_BOUNCER_VERDICTS.has(be.verdict)) return;
     divergences.push({
       kind: 'ts-allowed',

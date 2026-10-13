@@ -242,7 +242,24 @@ function evaluateMatcherCoverage(entries: readonly RawHookEntry[], expectedTools
   return allCovered ? { kind: 'covers' } : { kind: 'gap' };
 }
 
-export type WiringEventKind = 'pre_tool' | 'prompt' | 'session_start';
+export type WiringEventKind = 'pre_tool' | 'prompt' | 'session_start' | 'post_tool';
+
+// ADR-0008 § 7 (decision F6, all tools): a PostToolUse matcher must cover
+// ANY tool, not only the declared ones — an MCP tool or a tool added by a
+// later release must be redacted too. This name is in no tools map; only a
+// matcher meant for every tool (absent, `*`, `.*`) covers it.
+const ANY_TOOL_PROBE = 'bouncer__any_tool__probe';
+
+// The entry a missing PostToolUse wiring needs (ADR-0008 § 7): no matcher,
+// the same bouncer binary the PreToolUse entry already runs when there is
+// one (else the bare name), `--harness <id>` for a non-default harness.
+function postToolEntryFor(settings: RawHookEntry, protocol: HarnessProtocol, harnessId: string): string {
+  const binary = bouncerCommandsOf(entriesPointingAtBouncer(entriesFor(settings, protocol.events.pre_tool)))
+    .map((command) => bouncerExecutable(command))
+    .find((path): path is string => path !== undefined) ?? HOOK_NAME;
+  const command = harnessId === DEFAULT_HARNESS_ID ? `${binary} run` : `${binary} run --harness ${harnessId}`;
+  return JSON.stringify({ hooks: [{ type: 'command', command }] });
+}
 
 // `label` names the file kind in the "cannot verify" corrupt message —
 // defaults to this codec's own "settings.json" (review round 1 S-1/S-2/
@@ -279,6 +296,15 @@ export function checkWiring(
   const wired = entriesPointingAtBouncer(entriesFor(settings, eventName));
 
   if (wired.length === 0) {
+    if (eventKind === 'post_tool') {
+      return {
+        id,
+        ok: false,
+        message: `${eventName} hook is missing or does not point at ${HOOK_NAME} — tool output reaches the model `
+          + `unredacted; add this entry to hooks.${eventName} in ${label} (no matcher: every tool): `
+          + postToolEntryFor(settings, protocol, harnessId),
+      };
+    }
     return {
       id,
       ok: false,
@@ -306,8 +332,11 @@ export function checkWiring(
     };
   }
 
-  if (eventKind === 'pre_tool') {
-    const coverage = evaluateMatcherCoverage(wired, representativeToolNames(protocol.tools));
+  if (eventKind === 'pre_tool' || eventKind === 'post_tool') {
+    const expected = eventKind === 'pre_tool'
+      ? representativeToolNames(protocol.tools)
+      : [...representativeToolNames(protocol.tools), ANY_TOOL_PROBE];
+    const coverage = evaluateMatcherCoverage(wired, expected);
     if (coverage.kind === 'unparseable') {
       return {
         id,
@@ -320,8 +349,11 @@ export function checkWiring(
       return {
         id,
         ok: false,
-        message: `${eventName} hook is wired but its matcher does not cover every guarded tool declared by `
-          + `${harnessId}'s protocol — some tool calls run unguarded`,
+        message: eventKind === 'pre_tool'
+          ? `${eventName} hook is wired but its matcher does not cover every guarded tool declared by `
+            + `${harnessId}'s protocol — some tool calls run unguarded`
+          : `${eventName} hook is wired but its matcher does not cover every tool — some tool output reaches `
+            + `the model unredacted (wire it with no matcher)`,
       };
     }
   }

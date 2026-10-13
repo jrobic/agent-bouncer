@@ -40,17 +40,17 @@ describe('strictestOf: severity ordering', () => {
   });
 });
 
-describe('strictestOf: a flag verdict on PreToolUse is a routing bug, not a silent swallow', () => {
-  test('a flag co-occurring with a block does not get swallowed by the max-reduce — it throws', () => {
-    // flag has the LOWEST severity (0) — a naive max-reduce would silently
-    // pick the block and never surface that a family misrouted a flag onto
-    // PreToolUse at all. That silent swallow is exactly what this guard
-    // exists to prevent.
-    const hits = [hit('command', 'block', 'rm-rf-dangerous'), hit('prompt', 'flag', 'ignore-previous')];
-    expect(() => strictestOf(hits)).toThrow(/flag/);
+describe('strictestOf: a flag or redact verdict on PreToolUse is a routing bug, not a silent swallow', () => {
+  // flag (UserPromptSubmit) and redact (post-tool, ADR-0008) have the
+  // LOWEST severity (0) — a naive max-reduce would silently pick the block
+  // and never surface that a family misrouted one onto PreToolUse at all.
+  // That silent swallow is exactly what this guard exists to prevent.
+  test.each(['flag', 'redact'] as const)('%s co-occurring with a block is not swallowed by the max-reduce — it throws', (kind) => {
+    const hits = [hit('command', 'block', 'rm-rf-dangerous'), hit('write-secret', kind, 'misrouted')];
+    expect(() => strictestOf(hits)).toThrow(new RegExp(`"${kind}" verdict`));
   });
 
-  test('a lone flag hit still throws (not dependent on co-occurrence)', () => {
-    expect(() => strictestOf([hit('prompt', 'flag', 'ignore-previous')])).toThrow(/flag/);
+  test.each(['flag', 'redact'] as const)('a lone %s hit still throws (not dependent on co-occurrence)', (kind) => {
+    expect(() => strictestOf([hit('write-secret', kind, 'misrouted')])).toThrow(new RegExp(`"${kind}" verdict`));
   });
 });

@@ -37,6 +37,9 @@ interface RecordedCase {
   readonly id: string;
   readonly argv: readonly string[];
   readonly stdin: string;
+  // Ticket 59: the made-up environment a post-tool case was captured with —
+  // handed to run() as `options.env`, never set on this process.
+  readonly env?: Readonly<Record<string, string>>;
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
 }
 
@@ -115,7 +118,11 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       'sessionstart-missing-hook-scream',
       'empty-stdin-silent',
       'invalid-json-silent',
-      'posttooluse-event-silent',
+      'posttooluse-no-response-silent',
+      'posttooluse-bash-redact',
+      'posttooluse-mcp-redact',
+      'posttooluse-clean-silent',
+      'posttooluse-shadow-silent',
       'missing-hook-event-name-silent',
       'shadow-deny-silent',
       'shadow-typo-normal-enforce',
@@ -208,6 +215,9 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       'empty-stdin-malformed',
       'invalid-json-malformed',
       'unknown-event-silent',
+      'tool-result-redact',
+      'tool-result-clean-silent',
+      'tool-result-shadow-silent',
       'missing-event-name-silent',
       'shadow-deny-silent',
       'shadow-typo-normal-enforce',
@@ -309,6 +319,7 @@ for (const file of FIXTURE_FILES) {
             unrecognizedTokens,
             build: FIXTURE_BUILD,
             ...(config.runHarness !== undefined ? { harness: config.runHarness } : {}),
+            ...(recorded.env !== undefined ? { env: recorded.env } : {}),
           });
           expect(normalizeReasonPrefix(result.stdout)).toBe(normalizeReasonPrefix(recorded.expected.stdout));
           expect(result.exit ?? 0).toBe(recorded.expected.exit);

@@ -40,17 +40,26 @@ transport = "stdin-json"
 wiring    = "hook-file"
 
 [harness.protocol.input]
-event   = "hook_event_name"
-tool    = "tool_name"
-input   = "tool_input"
-session = "session_id"
-prompt  = "prompt"
-cwd     = "cwd"
+event    = "hook_event_name"
+tool     = "tool_name"
+input    = "tool_input"
+session  = "session_id"
+prompt   = "prompt"
+cwd      = "cwd"
+response = "tool_response"
 
+# ADR-0008: `post_tool` — every tool's output is walked for the value of a
+# protected environment variable and, when one is found, answered with
+# `updatedToolOutput` in the tool's own shape (the template below). Measured
+# 2026-10-13, Claude Code 2.1.296: honoured for Bash, Read, Grep and an MCP
+# tool; a value of another shape is ignored for a built-in tool; a failed
+# tool fires PostToolUseFailure only, which has no replacement — see
+# ADR-0008 § 6 and docs/how-to/wire-into-claude-code.md.
 [harness.protocol.events]
 pre_tool      = "PreToolUse"
 prompt        = "UserPromptSubmit"
 session_start = "SessionStart"
+post_tool     = "PostToolUse"
 
 # name -> role + field selectors. A selector is a dotted path into
 # tool_input; `[]` maps an array (a string element is taken as the value
@@ -91,3 +100,6 @@ stdout = '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalC
 
 [harness.protocol.output.session_start]
 stdout = '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":${context}}}'
+
+[harness.protocol.output.redact]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":${response}}}'

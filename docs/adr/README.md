@@ -15,6 +15,7 @@ a new ADR that supersedes the old one.
 | [ADR-0005](0005-harness-declarations.md) | Harness declarations — one block per assistant, rows derived | Accepted | 2026-09-05 |
 | [ADR-0006](0006-declarative-harness-adapters.md) | One generic adapter, driven by a harness declaration file | Accepted | 2026-09-07 |
 | [ADR-0007](0007-environment-secrets-baseline-net.md) | Environment secrets: baseline rows as a net, not a barrier | Accepted | 2026-10-13 |
+| [ADR-0008](0008-post-tool-redaction.md) | Post-tool redaction — a post-tool event in the adapter model | Accepted | 2026-10-13 |
 
 ## Statuses
 
