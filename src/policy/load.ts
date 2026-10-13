@@ -38,6 +38,7 @@
 // loadPolicyFromLayers directly).
 
 import { BASELINE } from './baseline.ts';
+import { gitGoverningForms } from './git-forms.ts';
 import {
   deriveHarnessRules,
   isDerivedHarnessRule,
@@ -666,15 +667,7 @@ function baselineOnlyResult(warnings: readonly string[] = []): Omit<LoadResult, 
 // this set is a SUBSTITUTION of vetted behavior, not a fresh addition — see
 // lint.ts's lintGitConditionalRelaxation.
 function baselineGovernedSubs(git: RulesPolicy['command']['git']): ReadonlySet<string> {
-  return new Set<string>([
-    ...git.safe_subcommands,
-    ...git.ask_flags.map((r) => r.sub),
-    ...git.safe_first_arg.map((r) => r.sub),
-    ...git.safe_grammar.map((r) => r.sub),
-    ...git.safe_flags.map((r) => r.sub),
-    'checkout',
-    'restore',
-  ]);
+  return new Set<string>([...git.safe_subcommands, ...gitGoverningForms(git).keys()]);
 }
 
 function buildActiveRelaxations(

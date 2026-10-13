@@ -17,6 +17,7 @@
 // strings and already-loaded data structures.
 
 import { extractGitSubcommand } from '../command-rules.ts';
+import { gitGoverningForms } from '../policy/git-forms.ts';
 import type { RelaxableList, RulesPolicy } from '../policy/schema.ts';
 import type { VerdictKind } from '../types.ts';
 import type { PolicyTransition, ReplayedVerdict } from './audit-replay.ts';
@@ -322,15 +323,7 @@ export function clusterPolicyDelta(entries: readonly PolicyDeltaEntry[]): Policy
  * silently, nothing to log or audit — so they are deliberately absent
  * here. */
 export function conditionalRuleIdsOf(git: RulesPolicy['command']['git']): string[] {
-  const subs = new Set<string>([
-    ...git.ask_flags.map((r) => r.sub),
-    ...git.safe_first_arg.map((r) => r.sub),
-    ...git.safe_grammar.map((r) => r.sub),
-    ...git.safe_flags.map((r) => r.sub),
-    'checkout',
-    'restore',
-  ]);
-  return [...subs].map((sub) => `git-conditional-${sub}`);
+  return [...gitGoverningForms(git).keys()].map((sub) => `git-conditional-${sub}`);
 }
 
 /** Every conditional rule id of `policy` that is NOT in `firedRuleIds` — a
