@@ -427,8 +427,10 @@ export const GIT_OPTS_WITH_ARG: ReadonlySet<string> = new Set([
   '--config-env',
 ]);
 
-// A `NAME=value` word in front of a command: an environment assignment.
-const ENV_ASSIGNMENT = /^\w+=/;
+// A `NAME=value` or `NAME+=value` word in front of a command: an environment
+// assignment. bash passes the appended form to the command as well; its name
+// keeps the `+`, so it matches no allow-list entry.
+const ENV_ASSIGNMENT = /^\w+\+?=/;
 
 const GIT_SHA = /^[0-9a-f]{7,64}$/i;
 

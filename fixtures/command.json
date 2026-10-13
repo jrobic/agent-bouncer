@@ -3673,6 +3673,32 @@
       ]
     },
     {
+      "id": "git-config-exec-env-append-assignment-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_EXTERNAL_DIFF+=/x git diff"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-append-assignment-before-asking-subcommand-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "X+=1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "git-config-exec-env-template-dir-on-init-asks",
       "toolName": "Bash",
       "toolInput": {
