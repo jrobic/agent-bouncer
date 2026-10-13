@@ -40,12 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `safe_flags` without a `reason` is rejected as a unit: run `bouncer rules
   lint` and `bouncer doctor` after upgrading.
 - `bouncer audit --suggest` no longer proposes a blanket `[[relax]]` of
-  `command.git.safe_subcommands` for a git subcommand the baseline already
-  governs (`init`, `branch`, `tag`, … in any of the four tables, plus
-  `checkout` and `restore`): that block would cancel the conditional rule
-  rather than widen it. A comment names the governing form and says to
-  substitute it with an overlay entry. A subcommand no table governs
-  (`gc`, `push`) is suggested as before.
+  `command.git.safe_subcommands` for a git subcommand the effective policy
+  already governs (baseline or overlay: `init`, `branch`, `tag`, … in any of
+  the four tables, plus `checkout` and `restore`): that block would cancel
+  the conditional rule rather than widen it. A comment names the governing
+  form and says to edit or substitute it instead. A subcommand no table
+  governs (`gc`, `push`) is suggested as before.
 
 ## [1.8.0] - 2026-10-13
 

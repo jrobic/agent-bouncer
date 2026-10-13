@@ -591,8 +591,8 @@ export function renderSuggestions(
       const asLogged = cluster.asLogged ? ' (as logged)' : '';
       lines.push(
         `# ${cluster.ruleId}${asLogged}: git ${action.sub} is governed by ${GOVERNING_FORM_PHRASE[action.form]} — `
-          + `a blanket relax of its safe_subcommands entry would cancel that rule; to widen it, substitute it `
-          + `with an overlay entry (fired ${cluster.count}x, last ${cluster.lastSeen}) — review manually`,
+          + `a blanket relax of command.git.safe_subcommands would cancel that rule; edit or substitute it instead `
+          + `(fired ${cluster.count}x, last ${cluster.lastSeen}) — review manually`,
       );
       lines.push('');
       continue;

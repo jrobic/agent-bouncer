@@ -474,7 +474,8 @@ describe('renderSuggestions', () => {
       expect(text).not.toContain('[[relax]]');
       expect(text).not.toContain('safe_subcommands"');
       expect(text).toContain(`# git-protected: git ${sub} is governed by ${governing}`);
-      expect(text).toContain('substitute');
+      expect(text).toContain('edit or substitute it instead');
+      expect(text).not.toContain('baseline');
       expect(text).toContain('fired 2x');
       expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
     });
@@ -485,6 +486,20 @@ describe('renderSuggestions', () => {
 
       expect(text).toContain('# [[relax]]');
       expect(text).toContain('# value = "gc"');
+    });
+
+    test('a subcommand only an overlay entry governs is named too: the effective policy decides, not the baseline', () => {
+      const overlayPolicy = loadPolicyFromOverlayText(
+        '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+      ).policy;
+      const clusters = clusterEntries([entry({ target: 'git gc --aggressive' })]);
+      const text = renderSuggestions(clusters, resolvable, {
+        days: 30,
+        governedGitSubs: gitGoverningForms(overlayPolicy.command.git),
+      });
+
+      expect(text).toContain('# git-protected: git gc is governed by a `safe_flags` entry');
+      expect(text).not.toContain('[[relax]]');
     });
   });
 

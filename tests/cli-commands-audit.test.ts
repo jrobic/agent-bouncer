@@ -292,6 +292,19 @@ describe('runAudit: current-policy replay', () => {
     expect(loadPolicyFromOverlayText(text).warnings).toEqual([]);
   });
 
+  test('--suggest reads the effective policy: a subcommand only an overlay entry governs is named, not relaxed', async () => {
+    const dir = freshAccountDir();
+    await writeOverlay(
+      dir,
+      '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+    );
+    await writeLog(dir, [verdictLine({ target: 'git gc --aggressive' })]);
+
+    const { text } = await runAudit({ days: 30, suggest: true, diff: false });
+    expect(text).toContain('# git-protected: git gc is governed by a `safe_flags` entry');
+    expect(text).not.toContain('# value = "gc"');
+  });
+
   test('retains a legacy-truncated entry as logged and counts it separately from replay', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [verdictLine({ target: `${'x'.repeat(197)}...` })]);
