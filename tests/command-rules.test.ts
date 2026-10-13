@@ -1107,21 +1107,29 @@ describe('command-rules: git-config-exec (what a fixture cannot say)', () => {
   const git = BASELINE.rules.command.git;
   const withGit = (overrides: Partial<typeof git>) => createCommandChecker({ ...BASELINE.rules.command, git: { ...git, ...overrides } });
 
-  test('ruleId git-config-exec: the prompt names what is not on the allow-list', () => {
+  test('ruleId git-config-exec: the prompt names what is not on the allow-list, never a value', () => {
     for (
       const [command, offender] of [
-        ['git -c core.fsmonitor=x status', '-c core.fsmonitor'],
-        ['git --config-env=core.pager=X diff', '--config-env core.pager'],
-        ['git --config-env core.pager=X diff', '--config-env core.pager'],
-        ['git --exec-path=/tmp/x status', '--exec-path'],
-        ['git --namespace x status', '--namespace'],
-        ['env GIT_EXTERNAL_DIFF=/x git diff', 'GIT_EXTERNAL_DIFF'],
+        ['git -c core.fsmonitor=SECRETVALUE status', '-c core.fsmonitor'],
+        ['git -ccore.fsmonitor=SECRETVALUE status', '-ccore.fsmonitor'],
+        ['git --config-env=core.pager=SECRETVALUE diff', '--config-env core.pager'],
+        ['git --config-env core.pager=SECRETVALUE diff', '--config-env core.pager'],
+        ['git --exec-path=SECRETVALUE status', '--exec-path'],
+        ['git --namespace SECRETVALUE status', '--namespace'],
+        ['env GIT_EXTERNAL_DIFF=SECRETVALUE git diff', 'GIT_EXTERNAL_DIFF'],
       ] as const
     ) {
       const verdict = checkGit(command);
       expect(verdict).toMatchObject({ verdict: 'confirm', ruleId: 'git-config-exec', target: command });
       expect(verdict?.reason).toContain(offender);
+      expect(verdict?.reason).not.toContain('SECRETVALUE');
     }
+  });
+
+  test('an unlisted global option is not described as running a program', () => {
+    const reason = checkGit('git --no-lazy-fetch status')?.reason;
+    expect(reason).toContain('--no-lazy-fetch');
+    expect(reason).not.toContain('program');
   });
 
   // `rebase`, `clone` and `read-tree` ask on their own in the baseline, so

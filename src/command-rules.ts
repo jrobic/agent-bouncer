@@ -1624,16 +1624,19 @@ function onAllowList(entries: readonly string[], name: string, value: string | n
   });
 }
 
-// What, in the words written around `git`, can make it run a program the
-// policy does not list: the first environment assignment, then the first
-// global option, `-c` or `--config-env` setting, as a short phrase for the
-// verdict's reason; null when every one is allowed. Read lexically, like the
+// What, in the words written around `git`, the policy does not list: the first
+// environment assignment, then the first global option, `-c` or `--config-env`
+// setting, as the verdict's reason; null when every one is allowed. The reason
+// names a variable, a key or an option, never a value. Read lexically, like the
 // rest of the git policy — git is not called and no file is read.
 function gitConfigExecOffender({ globals, assignments }: GitCommand, git: CommandGitPolicy): string | null {
+  const runsProgram = 'can make git run an arbitrary program and is not on the git-config-exec allow-list';
   for (const assignment of assignments ?? []) {
     const equals = assignment.indexOf('=');
     const name = assignment.slice(0, equals);
-    if (!onAllowList(git.allowed_env, name, assignment.slice(equals + 1), false)) return `environment variable ${name}`;
+    if (!onAllowList(git.allowed_env, name, assignment.slice(equals + 1), false)) {
+      return `environment variable ${name} ${runsProgram}`;
+    }
   }
 
   const options = globals ?? [];
@@ -1649,11 +1652,14 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, git: Comman
       const key = settingEquals === -1 ? setting : setting.slice(0, settingEquals);
       // `--config-env=key=VAR` reads the value from VAR when git runs.
       const value = name === '-c' && settingEquals !== -1 ? setting.slice(settingEquals + 1) : null;
-      if (!onAllowList(git.allowed_config, key, value, true)) return `${name} ${key}`;
+      if (!onAllowList(git.allowed_config, key, value, true)) return `${name} ${key} ${runsProgram}`;
       continue;
     }
 
-    if (!git.allowed_global_options.includes(name)) return `global option ${name}`;
+    if (!git.allowed_global_options.includes(name)) {
+      const shown = option.includes('=') ? option.slice(0, option.indexOf('=')) : option;
+      return `global option ${shown} is not on the git-config-exec allow-list`;
+    }
     if (GIT_OPTS_WITH_ARG.has(option)) index++;
   }
   return null;
@@ -1678,7 +1684,7 @@ function checkGitWith(cmd: string, git: CommandGitPolicy): Verdict | null {
       return {
         verdict: 'confirm',
         ruleId: 'git-config-exec',
-        reason: `${offender} can make git run an arbitrary program and is not on the allow-list — confirm before running`,
+        reason: `${offender} — confirm before running`,
         target: cmd,
       };
     }
