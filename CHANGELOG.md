@@ -36,9 +36,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the 1.8.0 environment rows do, how to check and relax them, and how to
   close the gap at the launcher. `docs/adr/0007-environment-secrets-baseline-net.md`
   records why they are a net and not a barrier.
+- **A write that carries the value of a protected environment variable is
+  blocked** (`env-value`, in `rules.write_secret`). Before a `Write` / `Edit`
+  (also `MultiEdit`, the pi-agent `write` / `edit` and a Codex patch's added
+  lines), Bouncer reads the environment of the hook process — the agent's own —
+  keeps the variables whose name is protected (the 1.8.0 definition: `TOKEN`,
+  `PASSWORD`, `PASSWD`, `SECRET`, `API_KEY`, `APIKEY`, `PRIVATE_KEY`,
+  `ACCESS_KEY`, `CREDENTIALS`) and whose value has at least 8 characters, and
+  blocks the call when the text contains such a value in clear, in base64
+  (standard and URL-safe alphabets, padded or not, at any alignment inside a
+  longer stream) or in hex (all lowercase or all uppercase). It catches the
+  secret an agent copies into a file after a script printed it. The reason
+  names the variable and tells the agent to reference it by name; the audit
+  log records the names in a new optional `env_vars` field, and on an
+  `env-value` verdict the value — in clear, base64 or hex — reaches no log field, message
+  or stderr line (a Bash command that carries a literal value and is blocked by
+  another rule is still logged as written). It is a net,
+  not a barrier: a value that is split, reversed or re-encoded evades, and
+  under Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` the hook sees no
+  value for the stripped variables. The row can be disabled or relaxed with
+  `[[override]]` like any baseline row. Details:
+  [The env-value row](docs/reference/policy.md#the-env-value-row).
 
 ### Changed
 
+- **Upgrade:** the baseline gains one row with a new id, `env-value`
+  (`rules.write_secret`). An overlay layer that already carries a row with that
+  id is rejected as a unit: run `bouncer rules lint` and `bouncer doctor`
+  after upgrading. `bouncer rules list` now counts 112 baseline rules. A
+  workflow whose files legitimately carry a variable's value (a shared dev
+  password in a compose file) disables or relaxes `env-value` with an
+  `[[override]]`.
 - **Upgrade:** `init` is now a baseline-governed git subcommand. An overlay
   entry for `init` in `ask_flags`, `safe_first_arg`, `safe_grammar` or
   `safe_flags` without a `reason` is rejected as a unit: run `bouncer rules

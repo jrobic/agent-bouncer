@@ -123,6 +123,35 @@ application data and issue network requests. Unlisted Chrome tools retain
 their existing rules. Copy the overlay only into the intended profile;
 it is not part of the baseline.
 
+## Opt out of the env-value write guard
+
+`env-value` (`rules.write_secret`) blocks a `Write` / `Edit` whose text carries
+the value of a protected environment variable
+([the env-value row](../reference/policy.md#the-env-value-row)). Its
+recognition is the engine's, but the row is an ordinary override target:
+
+```toml
+# switch it off — a shared dev password also sits in fixtures the agent edits
+[[override]]
+rule = "env-value"
+action = "disable"
+reason = "the dev database password is also written into compose and test fixtures"
+
+# or keep it, and ask instead of blocking (the reason still names the variable)
+[[override]]
+rule = "env-value"
+action = "relax"
+verdict = "confirm"
+reason = "review every write that carries a protected value"
+```
+
+`action = "replace"` is not the tool for a shared dev password: it changes only
+the row's `regex`, which is matched against the **text** being written (the
+baseline's `[\s\S]` accepts every non-empty text) and can only narrow which
+texts the guard looks at. It cannot exempt a path or a file, and it cannot
+change what counts as a protected value. For a dev password that a compose file
+or a test fixture legitimately repeats, use `relax` to `confirm` or `disable`.
+
 ## The limit: three rules aren't override-able
 
 `rm-rf-dangerous`, `sudo` (privilege escalation), and `git-protected`

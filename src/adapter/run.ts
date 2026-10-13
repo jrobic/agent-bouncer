@@ -40,6 +40,7 @@
 // restart or session reload needed.
 
 import { type BuildInfo, currentBuild } from '../build-info.ts';
+import { createEnvValueScanner, type EnvRecord, namesOf, withheldNotice } from '../env-value-rules.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { LoadResult } from '../policy/load.ts';
 import type { HarnessDeclaration, HarnessProtocol } from '../policy/schema.ts';
@@ -89,6 +90,13 @@ export interface RunOptions {
   readonly harness?: string;
   // Test seam for replaying the clean compiled-binary SessionStart contract.
   readonly build?: BuildInfo;
+  // The environment the env-value guard (ticket 58) reads protected values
+  // from. Absent = this process's own (`process.env`), taken here, at the edge,
+  // once per invocation; every dispatcher construction then reads that record
+  // (the overlay-aware one, then the baseline retry). The hook's environment
+  // is the agent's, in both harnesses. A test hands one in rather than
+  // touching the real one.
+  readonly env?: EnvRecord;
 }
 
 const SILENT: RunResult = { stdout: null };
@@ -314,18 +322,41 @@ async function dispatchByEvent(
 /**
  * Executes against the current policy's dispatcher, then retries once with
  * the embedded baseline on any construction or dispatch failure. `run` and
- * `ping` share this path so a runnable baseline has one definition.
+ * `ping` share this path so a runnable baseline has one definition. `env` is
+ * the environment the env-value guard reads (ticket 58): both dispatchers are
+ * built over the SAME record, so the guard survives the retry.
  */
 export async function withDispatcherLikeRun<T>(
   loaded: LoadResult,
+  env: EnvRecord,
   execute: (dispatcher: Dispatcher, effectiveLoaded: LoadResult | undefined) => Promise<T> | T,
   onRetry?: (error: unknown) => Promise<void>,
 ): Promise<T> {
   try {
-    return await execute(createDispatcher(loaded.policy), loaded);
+    return await execute(createDispatcher(loaded.policy, env), loaded);
   } catch (error) {
     if (onRetry !== undefined) await onRetry(error);
-    return execute(createDispatcher(BASELINE.rules), undefined);
+    return execute(createDispatcher(BASELINE.rules, env), undefined);
+  }
+}
+
+const RETRY_WARNING = 'dispatch failed, retrying with the embedded baseline';
+
+// The retry's policy-warning is free text, and whatever threw may have been
+// holding a protected value (ticket 58): an error that embeds the text being
+// judged carries it into the audit log. The message goes through the SAME
+// scanner the guard uses; a message that carries a value is replaced by a fixed
+// notice (the variable NAMES are allowed in it). A scanner that cannot be built
+// (the environment itself is what failed) proves nothing about the message,
+// so it is withheld too.
+function retryWarning(err: unknown, env: EnvRecord): string {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    const names = namesOf(createEnvValueScanner(env)(message));
+    if (names.length === 0) return `${RETRY_WARNING}: ${message}`;
+    return `${RETRY_WARNING} ${withheldNotice('error message', names)}`;
+  } catch {
+    return `${RETRY_WARNING} (error message withheld: the environment could not be scanned)`;
   }
 }
 
@@ -383,14 +414,16 @@ export async function run(rawStdin: string, options?: RunOptions): Promise<RunRe
     return runSessionStart(harness, protocol, loaded, shadow, runDoctorChecks, build);
   }
 
+  // Taken once; every dispatcher construction reads this record (see RunOptions.env).
+  const env = options?.env ?? process.env;
   try {
     return await withDispatcherLikeRun(
       loaded,
+      env,
       (dispatcher, effectiveLoaded) => dispatchByEvent(input, eventName, harness, protocol, dispatcher, effectiveLoaded, shadow, build),
       async (err) => {
-        const message = err instanceof Error ? err.message : String(err);
         try {
-          await logPolicyWarnings([`dispatch failed, retrying with the embedded baseline: ${message}`], harness, undefined, mode);
+          await logPolicyWarnings([retryWarning(err, env)], harness, undefined, mode);
         } catch {
           // Logging must never be what crashes the hook either.
         }

@@ -32,6 +32,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderShim } from '../src/adapter/shim.ts';
+import { protectedNamesIn } from '../src/protected-names.ts';
 import { harnessCaptureFor } from './harness-capture-config.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
@@ -486,6 +487,17 @@ interface Recorded {
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
 }
 
+// The environment every spawned bouncer gets: this process's own, minus every
+// variable with a protected name (ticket 58). `bouncer run` hands its
+// environment to the env-value guard, so a capture run from a shell that has
+// credentials exported must not depend on them — or carry them into a child —
+// and a recapture must give the same bytes on any machine.
+function captureEnv(overrides: Readonly<Record<string, string>>): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const name of protectedNamesIn(env)) delete env[name];
+  return { ...env, ...overrides };
+}
+
 function runOnce(
   argv: readonly string[],
   stdin: string,
@@ -496,7 +508,7 @@ function runOnce(
   const proc = Bun.spawnSync({
     cmd: [...execCmd, 'run', ...HARNESS_FLAG_ARGS, ...argv],
     cwd: PROJECT_ROOT,
-    env: { ...process.env, HOME: homeDir, [CAPTURE.envVar]: configDir },
+    env: captureEnv({ HOME: homeDir, [CAPTURE.envVar]: configDir }),
     stdin: Buffer.from(stdin, 'utf8'),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -541,7 +553,7 @@ function main(): void {
     const canaryProc = Bun.spawnSync({
       cmd: [...EXEC_CMD, 'doctor', '--print-canary', ...HARNESS_FLAG_ARGS],
       cwd: PROJECT_ROOT,
-      env: { ...process.env, HOME: canaryProbeDir, [CAPTURE.envVar]: canaryProbeConfig },
+      env: captureEnv({ HOME: canaryProbeDir, [CAPTURE.envVar]: canaryProbeConfig }),
       stdout: 'pipe',
       stderr: 'pipe',
     });

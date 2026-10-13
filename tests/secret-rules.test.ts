@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { BASELINE } from '../src/policy/baseline.ts';
 import { isProtectedName } from '../src/protected-names.ts';
 import { checkPath, checkSecretBash, checkUrl, createSecretChecker } from '../src/secret-rules.ts';
+import { PROTECTED_NAMES, UNPROTECTED_NAMES } from './protected-name-examples.ts';
 
 // One test per PATH_RULES id (nominal) + the two ENV_WHITELIST counter-examples
 // and the node_modules/.npmrc counter-example called out in the task.
@@ -782,43 +783,11 @@ describe('secret-rules: references to a protected variable (ticket 57)', () => {
     expect(checkSecretBash(command)).toMatchObject({ verdict: 'confirm', ruleId: 'env-ref' });
   });
 
-  // Decision F1: a name equal to, or ending in `_` plus, one of TOKEN
-  // PASSWORD PASSWD SECRET API_KEY APIKEY PRIVATE_KEY ACCESS_KEY
-  // CREDENTIALS. ONE definition (src/protected-names.ts): the baseline rows
+  // Decision F1 (the name definition) and its examples live in
+  // tests/protected-name-examples.ts, shared with the env-value detector's own
+  // drift test: ONE definition (src/protected-names.ts) — the baseline rows
   // write `{{protected-name}}` and the loader fills it in, so the rows and
-  // isProtectedName() agree on every name below.
-  const PROTECTED_NAMES = [
-    'TOKEN',
-    'GITHUB_TOKEN',
-    'ATLASSIAN_TOKEN',
-    'SONARQUBE_TOKEN',
-    'DEV_DB_PASSWORD',
-    'DB_PASSWD',
-    'STRIPE_API_KEY',
-    'APIKEY',
-    'MY_APIKEY',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_ACCESS_KEY',
-    'ANTHROPIC_API_KEY',
-    'SSH_PRIVATE_KEY',
-    'GOOGLE_CREDENTIALS',
-    'CLIENT_SECRET',
-  ];
-  const UNPROTECTED_NAMES = [
-    'NODE_ENV',
-    'HOME',
-    'PATH',
-    'CLAUDE_CONFIG_DIR',
-    'TOKENIZER_PATH',
-    'MY_TOKEN_FILE',
-    'TOKENS',
-    'MYTOKEN',
-    'SECRET_KEY',
-    'DB_PASS',
-    'GPG_PASSPHRASE',
-    'github_token',
-    'Api_Token',
-  ];
+  // isProtectedName() agree on every name of that list.
 
   test.each(PROTECTED_NAMES)('protected name %s: the reference rows and isProtectedName agree', (name) => {
     expect(isProtectedName(name)).toBe(true);

@@ -20,11 +20,13 @@ describe('fixtures: the adapter matches its conformance contract', () => {
         expect(file.cases.length).toBeGreaterThan(0);
       });
 
-      // The fixture tuple is "(event, tool name, tool input | prompt) ->
-      // verdict" — `event` is part of the contract, not decoration: it is
+      // The fixture tuple is "(event, tool name, tool input | prompt [, env])
+      // -> verdict" — `event` is part of the contract, not decoration: it is
       // what tells this runner (and any non-TS one) whether a case is
       // PreToolUse-shaped (toolName/toolInput) or UserPromptSubmit-shaped
-      // (prompt).
+      // (prompt). `env` is optional and only meaningful on a PreToolUse case:
+      // the made-up process environment the env-value guard reads protected
+      // values from (ticket 58); a case without it is judged with none.
       test('event names a known hook event', () => {
         expect(KNOWN_EVENTS.has(file.event)).toBe(true);
       });

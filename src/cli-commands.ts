@@ -139,7 +139,8 @@ export async function runCheck(command: string, harnessId: string = DEFAULT_HARN
     };
   }
 
-  const dispatcher = createDispatcher(loaded.policy);
+  // `check` judges a command string: no environment to offer the env-value guard.
+  const dispatcher = createDispatcher(loaded.policy, {});
   const call = buildNeutralCall(protocol, tool.name, buildCommandInputBag(tool.selector, command), null, HOOK_NAME);
   if (call === null) {
     // Unreachable by construction: tool.name was just read off an existing
@@ -182,7 +183,7 @@ export async function runPing(): Promise<CommandResult> {
   }
   try {
     const loaded = await loadCurrentPolicy(DEFAULT_HARNESS_ID);
-    await withDispatcherLikeRun(loaded, () => undefined);
+    await withDispatcherLikeRun(loaded, process.env, () => undefined);
     return { text: '', ok: true };
   } catch {
     return { text: '', ok: false };
@@ -658,7 +659,7 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
     : [sessionFilterHeader(sessionFilteredEntries.entries.length, sessionFilteredEntries.excludedCliEntryCount)];
   const replay = harness.protocol === undefined
     ? null
-    : await replayEntries(entries, harness.id, harness.protocol, createDispatcher(loaded.policy));
+    : await replayEntries(entries, harness.id, harness.protocol, createDispatcher(loaded.policy, {}));
   const currentEntries: AuditEntry[] = [];
   const deltaEntries: PolicyDeltaEntry[] = [];
   if (replay !== null) {

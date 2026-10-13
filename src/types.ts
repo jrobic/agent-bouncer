@@ -30,6 +30,10 @@ export interface Verdict {
   readonly ruleId: string;
   readonly reason: string;
   readonly target: string;
+  // The env-value guard (ticket 58) only: the NAMES of the protected
+  // variables whose value the text carries — what the audit log records as
+  // `env_vars`. Never a value, never a fragment of one.
+  readonly envVars?: readonly string[];
 }
 
 export interface BashRule {

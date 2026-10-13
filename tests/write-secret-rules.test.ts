@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { createCheckEnvValue } from '../src/env-value-rules.ts';
+import { BASELINE } from '../src/policy/baseline.ts';
 import { scanSecrets } from '../src/write-secret-rules.ts';
 
 describe('write-secret-rules: SECRET_RULES', () => {
@@ -53,5 +55,19 @@ describe('write-secret-rules: SECRET_RULES', () => {
 
   test('benign: empty text passes', () => {
     expect(scanSecrets('', 'target')).toBeNull();
+  });
+});
+
+describe('write-secret-rules: the env-value row', () => {
+  const env = { FAKE_API_TOKEN: 'Zq7-made-up-0042' };
+
+  test('ruleId env-value: the value of a protected environment variable is blocked, naming the variable', () => {
+    const verdict = createCheckEnvValue(BASELINE.rules.write_secret, env)('const t = "Zq7-made-up-0042";', '/tmp/out.ts');
+    expect(verdict).toMatchObject({ verdict: 'block', ruleId: 'env-value', target: '/tmp/out.ts', envVars: ['FAKE_API_TOKEN'] });
+    expect(verdict?.reason).toContain('FAKE_API_TOKEN');
+  });
+
+  test('the regex scan never fires that row: its recognition is the engine\'s, bound to an environment', () => {
+    expect(scanSecrets('const t = "Zq7-made-up-0042";', 'target')).toBeNull();
   });
 });

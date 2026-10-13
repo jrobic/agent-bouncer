@@ -49,6 +49,7 @@ verbatim, whenever the envelope actually sent one:
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
 | `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). |
 | `target_truncated` | boolean | OPTIONAL — `true` only when `target` was cut. Entries before 1.4.0 carry no marker; their legacy cut shape is a 200-character target ending in `...`. |
+| `env_vars` | array of string | OPTIONAL — only on a `write-secret` entry the env-value row produced (`rule_id` `env-value`): the **names** of the protected environment variables whose value the written text carries, in the environment's order. On an `env-value` entry the value, in clear, base64 or hex, appears in no field — a `target` path that itself carries one is logged as `(path withheld: …)`. That promise stops at this verdict: every other rule logs its `target` verbatim, so a blocked Bash command that carries a literal value is logged in clear. See `docs/reference/policy.md`'s env-value row. |
 | `build` | string | `"source"` for source execution; otherwise the short SHA with `-dirty` when the build tree was dirty. |
 | `policy` | string | First 12 hexadecimal characters of the SHA-256 digest of the effective policy that produced this verdict. |
 
@@ -57,7 +58,11 @@ Entries that predate build provenance have neither `build` nor `policy`;
 logs remain readable. An entry without `harness` predates ADR-0006 and is
 replayed as the selected harness. Entries written before 1.4.0 have no
 `target_truncated`; a 200-character `target` ending in `...` is their legacy
-truncation signature and remains `(as logged)` during replay.
+truncation signature and remains `(as logged)` during replay. An `env-value`
+entry (and its `env_vars` field) is read by `audit`, `audit --diff` and replay
+like any other verdict line — the unknown field is ignored — and replay leaves
+it `(as logged)` as a `write-secret` entry: the written text was never logged,
+so it cannot be re-judged.
 
 ## Audit-header entry
 
@@ -104,7 +109,7 @@ which an UNDECLARED id cannot be).
 | `timestamp` | string | ISO 8601. |
 | `harness` | string | The target harness's own declaration id. |
 | `kind` | string | Always `"policy-warning"`. |
-| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, or the unknown/protocol-less-harness message. |
+| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, or the unknown/protocol-less-harness message. A dispatch-retry message whose error text carries the value of a protected environment variable (in clear, base64 or hex) is replaced by a fixed notice that names the variable(s) — `dispatch failed, retrying with the embedded baseline (error message withheld: it contains the value of a protected environment variable: NAME)` — and one logged when the environment itself could not be scanned says `(error message withheld: the environment could not be scanned)`. |
 
 ## Rotation
 

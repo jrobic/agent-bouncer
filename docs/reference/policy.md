@@ -73,7 +73,7 @@ Every entry in the six regex tables below shares this shape:
 | `reason` | string | yes | Shown in `bouncer check`/`rules list` output and in the degraded Claude Code verdict text. |
 | `flags` | string | no | Regex flags — `i`, `m`, `s` only (§ below). |
 | `except` | string | no | A second regex; if it ALSO matches, the rule does not fire (e.g. `.env.example`/`.env.test` excepted from the `.env` block). |
-| `special` | string | no | An engine-recognized structural matcher. A matcher receives the effective row: `git_remote_url` owns its read/write predicate; `docker_destructive` applies the row's `regex`, `flags`, and `except` to executable Docker candidates. The row's configured verdict and every override remain authoritative. |
+| `special` | string | no | An engine-recognized structural matcher. A matcher receives the effective row: `git_remote_url` owns its read/write predicate; `docker_destructive` applies the row's `regex`, `flags`, and `except` to executable Docker candidates; `env_value` (the `env-value` row of `rules.write_secret`) looks the text up against the hook process's environment and applies the row's `regex` and `except` as a gate on which texts it looks at (see [The env-value row](#the-env-value-row)). The row's configured verdict and every override remain authoritative. |
 | `verdict` | `"block"` \| `"confirm"` \| `"observe"` | no | A per-row static override of the family's default verdict (e.g. every `secret.path` row defaults to `"block"`; `transcript-backup` sets `verdict = "confirm"`). Lint-validated against the same three kinds `[[override]]`'s `action = "relax"` can name. A live `[[override]]` relax still wins over this field when both apply — this is the row's own static default, not the loudest word on the subject. |
 
 ## The six regex tables
@@ -83,7 +83,7 @@ Every entry in the six regex tables below shares this shape:
 | `rules.command.bash` | command | destructive/exfiltration/escalation shell patterns; proxy execution through file finders, pipeline executors, and preprocessors |
 | `rules.secret.path` | secret | file paths that read as secret-bearing |
 | `rules.secret.bash` | secret | shell commands that reveal plaintext (sops/age decryption, git config, embedded URL credentials, credential printers) or print or reference the process environment (the [environment rows](#the-environment-rows)); see [Override a baseline rule](../how-to/override-a-baseline-rule.md) to relax a baseline row |
-| `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape |
+| `rules.write_secret` | write-secret | text about to be written that matches a known secret token shape, or that carries the value of a protected environment variable ([the env-value row](#the-env-value-row)) |
 | `rules.protected_write` | protected-write | paths whose mutation changes harness behavior, persistence, or shell startup |
 | `rules.prompt` | prompt | submitted prompts matching a prompt-injection signature |
 
@@ -229,6 +229,86 @@ The operator-side steps are in
 the reasons for a net rather than a barrier are in
 [ADR-0007](../adr/0007-environment-secrets-baseline-net.md).
 
+### The env-value row
+
+The environment rows refuse the commands that print or name a protected
+variable; they cannot see a script that prints one, an output that already
+contains one, or a value the agent then writes into a file. The `env-value`
+row of `rules.write_secret` closes that last half: **a `Write` / `Edit` whose
+text carries the value of a protected environment variable is blocked**. It is
+`write_secret` with the exact value instead of a regex, and it is a net, not a
+barrier, like the rows above.
+
+- **Where the value comes from.** The environment of the hook process: what
+  the agent was launched with (Claude Code hands a hook its own environment;
+  the pi-agent shim spawns Bouncer with no `env` option, so it inherits omp's).
+  `bouncer run` takes its own process environment once per invocation and
+  hands it to the dispatcher: the overlay-aware dispatcher and the baseline
+  retry both read that record. No `.env`, `.envrc` or secret store is read.
+- **Which variables.** Those whose name is protected — the same definition as
+  the environment rows (`src/protected-names.ts`): an uppercase name equal to,
+  or ending in `_` plus, `TOKEN`, `PASSWORD`, `PASSWD`, `SECRET`, `API_KEY`,
+  `APIKEY`, `PRIVATE_KEY`, `ACCESS_KEY` or `CREDENTIALS` — and whose value is
+  **at least 8 characters** long. `HOME`, `NODE_ENV`, a lowercase name and a
+  7-character value are not looked at.
+- **Which text.** The text that `write_secret` already scans: `Write.content`,
+  `Edit.new_string`, each `MultiEdit` `edits[].new_string`, the pi-agent
+  `write` content and the added (`+`) rows of its `edit` (both the hashline
+  string and pi's `edits[].newText`), and a Codex patch's added lines. Never
+  `old_string` / `oldText`, never `NotebookEdit` (no text selector), never a
+  command (Bash, `ctx_execute`), an MCP payload or a prompt.
+- **Which forms.** The value is looked for as plain text, as base64 and as
+  hex, by string search — never compiled into a regular expression. Exactly:
+  - *plain*: the value itself;
+  - *base64*: the value's UTF-8 bytes in the standard (`+/`) **and** URL-safe
+    (`-_`) alphabets, padded or unpadded, at **any of the three alignments**
+    the value can take inside a longer base64 stream (`base64(value)` alone
+    would only match a value starting on a 3-byte boundary). The match leaves
+    out the characters that share a 3-byte group with the neighbouring bytes,
+    which is also why `=` padding does not matter;
+  - *hex*: the value's UTF-8 bytes, all lowercase or all uppercase, contiguous.
+- **Verdict, reason, audit log.** `block` (`env-value`, family `write-secret`).
+  The reason shown to the model names the variable(s) and says to reference
+  them by name instead; the audit-log entry carries the names in `env_vars`
+  ([Audit log reference](audit-log.md#verdict-entry)). **On this verdict the
+  value, in clear, base64 or hex, appears in neither** — nor in the log's `target` (a path
+  that itself carries the value is logged as `(path withheld: …)`) — nor in
+  the retry's `policy-warning`, whose error text is withheld when it carries a
+  value. A shared dev password that also sits in a docker-compose file or a
+  test fixture blocks that file: that is the guard working, and the reason
+  tells the agent to reference the variable instead.
+- **Opting out.** The row is a regular baseline row, listed by `rules list`
+  and reachable by `[[override]]` ([Override a baseline rule](../how-to/override-a-baseline-rule.md)):
+  `disable` switches the guard off; `relax` softens it to `confirm` or
+  `observe` (the variable is still named); `replace` swaps the row's regex,
+  which here only decides **which texts** the guard looks at (the baseline's
+  `[\s\S]` accepts every non-empty text) — it sees the text, never the path,
+  so it cannot exempt a file. The recognition itself
+  (`special = "env_value"`) is the engine's and is not replaceable.
+
+**Limits.** The guard sees only what its own environment holds, and only these
+spellings:
+
+- Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` strips credentials from
+  subprocess environments, hooks included: the hook then sees **no values**
+  and the guard is inert for the stripped variables.
+- A value the agent splits, concatenates, reverses, ROT13s, hashes or
+  re-encodes (percent-, JSON- or HTML-escaping, base64 of UTF-16 or broken
+  across lines, hex with separators or in mixed case) before writing evades. A
+  multi-line value (a PEM key) of which only some lines are written evades the
+  plain match, and a value is matched exactly as the environment holds it, so
+  one with a trailing newline does not match the same text without it.
+- A variable exported later inside the Bash tool's own shell, or defined only
+  by a shell profile the hook never loads, is not in the hook's environment.
+- It is a net for what the agent copies. It does not stop a value reaching the
+  agent's context in the first place.
+- It does not redact other families' logs. Every rule other than `env-value`
+  logs its `target` verbatim, so a Bash command that carries a literal value
+  and is blocked by another rule is written to the audit log as typed.
+
+`bouncer audit` leaves an `env-value` entry `(as logged)`, like every
+`write-secret` entry: the written text was never logged, so there is nothing
+to re-judge.
 
 ### Infrastructure mutation rows
 
@@ -250,10 +330,15 @@ elsewhere"` without removing the baseline guard.
   seen; production-decryption scripts remain human-run.
 - Plaintext inherited from the agent's launch environment cannot be removed
   by any row. The [environment rows](#the-environment-rows) only refuse the
-  commands that print or reference it — a net, not a barrier: a test or a
-  script the agent launches inherits the environment and may print it, and a
+  commands that print or reference it, and [the env-value row](#the-env-value-row)
+  only blocks a write that carries its value — a net, not a barrier: a test or
+  a script the agent launches inherits the environment and may print it, and a
   value that already reached the agent's context stays there. The structural
   fix is the launcher's (secrets kept out of the agent's environment).
+- The audit log records every verdict's `target` as the rule saw it, except
+  the `env-value` verdict's, which withholds a path that carries a protected
+  value. A command that carries a literal value and is blocked by another
+  rule is therefore logged in clear.
 - The environment rows read command text. Not covered: a variable name or a
   command built at run time (`eval`, a base64-decoded command, a pid in
   `/proc/$$/environ`); Perl `%ENV`, PHP `$_ENV` and Python's bare `environ`
@@ -1389,4 +1474,4 @@ Other `baseline`-provenance lines have no suffix because the embedded
 baseline has no file on disk to name.
 
 ---
-Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/fragments.ts, src/policy/harness.ts, src/protected-write-rules.ts, src/protected-names.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/shim.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts
+Source: src/policy/schema.ts, src/policy/load.ts, src/policy/lint.ts, src/policy/baseline.ts, src/policy/fragments.ts, src/policy/harness.ts, src/protected-write-rules.ts, src/protected-names.ts, src/env-value-rules.ts, policy/command.toml, policy/secret.toml, policy/mcp-write.toml, policy/write-secret.toml, policy/protected-write.toml, policy/prompt.toml, policy/harness/claude-code.toml, policy/harness/codex.toml, policy/harness/opencode.toml, policy/harness/pi-agent.toml, policy/harness/pi-agent.shim.ts, policy/harness/gemini-cli.toml, policy/harness/cursor.toml, src/adapter/policy.ts, src/adapter/log-path.ts, src/adapter/shim.ts, src/adapter/codecs/stdin-json.ts, src/adapter/codecs/wiring/hook-file.ts, src/adapter/codecs/input/apply-patch.ts, src/adapter/codecs/input/hashline.ts, src/adapter/codecs/wiring/codex-hooks.ts, src/adapter/codecs/wiring/shim-file.ts, src/adapter/codecs/wiring/registry.ts, src/adapter/neutral-call.ts, src/adapter/degrade.ts, src/adapter/render.ts

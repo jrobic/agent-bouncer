@@ -14,10 +14,14 @@
 // carry `prompt` instead — genuinely a different envelope, not a family
 // that "stays unreachable", so no `check` field survives anywhere in the
 // fixture set.
+//
+// One optional input: `env` (ticket 58), the process environment the
+// env-value guard reads protected values from — made-up names and values,
+// never the machine's. A case without it is judged with no environment.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { inspectPreToolUse, inspectUserPromptSubmit } from '../src/adapter/dispatch.ts';
+import { createDispatcher, inspectPreToolUse, inspectUserPromptSubmit } from '../src/adapter/dispatch.ts';
 import { buildNeutralCall } from '../src/adapter/neutral-call.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { VerdictKind } from '../src/types.ts';
@@ -35,6 +39,7 @@ export interface FixtureCase {
   readonly toolInput?: Record<string, unknown>;
   readonly prompt?: string;
   readonly expected: readonly ExpectedVerdict[];
+  readonly env?: Readonly<Record<string, string>>;
   readonly knownLimit?: boolean;
   readonly knownLimitReason?: string;
 }
@@ -84,6 +89,8 @@ export async function evaluateCase(
   const toolName = requireString(fixtureCase, 'toolName');
   const call = buildNeutralCall(CLAUDE_CODE_PROTOCOL, toolName, fixtureCase.toolInput ?? {}, null, 'fixture-runner');
   if (call === null) return [];
-  const hit = await inspectPreToolUse(call);
+  const hit = fixtureCase.env === undefined
+    ? await inspectPreToolUse(call)
+    : await createDispatcher(BASELINE.rules, fixtureCase.env).inspectPreToolUse(call);
   return hit ? [{ verdict: hit.verdict.verdict, ruleId: hit.verdict.ruleId }] : [];
 }

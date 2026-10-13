@@ -4,6 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import { replayEntries, transitionFor } from '../src/adapter/audit-replay.ts';
 import type { AuditEntry } from '../src/adapter/audit.ts';
+import { parseLogEntries } from '../src/adapter/audit.ts';
 import { createDispatcher } from '../src/adapter/dispatch.ts';
 import type { Dispatcher, FamilyVerdict } from '../src/adapter/dispatch.ts';
 import { findToolRow } from '../src/adapter/neutral-call.ts';
@@ -118,7 +119,7 @@ describe('replayEntries', () => {
         Glob: { role: 'read', path: 'path', pattern: 'pattern' },
         CodecTool: { role: 'mcp', codec: 'apply-patch' },
       }),
-      createDispatcher(BASELINE.rules),
+      createDispatcher(BASELINE.rules, {}),
     );
 
     expect(result.replayedCount).toBe(4);
@@ -204,6 +205,32 @@ describe('replayEntries', () => {
       { excluded: 'other-harness' },
     ]);
     expect(exclusions).toEqual({ truncated: 1, 'write-secret': 1, prompt: 1, 'unknown-tool': 1, 'other-harness': 1 });
+  });
+
+  test('an env-value log line (extra env_vars field) parses and stays as logged: its text was never logged, so it cannot be re-judged', async () => {
+    const line = JSON.stringify({
+      timestamp: '2026-10-13T10:00:00.000Z',
+      harness: 'claude-code',
+      session_id: 'session-1',
+      tool_name: 'Write',
+      family: 'write-secret',
+      verdict: 'block',
+      rule_id: 'env-value',
+      target: '/tmp/out.ts',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    const entries = parseLogEntries(`${line}\n`);
+    expect(entries).toMatchObject([{ family: 'write-secret', ruleId: 'env-value', target: '/tmp/out.ts' }]);
+
+    const { dispatcher, calls } = recordingDispatcher();
+    const { results } = await replayEntries(
+      entries,
+      'claude-code',
+      protocol({ Write: { role: 'write', path: 'file_path', text: 'content' } }),
+      dispatcher,
+    );
+    expect(results).toEqual([{ excluded: 'write-secret' }]);
+    expect(calls).toEqual([]);
   });
 });
 

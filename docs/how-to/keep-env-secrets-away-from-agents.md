@@ -30,7 +30,10 @@ environment, with no configuration:
   blocked;
 - `/proc/<pid>/environ` is blocked, for the Read tool as well as Bash;
 - `docker inspect` asks for confirmation, because it prints a container's
-  `Config.Env`.
+  `Config.Env`;
+- since 1.9.0, a `Write` or `Edit` whose text carries the **value** of a
+  protected variable (in clear, base64 or hex, 8 characters or more) is
+  blocked, and the refusal names the variable, never the value.
 
 A protected name is an uppercase name that ends in a credential word, such
 as `GITHUB_TOKEN`, `DB_PASSWORD` or `STRIPE_API_KEY`. The exact definition,
@@ -38,6 +41,20 @@ every row id and the forms each row recognises are in
 [The environment rows](../reference/policy.md#the-environment-rows). The
 rows read command text, so they are a net and not a barrier: step 3 covers
 what they miss.
+
+The write guard reads the environment of the hook process, which is the
+agent's own, and compares it with the text of a write. Its limits: under
+Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` the hook sees no value for
+the stripped variables and the guard is inert for them; a value the agent
+splits, reverses or re-encodes before writing it evades; it stops a copy, not
+the value reaching the agent's context; a dev password shared with a
+compose file or a test fixture blocks that file, so reference the variable by
+name or write the file yourself; and only its own verdict withholds a value
+from the audit log — a Bash command that carries a literal value and is
+blocked by another rule is logged as typed. To turn it off, disable or relax the
+`env-value` row ([Override a baseline rule](override-a-baseline-rule.md)). The
+full list is in
+[The env-value row](../reference/policy.md#the-env-value-row).
 
 ## Steps
 
@@ -174,4 +191,4 @@ what they miss.
   variable.
 
 ---
-Source: policy/secret.toml, src/protected-names.ts, src/cli-commands.ts, policy/harness/claude-code.toml
+Source: policy/secret.toml, policy/write-secret.toml, src/protected-names.ts, src/env-value-rules.ts, src/cli-commands.ts, policy/harness/claude-code.toml
