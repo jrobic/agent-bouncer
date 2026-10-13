@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **`ask_flags` no longer lets a flag through because of how it is spelled.**
+  A listed flag was recognised only when written exactly as listed, but git
+  accepts three other spellings of the same option, and each of them skipped the
+  confirmation: grouped short options (`git branch -qD foo`, `git branch -fd
+  foo`, `git tag -fd v1`), `--long=value` (`git switch --force-create=x main`)
+  and an abbreviated long option (`git branch --forc x`, `git switch
+  --force-c x main`, `git switch --discard`, `git tag --del v1`). All of them
+  now ask with `git-protected`, as the standard spelling does. An argument
+  after the subcommand matches a listed flag when it is identical, when it is
+  `--name=value` and `--name` is listed, when it is a strict prefix of a listed
+  long option (a `--x`, however short; combined with `=value` it still
+  matches, as `--force-c=x` does), or when it is a single-dash group without
+  `=` that is not a number and holds a listed short option as any of its
+  letters. The rule covers every `ask_flags` entry, the baseline's (`branch`,
+  `tag`, `switch`, `symbolic-ref`) and an overlay's (`worktree`, a replaced
+  `branch`). Known limit: a value glued to a short option (`git switch -cfix`,
+  `git tag -mdone`) can contain a listed letter and ask once too often; the
+  separated spelling (`git switch -c fix`) does not. `max_positionals`,
+  `safe_first_arg`, `safe_grammar` and `safe_flags` are unchanged. Replayed on
+  real agent git commands, the new matching changes no verdict. Details:
+  [`ask_flags`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms).
+
+### Changed
+
+- **Upgrade:** a personal `ask_flags` overlay becomes stricter without being
+  rewritten. A command that spells a listed flag grouped, as `--name=value` or
+  abbreviated now asks, where it used to pass.
+
 ## [1.9.0] - 2026-10-13
 
 ### Added

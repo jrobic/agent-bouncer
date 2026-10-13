@@ -480,6 +480,38 @@ reason = "example only — this duplicates the baseline row verbatim"
 | `max_positionals` | number | no |
 | `reason` | string | conditional — see § [[relax]] below |
 
+`flags` lists the options that ask; it never lists the safe ones. Each
+argument after the subcommand is compared with the listed flags the way
+git itself reads options (gitcli(7)), so the exact spelling is only one of
+four ways to hit a flag, and each of them asks:
+
+| Written as | Matches when | Example |
+|---|---|---|
+| the listed spelling | identical | `git branch -D foo` |
+| `--name=value` | `--name` is listed (the value is ignored) | `git switch --force-create=x main`, `git branch --force=x` |
+| an abbreviation | a `--x` without `=` that is a strict prefix of a listed long option, however short | `git branch --delet foo`, `git tag --del v1`, `git switch --discard` |
+| a group of short options | a single-dash token, without `=`, that is not a number, and in which any letter, at any position, is a listed short option | `git branch -qD foo`, `git branch -dv foo`, `git tag -fd v1` |
+
+The `=value` and abbreviation forms compose: `git switch --force-c=x main`
+asks, as git itself reads it as `--force-create=x`. A listed spelling asks
+even where git refuses it (`git branch --force=x`, an ambiguous
+abbreviation): the list is a confirmation net, not a model of git's
+errors. `--` (end of options) and a bare `-` are matched only when listed
+themselves. An entry that is neither `-x` nor `--name` (a bare word,
+`-ff`) matches its exact spelling only. `max_positionals` counts the
+arguments that are not options and does not change.
+
+The rule is the same for every `ask_flags` entry, the baseline's and an
+overlay's, so an existing overlay entry becomes stricter without being
+rewritten.
+
+**Known limit.** A value glued to a short option reads as more letters
+(`git switch -cfix`, `git tag -mdone`), so a letter of the value can
+coincide with a listed option and the command asks once too often. The
+error is on the safe side, no `ask_flags` field names the options that
+take a value, and the separated spelling (`git switch -c fix`) does not
+ask. `fixtures/command.json` pins the case (`known-limit-git-switch-glued-value-letter`).
+
 **`safe_first_arg`** — safety hinges on the first non-flag argument.
 Baseline's own `stash` row; same substitution note as above:
 
