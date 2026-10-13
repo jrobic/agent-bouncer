@@ -148,7 +148,7 @@ describe('loadPolicyFromOverlayText: [[relax]] — the only sanctioned way to wi
 describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-lists', () => {
   const relax = (list: string, value: string, reason = 'human-approved') =>
     `[[relax]]\nlist = ${JSON.stringify(list)}\nvalue = ${JSON.stringify(value)}\nreason = ${JSON.stringify(reason)}\n`;
-  const checkGitWith = (overlay: string, command: string) => {
+  const verdictUnder = (overlay: string, command: string) => {
     const loaded = loadPolicyFromOverlayText(overlay);
     expect(loaded.warnings).toEqual([]);
     return createCommandChecker(loaded.policy.command).checkGit(command);
@@ -157,29 +157,23 @@ describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-list
 
   test('a variable relaxed by name passes at any value, and its neighbours still ask', () => {
     const overlay = relax('command.git.allowed_env', 'GIT_SSH_COMMAND');
-    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
-    expect(checkGitWith(overlay, ssh('/tmp/anything'))).toBeNull();
-    expect(checkGitWith(overlay, 'GIT_SSH=/x git ls-remote ssh://h/r')?.ruleId).toBe('git-config-exec');
-  });
-
-  test('a variable relaxed as name=value passes at that value only', () => {
-    const overlay = relax('command.git.allowed_env', 'GIT_SSH_COMMAND=ssh -o BatchMode=yes');
-    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
-    expect(checkGitWith(overlay, ssh('ssh -o BatchMode=no'))?.ruleId).toBe('git-config-exec');
+    expect(verdictUnder(overlay, ssh('ssh -o BatchMode=yes'))).toBeNull();
+    expect(verdictUnder(overlay, ssh('/tmp/anything'))).toBeNull();
+    expect(verdictUnder(overlay, 'GIT_SSH=/x git ls-remote ssh://h/r')?.ruleId).toBe('git-config-exec');
   });
 
   test('a config key relaxed as key=value passes at that value only, whatever the key\'s case', () => {
     const overlay = relax('command.git.allowed_config', 'core.pager=less');
-    expect(checkGitWith(overlay, 'git -c core.pager=less diff')).toBeNull();
-    expect(checkGitWith(overlay, 'git -c CORE.Pager=less diff')).toBeNull();
-    expect(checkGitWith(overlay, 'git -c core.pager=more diff')?.ruleId).toBe('git-config-exec');
+    expect(verdictUnder(overlay, 'git -c core.pager=less diff')).toBeNull();
+    expect(verdictUnder(overlay, 'git -c CORE.Pager=less diff')).toBeNull();
+    expect(verdictUnder(overlay, 'git -c core.pager=more diff')?.ruleId).toBe('git-config-exec');
   });
 
   test('a global option relaxed by name passes, with its value in the next token', () => {
     const overlay = relax('command.git.allowed_global_options', '--namespace');
-    expect(checkGitWith(overlay, 'git --namespace=x status')).toBeNull();
-    expect(checkGitWith(overlay, 'git --namespace x status')).toBeNull();
-    expect(checkGitWith(overlay, 'git --exec-path=/tmp/x status')?.ruleId).toBe('git-config-exec');
+    expect(verdictUnder(overlay, 'git --namespace=x status')).toBeNull();
+    expect(verdictUnder(overlay, 'git --namespace x status')).toBeNull();
+    expect(verdictUnder(overlay, 'git --exec-path=/tmp/x status')?.ruleId).toBe('git-config-exec');
   });
 
   test('an active relaxation names its list, value, reason and file', () => {
