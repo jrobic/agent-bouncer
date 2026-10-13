@@ -14,16 +14,46 @@
 //            rule decided this, as opposed to an unconditional allow that
 //            never reaches this vocabulary at all — absence of a Verdict
 //            IS allow, silently, by contract)
-export type VerdictKind = 'block' | 'confirm' | 'flag' | 'observe';
+//   redact   post-tool only (ADR-0008): the tool ran, and its output
+//            reached the model with the value of a protected environment
+//            variable replaced by `[redacted: NAME]` — never a pre-tool
+//            verdict, never degraded through an output table
+export type VerdictKind = 'block' | 'confirm' | 'flag' | 'observe' | 'redact';
 
 // Total over VerdictKind: adding a verdict kind requires defining where it
 // falls in the severity order instead of silently producing undefined.
+// `flag` and `redact` are never ranked against a pre-tool verdict (their own
+// events emit nothing else); 0 is a placeholder, never a decision.
 export const VERDICT_SEVERITY: Readonly<Record<VerdictKind, number>> = {
   block: 3,
   confirm: 2,
   observe: 1,
   flag: 0,
+  redact: 0,
 };
+
+// Total over VerdictKind, like VERDICT_SEVERITY: adding a verdict kind
+// requires deciding whether a pre-tool family may emit it. `flag` belongs to
+// UserPromptSubmit, `redact` to the post-tool event (ADR-0008).
+const PRE_TOOL_VERDICTS = {
+  block: true,
+  confirm: true,
+  observe: true,
+  flag: false,
+  redact: false,
+} as const satisfies Readonly<Record<VerdictKind, boolean>>;
+
+/** The verdicts a pre-tool family may emit — read off PRE_TOOL_VERDICTS, so the two cannot drift. */
+export type PreToolVerdictKind = { [K in VerdictKind]: (typeof PRE_TOOL_VERDICTS)[K] extends true ? K : never; }[VerdictKind];
+
+/**
+ * The one test both pre-tool consumers apply (src/adapter/dispatch.ts's
+ * strictestOf, src/adapter/degrade.ts): a verdict outside this set on the
+ * pre-tool path is a routing bug, thrown — never ranked, never degraded.
+ */
+export function isPreToolKind(kind: VerdictKind): kind is PreToolVerdictKind {
+  return PRE_TOOL_VERDICTS[kind];
+}
 
 export interface Verdict {
   readonly verdict: VerdictKind;

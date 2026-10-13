@@ -221,15 +221,26 @@ transport = "stdin-json"
 wiring    = "shim-file"
 
 [harness.protocol.input]
-event   = "event"
-tool    = "toolName"
-input   = "input"
-session = "session"
-cwd     = "cwd"
+event    = "event"
+tool     = "toolName"
+input    = "input"
+session  = "session"
+cwd      = "cwd"
+response = "content"
 
+# ADR-0008: `post_tool` — the shim relays every `tool_result` as
+# `{event: "tool_result", toolName, input, content, isError, session, cwd}`
+# and returns bouncer's `{ content }` answer as is (the `redact` template
+# below). Measured 2026-10-13, omp 18.10.3 and pi 0.84.1: a handler's
+# `{ content }` replaces what the model sees for bash, read, grep, an
+# extension tool and MCP (omp: top level and through `write xd://…`; pi:
+# pi-mcp-adapter's `mcp` tool), failed tools included (`isError: true`); a
+# throwing handler keeps the original, so the shim's own handler never
+# throws; `details` never reaches the model and is not forwarded.
 [harness.protocol.events]
 pre_tool      = "tool_call"
 session_start = "session_start"
+post_tool     = "tool_result"
 
 # name -> role + field selectors, on the SHIM's own event object (never
 # omp/pi-agent's real extension event shape directly — the shim already
@@ -293,3 +304,6 @@ stdout = '{"ask":true,"reason":${reason}}'
 
 [harness.protocol.output.session_start]
 stdout = '{"notify":${context}}'
+
+[harness.protocol.output.redact]
+stdout = '{"content":${response}}'

@@ -165,6 +165,25 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     expect(sectionOf(text, 'bouncer would deny/ask, TS allowed')).toContain('env-value');
   });
 
+  test('shadow post-tool redact entries (ADR-0008) count as shadow entries and are never a divergence: the tool ran', async () => {
+    const dir = freshAccountDir();
+    const redacted = shadowVerdict({
+      family: 'write-secret',
+      verdict: 'redact',
+      rule_id: 'env-value',
+      target: '(tool output)',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    await writeBouncerLog(dir, [redacted, redacted]);
+
+    const { text, ok } = await runAudit({ days: 30, suggest: false, diff: true });
+    expect(ok).toBe(true);
+    expect(text).toContain('bouncer shadow: 2 entries');
+    for (const heading of ['TS denied/asked, bouncer would allow', 'bouncer would deny/ask, TS allowed', 'matched, but verdicts differ']) {
+      expect(sectionOf(text, heading)).toContain('none');
+    }
+  });
+
   test('a matched pair with different verdicts reports a verdict divergence, naming both sides', async () => {
     const dir = freshAccountDir();
     await writeBouncerLog(dir, [

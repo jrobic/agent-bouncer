@@ -211,8 +211,10 @@ export interface HarnessOutputTable {
 }
 
 // Keyed by the ACTION name (not the abstract verdict) — "silent" carries
-// no template, so this table only ever has up to four entries.
-export type HarnessTemplateKey = 'deny' | 'ask' | 'context' | 'session_start';
+// no template, so this table only ever has up to four action entries —
+// plus `redact`, ADR-0008's post-tool answer: rendered when a tool's
+// response is rewritten, never reached through the output table.
+export type HarnessTemplateKey = 'deny' | 'ask' | 'context' | 'session_start' | 'redact';
 
 // A template may render `stdout`, set the process `exit` code, or both —
 // Claude Code's four templates only ever set `stdout` (exit stays the
@@ -242,12 +244,20 @@ export interface HarnessProtocolInput {
   // run.ts/log.ts). Absent on claude-code.toml, which sends no such
   // field at all.
   readonly permission?: string;
+  // ADR-0008: the selector of the tool's own result in a post-tool
+  // envelope (`tool_response` for Claude Code, the shim's `content` for
+  // pi-agent). Kept in lockstep with `events.post_tool` by lint.
+  readonly response?: string;
 }
 
 export interface HarnessProtocolEvents {
   readonly pre_tool: string;
   readonly prompt?: string;
   readonly session_start?: string;
+  // ADR-0008: the event fired after a tool ran, whose response bouncer
+  // rewrites to redact protected environment values. Optional: a harness
+  // that cannot replace a tool result declares none and is never reached.
+  readonly post_tool?: string;
 }
 
 // ADR-0006 § 3/6: the full declaration a harness's `run()` pipeline reads

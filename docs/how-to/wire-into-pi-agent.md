@@ -2,14 +2,14 @@
 
 Goal: install the printed shim as an extension in pi-agent's (and omp's — omp
 is a layer on pi-agent, the relation of oh-my-zsh to zsh, ADR-0006 fact 5)
-own configuration directory, so every tool call and every session start goes
-through `bouncer run --harness pi-agent`.
+own configuration directory, so every tool call, every tool result and every
+session start goes through `bouncer run --harness pi-agent`.
 
 Unlike Claude Code and Codex, pi-agent and omp are **in-process** harnesses
 (ADR-0006 § 7): neither writes a stdin-JSON envelope itself. There is no
 `hooks.json`/`settings.json` to point at bouncer — a guard is reached only
 through an **extension**, a small TypeScript module `pi`/`omp` load at boot
-and call on every tool call and session start. `bouncer harness shim
+and call on every tool call, tool result and session start. `bouncer harness shim
 pi-agent` prints that extension, embedded in the binary and byte-identical
 every time: it forwards the harness's own event object to `bouncer run
 --harness pi-agent` unmodified and returns bouncer's stdout to the harness
@@ -233,6 +233,45 @@ toast itself cannot expand. The model always receives the full text.
 Measured live on `omp` 18.10.3 and `pi` 0.84.1. `bouncer doctor --harness
 pi-agent` prints the same details in a terminal.
 
+## Tool output redaction
+
+The shim relays every `tool_result` — every tool's output, before the model
+sees it — to `bouncer run --harness pi-agent` (ADR-0008). When the output
+carries the value of a protected environment variable (the same names and
+spellings as the write guard, `docs/reference/policy.md`'s env-value row),
+bouncer answers `{ content }` with each occurrence replaced by
+`[redacted: NAME]`, and the shim returns it as is; nothing found, bouncer
+prints nothing and the output is untouched. The shim forwards `toolName`,
+`input`, `content` and `isError` — never `details`, which never reaches the
+model — and judges nothing itself.
+
+Every failure withholds the output: bouncer missing, timing out (2 s),
+exiting non-zero, or answering something other than a `{ content }` array
+gives the model `bouncer: post-tool check failed — output withheld` instead.
+The shim's handler never throws: a throwing `tool_result` handler makes both
+binaries keep the original output.
+
+Measured live on 2026-10-13, omp 18.10.3 and pi 0.84.1, in a temporary
+`HOME` and `PI_CODING_AGENT_DIR` with a made-up variable:
+
+- `bash`, `read`, `grep`, an extension tool and MCP tools reach the model
+  redacted — under omp at top level (`mcp__<server>_<tool>`) and through the
+  default `write xd://<tool>` route, which fires `tool_result` twice (the
+  inner tool, then `write`, the second already redacted); under pi through
+  `pi-mcp-adapter`'s `mcp` tool.
+- **A failed tool is redacted too** (`isError: true`, a non-zero `bash`
+  exit included) — unlike Claude Code.
+- **On disk, the original stays**: the session file keeps each tool's
+  `details`, which for `read`, `grep`, MCP and a truncated `bash` output hold
+  the text as printed; omp also writes a large `bash` output in full to the
+  session's artifacts (`0.bash.log`). Reading one back through a tool is
+  redacted again.
+- **The tool already ran**: redaction protects the model's context, not what
+  the tool did. Image blocks are passed through untouched.
+
+The switch is the `env-value` row: an `[[override]]` that disables or relaxes
+it turns redaction off as well.
+
 ## `PI_CODING_AGENT_DIR` for a second account
 
 The same binary guards a second pi-agent/omp account by pointing
@@ -371,6 +410,12 @@ install time — for each of `~/.pi/agent` and `~/.omp/agent`, or any
 `PI_CODING_AGENT_DIR` seat), then restart the session; `bouncer doctor
 --harness pi-agent` is `[pass]` again once it matches.
 
+Bouncer 1.10.0 is another: the shim relays every `tool_result` for
+[tool output redaction](#tool-output-redaction). Reprint it the same way, for
+each agent directory and each omp profile, then restart the session — until
+then the installed shim does not redact, and `doctor` reads `[fail]
+wiring:shim`.
+
 Every [omp profile](#omp-profiles) holds its own copy of the shim: reprint it
 into each one too. `doctor` names every profile whose copy is stale or missing.
 
@@ -380,6 +425,9 @@ into each one too. `doctor` names every profile whose copy is stale or missing.
   (every `wiring:shim (profile …)` line included).
 - A guarded command inside the session (e.g. `rm -rf /tmp/some-test-dir`)
   is denied, with the reason visible to the model.
+- A tool that prints the value of a protected variable reaches the model as
+  `[redacted: NAME]` (try it with a made-up variable exported only for that
+  session, never a real one).
 - Editing `extensions/bouncer.ts` directly (or deleting it) asks for
   confirmation before it proceeds — the file's own protected-write row.
 - Under Herdr, a Bouncer ask (e.g. `git push` under `omp`) is *expected*

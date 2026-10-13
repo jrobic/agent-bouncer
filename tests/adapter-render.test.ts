@@ -8,7 +8,7 @@
 // declaration's own templates render the installed binary's exact bytes.
 
 import { describe, expect, test } from 'bun:test';
-import { assembleFlagContext, reasonText, renderAction, renderSessionStart } from '../src/adapter/render.ts';
+import { assembleFlagContext, reasonText, renderAction, renderRedaction, renderSessionStart } from '../src/adapter/render.ts';
 import type { HarnessProtocol } from '../src/policy/schema.ts';
 import type { Verdict } from '../src/types.ts';
 
@@ -110,5 +110,11 @@ describe('renderSessionStart', () => {
   test('a non-null context renders through the session_start template', () => {
     const result = renderSessionStart(PROTOCOL, 'doctor: WIRING PROBLEM');
     expect(JSON.parse(result.stdout!)).toEqual({ sessionContext: 'doctor: WIRING PROBLEM' });
+  });
+});
+
+describe('renderRedaction', () => {
+  test('no redact template declared: throws, never renders silence (ADR-0008 § 6)', () => {
+    expect(() => renderRedaction(PROTOCOL, { stdout: 'x' })).toThrow(/no redact template/);
   });
 });

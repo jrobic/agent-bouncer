@@ -33,7 +33,12 @@ environment, with no configuration:
   `Config.Env`;
 - since 1.9.0, a `Write` or `Edit` whose text carries the **value** of a
   protected variable (in clear, base64 or hex, 8 characters or more) is
-  blocked, and the refusal names the variable, never the value.
+  blocked, and the refusal names the variable, never the value;
+- since 1.10.0, the same value in **any tool's output** reaches the model as
+  `[redacted: NAME]` — once the `PostToolUse` entry is wired (Claude Code) or
+  the shim reprinted (pi/omp). The tool has already run, and under Claude
+  Code a tool that fails is not redacted: see
+  [Tool output redaction](wire-into-claude-code.md#tool-output-redaction).
 
 A protected name is an uppercase name that ends in a credential word, such
 as `GITHUB_TOKEN`, `DB_PASSWORD` or `STRIPE_API_KEY`. The exact definition,
@@ -46,8 +51,9 @@ The write guard reads the environment of the hook process, which is the
 agent's own, and compares it with the text of a write. Its limits: under
 Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` the hook sees no value for
 the stripped variables and the guard is inert for them; a value the agent
-splits, reverses or re-encodes before writing it evades; it stops a copy, not
-the value reaching the agent's context; a dev password shared with a
+splits, reverses or re-encodes before writing it evades; it stops a copy (and,
+since 1.10.0, the redaction of tool output keeps the value out of what the
+model is shown, within its own limits); a dev password shared with a
 compose file or a test fixture blocks that file, so reference the variable by
 name or write the file yourself; and only its own verdict withholds a value
 from the audit log — a Bash command that carries a literal value and is

@@ -172,6 +172,26 @@ describe('runAudit: report mode', () => {
     expect(text).toContain('git-conditional-branch'); // still dead, never fired
   });
 
+  test('post-tool redact entries (ADR-0008) are counted but are no friction: no deny/ask, nothing to relax', async () => {
+    const dir = freshAccountDir();
+    const redacted = verdictLine({
+      family: 'write-secret',
+      verdict: 'redact',
+      rule_id: 'env-value',
+      target: '(tool output)',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    await writeLog(dir, [redacted, redacted]);
+    const report = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(report.ok).toBe(true);
+    expect(report.text).toContain('Replayed 0 of 2 entries against the current policy');
+    expect(report.text).toContain('Not replayable: 2 write-secret.');
+    expect(sectionOf(report.text, 'Frequent friction')).toContain('no deny/ask entries');
+    const suggestion = await runAudit({ days: 30, suggest: true, diff: false });
+    expect(suggestion.text).toContain('nothing to suggest');
+    expect(suggestion.text).not.toContain('[[relax]]');
+  });
+
   test('--days excludes entries outside the window', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [

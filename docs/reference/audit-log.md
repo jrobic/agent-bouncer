@@ -19,10 +19,11 @@ all present as strings; the other two carry a `kind` field instead).
 ## Verdict entry
 
 Written for every `block`/`confirm`/`observe` verdict from `PreToolUse`,
-and every `flag` from `UserPromptSubmit` — including `observe`, which
-never reaches the model and never appears on stdout (see
-`docs/reference/cli.md`'s `run` section). A clean, unremarkable tool call
-produces no line at all.
+every `flag` from `UserPromptSubmit`, and every `redact` from the post-tool
+event (ADR-0008) — including `observe`, which never reaches the model and
+never appears on stdout (see `docs/reference/cli.md`'s `run` section). A
+clean, unremarkable tool call produces no line at all; neither does a tool
+output with no protected value in it.
 
 ```json
 {"timestamp":"2026-08-17T08:56:56.332Z","harness":"claude-code","session_id":null,"tool_name":"Bash","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","build":"56b1e5a","policy":"0123456789ab"}
@@ -37,6 +38,15 @@ verbatim, whenever the envelope actually sent one:
 {"timestamp":"2026-09-08T20:00:00.000Z","harness":"codex","session_id":"01a...","tool_name":"Bash","permission":"bypassPermissions","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","build":"56b1e5a","policy":"0123456789ab"}
 ```
 
+A post-tool redaction (ADR-0008): the tool's output carried the value of a
+protected environment variable and reached the model with it replaced by
+`[redacted: NAME]`. The output itself is never logged — `target` is the fixed
+`(tool output)`, and `env_vars` names the variables:
+
+```json
+{"timestamp":"2026-10-13T16:24:59.069Z","harness":"claude-code","session_id":"01a...","tool_name":"Bash","family":"write-secret","verdict":"redact","rule_id":"env-value","target":"(tool output)","build":"56b1e5a","policy":"0123456789ab","env_vars":["FAKE_API_TOKEN"]}
+```
+
 | Field | Type | Notes |
 |---|---|---|
 | `timestamp` | string | ISO 8601, set when the line is written. |
@@ -45,11 +55,11 @@ verbatim, whenever the envelope actually sent one:
 | `tool_name` | string \| null | From the hook envelope; `null` when absent. |
 | `permission` | string | OPTIONAL — only present when the harness declares `input.permission` AND the envelope sent a value for it. Logged verbatim, never read for a decision anywhere in this codebase. |
 | `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"protected-write"` \| `"prompt"`. |
-| `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"`. |
+| `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"` \| `"redact"` (post-tool only: the tool ran, its output was rewritten). |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
-| `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). |
+| `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). On a `redact` entry, always `(tool output)`. |
 | `target_truncated` | boolean | OPTIONAL — `true` only when `target` was cut. Entries before 1.4.0 carry no marker; their legacy cut shape is a 200-character target ending in `...`. |
-| `env_vars` | array of string | OPTIONAL — only on a `write-secret` entry the env-value row produced (`rule_id` `env-value`): the **names** of the protected environment variables whose value the written text carries, in the environment's order. On an `env-value` entry the value, in clear, base64 or hex, appears in no field — a `target` path that itself carries one is logged as `(path withheld: …)`. That promise stops at this verdict: every other rule logs its `target` verbatim, so a blocked Bash command that carries a literal value is logged in clear. See `docs/reference/policy.md`'s env-value row. |
+| `env_vars` | array of string | OPTIONAL — only on a `write-secret` entry the env-value row produced (`rule_id` `env-value`): the **names** of the protected environment variables whose value the written text carries, in the environment's order — or, on a `redact` entry, whose value the tool's output carried, in the order first found. On an `env-value` entry the value, in clear, base64 or hex, appears in no field — a `target` path that itself carries one is logged as `(path withheld: …)`. That promise stops at this verdict: every other rule logs its `target` verbatim, so a blocked Bash command that carries a literal value is logged in clear. See `docs/reference/policy.md`'s env-value row. |
 | `build` | string | `"source"` for source execution; otherwise the short SHA with `-dirty` when the build tree was dirty. |
 | `policy` | string | First 12 hexadecimal characters of the SHA-256 digest of the effective policy that produced this verdict. |
 
@@ -62,7 +72,8 @@ truncation signature and remains `(as logged)` during replay. An `env-value`
 entry (and its `env_vars` field) is read by `audit`, `audit --diff` and replay
 like any other verdict line — the unknown field is ignored — and replay leaves
 it `(as logged)` as a `write-secret` entry: the written text was never logged,
-so it cannot be re-judged.
+so it cannot be re-judged. A `redact` entry is the same: `audit` counts it as no
+friction, `audit --diff` as a silent verdict, replay leaves it `(as logged)`.
 
 ## Audit-header entry
 
@@ -94,7 +105,8 @@ Written once per warning: one entry per REJECTED LAYER (ADR-0001
 § Rejection — a broken common file and a broken profile file each get
 their own entry, naming their own layer and file), one for the migration
 guard (see `docs/reference/policy.md`'s fail-closed behavior), one when a
-dispatch throw forced a retry against the embedded baseline, one when the
+dispatch throw forced a retry against the embedded baseline, one when a
+post-tool check failed and the output was withheld (ADR-0008), one when the
 `SessionStart` doctor check itself failed and fell back to silence, or
 one when `run` was invoked with an unknown or protocol-less `--harness
 <id>` (ADR-0006 § 6 — logged only when a log path can be resolved for it,
@@ -109,7 +121,7 @@ which an UNDECLARED id cannot be).
 | `timestamp` | string | ISO 8601. |
 | `harness` | string | The target harness's own declaration id. |
 | `kind` | string | Always `"policy-warning"`. |
-| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, or the unknown/protocol-less-harness message. A dispatch-retry message whose error text carries the value of a protected environment variable (in clear, base64 or hex) is replaced by a fixed notice that names the variable(s) — `dispatch failed, retrying with the embedded baseline (error message withheld: it contains the value of a protected environment variable: NAME)` — and one logged when the environment itself could not be scanned says `(error message withheld: the environment could not be scanned)`. |
+| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, a post-tool check failure (`post-tool check failed, output withheld: …`, ADR-0008), or the unknown/protocol-less-harness message. A dispatch-retry or post-tool failure message whose error text carries the value of a protected environment variable (in clear, base64 or hex) is replaced by a fixed notice that names the variable(s) — `dispatch failed, retrying with the embedded baseline (error message withheld: it contains the value of a protected environment variable: NAME)` — and one logged when the environment itself could not be scanned says `(error message withheld: the environment could not be scanned)`. |
 
 ## Rotation
 

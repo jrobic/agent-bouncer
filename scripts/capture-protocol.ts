@@ -96,6 +96,25 @@ interface Case {
   // claude-code case keeps recording the installed binary's own
   // byte-identical output.
   readonly execOverride?: readonly string[];
+  // Ticket 59 (ADR-0008): the made-up environment the post-tool cases hand
+  // the spawned bouncer — merged over captureEnv's own (which drops every
+  // protected name), recorded with the case so the replay hands run() the
+  // same record. Never a real credential.
+  readonly env?: Readonly<Record<string, string>>;
+}
+
+// One made-up protected variable for the post-tool cases (ticket 59).
+const POST_TOOL_VALUE = 'Zq7-made-up-0042';
+const POST_TOOL_ENV: Readonly<Record<string, string>> = { FAKE_API_TOKEN: POST_TOOL_VALUE };
+
+function postToolUse(toolName: string, toolResponse: unknown): string {
+  return json({
+    hook_event_name: 'PostToolUse',
+    session_id: 'capture-session',
+    tool_name: toolName,
+    tool_input: {},
+    tool_response: toolResponse,
+  });
 }
 
 function json(obj: unknown): string {
@@ -173,6 +192,7 @@ function claudeCodeCases(): Case[] {
           ],
           UserPromptSubmit: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
           SessionStart: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
+          PostToolUse: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
         },
       },
     },
@@ -185,15 +205,57 @@ function claudeCodeCases(): Case[] {
           PreToolUse: [{ matcher: CAPTURE.matcher, hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
           // UserPromptSubmit deliberately absent — the "missing hook" case.
           SessionStart: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
+          PostToolUse: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
         },
       },
     },
     { id: 'empty-stdin-silent', argv: [], stdin: '' },
     { id: 'invalid-json-silent', argv: [], stdin: '{not valid json' },
+    // Ticket 59 (ADR-0008): PostToolUse is the post-tool event now. With no
+    // `tool_response` there is nothing to rewrite (this case's former id,
+    // `posttooluse-event-silent`, pinned the event as unjudged). The four
+    // after it are source-only until the release that ships ADR-0008.
     {
-      id: 'posttooluse-event-silent',
+      id: 'posttooluse-no-response-silent',
       argv: [],
       stdin: json({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'echo hi' } }),
+    },
+    {
+      id: 'posttooluse-bash-redact',
+      argv: [],
+      stdin: postToolUse('Bash', {
+        stdout: `token=${POST_TOOL_VALUE}\n`,
+        stderr: '',
+        interrupted: false,
+        isImage: false,
+        noOutputExpected: false,
+      }),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttooluse-mcp-redact',
+      argv: [],
+      stdin: postToolUse('mcp__probe__leak', [{ type: 'text', text: `mcp says: ${Buffer.from(POST_TOOL_VALUE).toString('base64')}` }]),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttooluse-clean-silent',
+      argv: [],
+      stdin: postToolUse('Read', {
+        type: 'text',
+        file: { filePath: '/tmp/capture-scratch.txt', content: 'hello', numLines: 1, startLine: 1, totalLines: 1 },
+      }),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttooluse-shadow-silent',
+      argv: ['--shadow'],
+      stdin: postToolUse('Bash', { stdout: POST_TOOL_VALUE, stderr: '', interrupted: false, isImage: false, noOutputExpected: false }),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
     },
     { id: 'missing-hook-event-name-silent', argv: [], stdin: json({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }) },
     { id: 'shadow-deny-silent', argv: ['--shadow'], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
@@ -463,7 +525,55 @@ function piAgentCases(): Case[] {
     { id: 'sessionstart-broken-shim-scream', argv: [], stdin: piAgentSessionStart(), settings: { shimHealthy: false } },
     { id: 'empty-stdin-malformed', argv: [], stdin: '' },
     { id: 'invalid-json-malformed', argv: [], stdin: '{not valid json' },
-    { id: 'unknown-event-silent', argv: [], stdin: json({ event: 'tool_result', toolName: 'bash', input: { command: 'echo hi' } }) },
+    // Ticket 59 (ADR-0008): `tool_result` is the declared post-tool event
+    // now, so the unjudged-event case names an event pi-agent declares none
+    // of (pi's own `tool_execution_end`).
+    { id: 'unknown-event-silent', argv: [], stdin: json({ event: 'tool_execution_end', toolName: 'bash', input: { command: 'echo hi' } }) },
+    {
+      id: 'tool-result-redact',
+      argv: [],
+      stdin: json({
+        event: 'tool_result',
+        toolName: 'bash',
+        input: { command: 'printenv' },
+        content: [
+          { type: 'text', text: `token=${Buffer.from(POST_TOOL_VALUE).toString('hex')}\n` },
+          { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+        ],
+        isError: true,
+        session: 'capture-session',
+        cwd: null,
+      }),
+      env: POST_TOOL_ENV,
+    },
+    {
+      id: 'tool-result-clean-silent',
+      argv: [],
+      stdin: json({
+        event: 'tool_result',
+        toolName: 'read',
+        input: { path: 'README.md' },
+        content: [{ type: 'text', text: 'hello' }],
+        isError: false,
+        session: 'capture-session',
+        cwd: null,
+      }),
+      env: POST_TOOL_ENV,
+    },
+    {
+      id: 'tool-result-shadow-silent',
+      argv: ['--shadow'],
+      stdin: json({
+        event: 'tool_result',
+        toolName: 'bash',
+        input: { command: 'printenv' },
+        content: [{ type: 'text', text: POST_TOOL_VALUE }],
+        isError: false,
+        session: 'capture-session',
+        cwd: null,
+      }),
+      env: POST_TOOL_ENV,
+    },
     { id: 'missing-event-name-silent', argv: [], stdin: json({ toolName: 'bash', input: { command: 'rm -rf /' } }) },
     { id: 'shadow-deny-silent', argv: ['--shadow'], stdin: piAgentToolCall('bash', { command: 'rm -rf /' }) },
     { id: 'shadow-typo-normal-enforce', argv: ['--shadwo'], stdin: piAgentToolCall('bash', { command: 'rm -rf /' }) },
@@ -484,6 +594,9 @@ interface Recorded {
   readonly id: string;
   readonly argv: readonly string[];
   readonly stdin: string;
+  // Only on a case that carries one (ticket 59): every other record keeps
+  // its pre-59 bytes.
+  readonly env?: Readonly<Record<string, string>>;
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
 }
 
@@ -504,11 +617,12 @@ function runOnce(
   homeDir: string,
   configDir: string,
   execCmd: readonly string[] = EXEC_CMD,
+  caseEnv: Readonly<Record<string, string>> = {},
 ): { stdout: string; exit: number; } {
   const proc = Bun.spawnSync({
     cmd: [...execCmd, 'run', ...HARNESS_FLAG_ARGS, ...argv],
     cwd: PROJECT_ROOT,
-    env: captureEnv({ HOME: homeDir, [CAPTURE.envVar]: configDir }),
+    env: captureEnv({ HOME: homeDir, [CAPTURE.envVar]: configDir, ...caseEnv }),
     stdin: Buffer.from(stdin, 'utf8'),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -644,11 +758,12 @@ function main(): void {
       }
     }
 
-    const { stdout, exit } = runOnce(testCase.argv, testCase.stdin, caseDir, configDir, testCase.execOverride ?? EXEC_CMD);
+    const { stdout, exit } = runOnce(testCase.argv, testCase.stdin, caseDir, configDir, testCase.execOverride ?? EXEC_CMD, testCase.env);
     results.push({
       id: testCase.id,
       argv: testCase.argv,
       stdin: testCase.stdin,
+      ...(testCase.env === undefined ? {} : { env: testCase.env }),
       expected: { stdout: stdout === '' ? null : stdout, exit },
     });
   }

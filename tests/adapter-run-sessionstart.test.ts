@@ -122,11 +122,17 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
     expect(context).not.toContain('WIRING/POLICY PROBLEM'); // nothing is actually broken
   });
 
-  test('a PostToolUse envelope stays silent — SessionStart handling does not widen the whitelist', async () => {
-    await accountWithSettings(HEALTHY_HOOKS);
-    const envelope = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'ls' } });
-    const { stdout } = await run(envelope);
-    expect(stdout).toBeNull();
+  // ADR-0008 / decision H2: no new tier — a missing PostToolUse entry joins
+  // the scream like every other wiring:* failure, entry to paste included.
+  test('a missing PostToolUse entry reaches the SessionStart scream like any other wiring failure', async () => {
+    const { PostToolUse: _omit, ...withoutPostToolUse } = HEALTHY_HOOKS;
+    await accountWithSettings(withoutPostToolUse);
+    const { stdout } = await run(SESSION_START_ENVELOPE, { build: CLEAN_BUILD });
+    expect(stdout).not.toBeNull();
+    const context: string = JSON.parse(stdout!).hookSpecificOutput.additionalContext;
+    expect(context).toContain('WIRING/POLICY PROBLEM');
+    expect(context).toContain('wiring:PostToolUse');
+    expect(context).toContain(JSON.stringify({ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }));
   });
 });
 

@@ -19,14 +19,14 @@
 // environment awareness (most tests).
 
 import { createCommandChecker } from '../command-rules.ts';
-import { createCheckEnvValue, type EnvRecord } from '../env-value-rules.ts';
+import { createEnvValueGuard, type EnvRecord } from '../env-value-rules.ts';
 import { createCheckMcpWrite } from '../mcp-write-rules.ts';
 import { BASELINE } from '../policy/baseline.ts';
 import type { RulesPolicy } from '../policy/schema.ts';
 import { createScanPrompt } from '../prompt-rules.ts';
 import { createProtectedWriteChecker } from '../protected-write-rules.ts';
 import { createSecretChecker } from '../secret-rules.ts';
-import { type Family, type Verdict, VERDICT_SEVERITY } from '../types.ts';
+import { type Family, isPreToolKind, type Verdict, VERDICT_SEVERITY } from '../types.ts';
 import { createScanSecrets } from '../write-secret-rules.ts';
 import type { NeutralCall } from './neutral-call.ts';
 import { canonicalizePath } from './paths.ts';
@@ -54,22 +54,23 @@ export interface Dispatcher {
 // block go unheard just because command found a milder confirm first.
 // VERDICT_SEVERITY lives in src/types.ts so every engine family ranks the
 // shared VerdictKind vocabulary identically.
-// `flag` is not part of this ordering at all — a PreToolUse family that
-// emits `flag` is a routing bug (flag belongs to UserPromptSubmit only; see
-// degrade.ts's own guard). Giving it severity 0 and letting the max-reduce
-// silently swallow it whenever a block/confirm co-occurs would hide
-// exactly that bug. Every hit is checked for `flag` BEFORE ranking,
+// `flag` and `redact` are not part of this ordering at all — a PreToolUse
+// family that emits either is a routing bug (flag belongs to
+// UserPromptSubmit, redact to the post-tool event; see degrade.ts's own
+// guard, the same `isPreToolKind` test). Giving them severity 0 and letting
+// the max-reduce silently swallow them whenever a block/confirm co-occurs
+// would hide exactly that bug. Every hit is checked BEFORE ranking,
 // independent of whether anything stricter also fired.
 // Exported for its own unit test (tests/adapter-dispatch.test.ts): no
-// current PreToolUse family actually emits `flag`, so the misrouting guard
+// current PreToolUse family actually emits either, so the misrouting guard
 // below can only be exercised directly, with a hand-built FamilyVerdict —
 // there is no real input that reaches it through inspectPreToolUse today.
 export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | null {
-  const misrouted = hits.find((hit) => hit.verdict.verdict === 'flag');
+  const misrouted = hits.find((hit) => !isPreToolKind(hit.verdict.verdict));
   if (misrouted) {
     throw new Error(
-      `inspectPreToolUse: family "${misrouted.family}" emitted a "flag" verdict `
-        + `(ruleId ${misrouted.verdict.ruleId}) — flag belongs to UserPromptSubmit only`,
+      `inspectPreToolUse: family "${misrouted.family}" emitted a "${misrouted.verdict.verdict}" verdict `
+        + `(ruleId ${misrouted.verdict.ruleId}) — not a pre-tool verdict (flag belongs to UserPromptSubmit, redact to the post-tool event)`,
     );
   }
   if (hits.length === 0) return null;
@@ -95,7 +96,7 @@ export function createDispatcher(policy: RulesPolicy, env: EnvRecord): Dispatche
   const protectedWrite = createProtectedWriteChecker(policy.protected_write, policy.harness);
   const checkMcpWriteBound = createCheckMcpWrite(policy.mcp_write);
   const scanSecretsBound = createScanSecrets(policy.write_secret);
-  const checkEnvValueBound = createCheckEnvValue(policy.write_secret, env);
+  const checkEnvValueBound = createEnvValueGuard(policy.write_secret, env).check;
   const scanPromptBound = createScanPrompt(policy.prompt);
 
   function inspectCommandFamily(call: NeutralCall): FamilyVerdict | null {

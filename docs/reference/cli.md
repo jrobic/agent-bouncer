@@ -115,9 +115,23 @@ bouncer run [--harness <id>] < envelope.json
   ever monitors.
 
 **Dispatch by the harness's own declared event names:** for Claude Code,
-`PreToolUse`, `UserPromptSubmit`, `SessionStart` are handled; anything
-else (a future event, a typo, a missing field) produces no output —
-silent, by contract, never a guess.
+`PreToolUse`, `UserPromptSubmit`, `SessionStart` and `PostToolUse` are
+handled; anything else (a future event, a typo, a missing field) produces
+no output — silent, by contract, never a guess.
+
+**Post-tool redaction (ADR-0008):** for a harness that declares
+`events.post_tool` (Claude Code's `PostToolUse`, pi-agent's `tool_result`),
+`run` walks the tool's response (`input.response`) in its own shape and
+replaces the value of every protected environment variable — plain, base64
+or hex — by `[redacted: NAME]`. A response with no such value produces no
+output (the common case). A redaction is logged (verdict `redact`, the
+variable names in `env_vars`) and rendered through the `redact` template;
+`--shadow` logs it and prints nothing. When the check itself fails
+in-process — the environment, the walk, or the rendering — the answer is
+the response in its own shape with every text that could hold a value
+replaced by `bouncer: post-tool check failed — output withheld` (a `type`
+discriminator, image data and strings under 8 characters are kept) — never
+silence; if even that cannot be rendered, `run` exits 2.
 
 **Malformed-envelope contract (ADR-0006 § 4, review round 1 S-3):** empty
 stdin or invalid JSON is governed by the TARGET harness's own declared
@@ -148,7 +162,7 @@ $ echo $?
 ```
 
 **Output shapes** (`hookSpecificOutput`, one object per line, only
-written when there's something to say — Claude Code's own four
+written when there's something to say — Claude Code's own five
 templates, `policy/harness/claude-code.toml`'s
 `[harness.protocol.output.*]`):
 
@@ -164,14 +178,18 @@ templates, `policy/harness/claude-code.toml`'s
 ```json
 {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"bouncer doctor: WIRING/POLICY PROBLEM DETECTED — this session may be running partially or fully unguarded.\n  - wiring:PreToolUse: PreToolUse hook is missing or does not point at bouncer — this event runs unguarded"}}
 ```
+```json
+{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":"token=[redacted: FAKE_API_TOKEN]\n","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false}}}
+```
 
-An unremarkable tool call, a clean prompt, or a healthy `SessionStart`
-produces no stdout at all.
+An unremarkable tool call, a clean prompt, a healthy `SessionStart`, or a
+tool output with no protected value produces no stdout at all.
 
 **Exit code:** 0 for a recognized harness (regardless of verdict); 2 for
-an unusable `--harness <id>` (see above). A future harness's template MAY
+an unusable `--harness <id>` (see above), or for a post-tool check whose
+withheld answer could not be rendered. A future harness's template MAY
 set a different exit code (ADR-0006 § 3: "a template may set `exit`
-instead of, or with, `stdout`") — Claude Code's four templates never do.
+instead of, or with, `stdout`") — Claude Code's five templates never do.
 
 **Shadow mode example** — same `rm -rf /` envelope that would normally
 deny, run with `--shadow`:
@@ -455,7 +473,8 @@ bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
 
 **Output:** without `--print-canary`, one `[pass]`/`[fail]`/`[warn]` line
 per check (`settings`, `wiring:PreToolUse`, `wiring:canary`,
-`wiring:UserPromptSubmit`, `wiring:SessionStart`, `policy`, `binary`, `log`), then
+`wiring:UserPromptSubmit`, `wiring:SessionStart`, `wiring:PostToolUse`,
+`policy`, `binary`, `log`), then
 an `overrides: N active` line and, when `N > 0`, one indented line per
 active override/relaxation, then one `harness <id> ...` line (ADR-0006 § 5) per
 harness the account's overlay declared or extended — never the plain baseline six,
@@ -467,10 +486,20 @@ which need no announcement. Always printed in full, healthy or not.
 [pass] wiring:canary — PreToolUse canary is correctly wired
 [pass] wiring:UserPromptSubmit — UserPromptSubmit is correctly wired
 [pass] wiring:SessionStart — SessionStart is correctly wired
+[pass] wiring:PostToolUse — PostToolUse is correctly wired
 [pass] policy — overlay active (54 effective rules; common: 4 files, profile: 0 files)
 [pass] binary — 0.1.0 (56b1e5a, built 2026-09-12T14:02Z), effective policy 0123456789ab
 [pass] log — writable (/path/to/logs/hooks/bouncer.log)
 overrides: none active
+```
+
+`wiring:PostToolUse` (ADR-0008) fails when no `PostToolUse` entry runs
+`bouncer run` — the line ends with the entry to paste, with the binary the
+`PreToolUse` entry already runs — or when its matcher would leave a tool out
+(the entry takes no matcher: every tool's output is redacted):
+
+```
+[fail] wiring:PostToolUse — PostToolUse hook is missing or does not point at bouncer — tool output reaches the model unredacted; add this entry to hooks.PostToolUse in settings.json (no matcher: every tool): {"hooks":[{"type":"command","command":"/path/to/dist/bouncer run"}]}
 ```
 
 **`codex-hooks` wiring (ticket 15b, ADR-0006 § 6):** `--harness codex`
@@ -843,8 +872,9 @@ an overlay-touched harness with (one source, `src/adapter/doctor.ts`'s
 
 Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7,
 ticket 15c: pi-agent and omp — they share one printed file) — the dumb,
-policy-free extension that forwards the harness's own tool-call/session-
-start event to `bouncer run --harness <id>` and returns bouncer's stdout
+policy-free extension that forwards the harness's own tool-call,
+session-start and tool-result events (ADR-0008: every `tool_result`, before
+the model sees it) to `bouncer run --harness <id>` and returns bouncer's stdout
 to the harness as is. By default, `BOUNCER` is baked to the path bouncer
 was invoked through, without `realpath` resolution: `bouncer` found on
 `PATH` or `/opt/homebrew/bin/bouncer` bakes that stable symlink, not the

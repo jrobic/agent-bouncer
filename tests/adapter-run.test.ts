@@ -49,15 +49,17 @@ describe('run: fail-open on a malformed envelope (by contract)', () => {
 });
 
 describe('run: hook_event_name is an explicit whitelist, not "else PreToolUse"', () => {
-  test('a PostToolUse envelope is silent, even though it names a guarded tool', async () => {
+  test('a PostToolUse envelope is never judged as a tool call, even though it names a guarded tool', async () => {
     // Same tool_name/tool_input as the command-family deny case above — the
     // event name alone must be what stops this from being judged. A
     // default-to-PreToolUse fallback would deny a tool call this process
-    // was never asked to judge.
+    // was never asked to judge. Since ADR-0008 the event is the post-tool
+    // one: its response is only rewritten, and a clean one stays silent.
     const envelope = JSON.stringify({
       hook_event_name: 'PostToolUse',
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /' },
+      tool_response: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false },
     });
     expect((await run(envelope)).stdout).toBeNull();
   });
@@ -404,14 +406,18 @@ describe('run: on_malformed honored (review round 1 S-3)', () => {
     expect((await run('')).stdout).toBeNull();
   });
 
-  test('on_malformed = "deny": a well-formed PostToolUse envelope (unjudged event, not malformed) stays silent', async () => {
+  test('on_malformed = "deny": a protocol that declares no post_tool never rewrites a PostToolUse envelope (unjudged, not malformed)', async () => {
+    // This overlay protocol replaces claude-code's and declares no
+    // `post_tool` (ADR-0008): the response carries a protected value, and
+    // the event is still nobody's to act on.
     await accountWithOnMalformed('deny');
     const envelope = JSON.stringify({
       hook_event_name: 'PostToolUse',
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /' },
+      tool_response: { stdout: 'Zq7-made-up-0042', stderr: '' },
     });
-    expect((await run(envelope)).stdout).toBeNull();
+    expect((await run(envelope, { env: { FAKE_API_TOKEN: 'Zq7-made-up-0042' } })).stdout).toBeNull();
   });
 
   test('on_malformed = "deny": a well-formed envelope with no hook_event_name at all stays silent', async () => {

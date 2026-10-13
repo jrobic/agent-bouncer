@@ -32,7 +32,7 @@ import { formatDoctorChecklist, harnessAnnouncementLine, runDoctorChecks } from 
 import { configDirFor, hookLogPathFor } from './adapter/log-path.ts';
 import { buildCommandInputBag, buildNeutralCall } from './adapter/neutral-call.ts';
 import { loadCurrentPolicy } from './adapter/policy.ts';
-import { withDispatcherLikeRun } from './adapter/run.ts';
+import { withPolicyLikeRun } from './adapter/run.ts';
 import { renderShim } from './adapter/shim.ts';
 import { renderSkill } from './adapter/skill.ts';
 import { BASELINE } from './policy/baseline.ts';
@@ -183,7 +183,7 @@ export async function runPing(): Promise<CommandResult> {
   }
   try {
     const loaded = await loadCurrentPolicy(DEFAULT_HARNESS_ID);
-    await withDispatcherLikeRun(loaded, process.env, () => undefined);
+    await withPolicyLikeRun(loaded, (policy) => createDispatcher(policy, process.env), () => undefined);
     return { text: '', ok: true };
   } catch {
     return { text: '', ok: false };

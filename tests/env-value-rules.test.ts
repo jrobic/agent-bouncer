@@ -1,10 +1,11 @@
-// The env-value detector (ticket 58): a fake environment in, names and forms
-// out. Every name and value below is made up; nothing reads the machine's own
-// environment (tests/setup.ts drops the protected names from this process, and
-// createEnvValueScanner takes the record as an argument).
+// The env-value detector (ticket 58) and its redactor (ticket 59): a fake
+// environment in, names and forms — or the redacted text — out. Every name and
+// value below is made up; nothing reads the machine's own environment
+// (tests/setup.ts drops the protected names from this process, and every
+// constructor takes the record as an argument).
 
 import { describe, expect, test } from 'bun:test';
-import { createCheckEnvValue, createEnvValueScanner, ENV_VALUE_SPECIAL, MIN_ENV_VALUE_LENGTH } from '../src/env-value-rules.ts';
+import { createEnvValueGuard, createEnvValueScanner, ENV_VALUE_SPECIAL, MIN_ENV_VALUE_LENGTH } from '../src/env-value-rules.ts';
 import type { RegexRule } from '../src/policy/schema.ts';
 import { checkSecretBash } from '../src/secret-rules.ts';
 import { PROTECTED_NAMES, UNPROTECTED_NAMES } from './protected-name-examples.ts';
@@ -190,7 +191,7 @@ describe('env-value check: the row-consulting verdict', () => {
   const env = { FAKE_API_TOKEN: VALUE };
 
   test('a hit is a block that names the variable in the reason and in envVars, never the value', () => {
-    const verdict = createCheckEnvValue([ROW], env)(`x = "${VALUE}"`, '/tmp/out.ts');
+    const verdict = createEnvValueGuard([ROW], env).check(`x = "${VALUE}"`, '/tmp/out.ts');
     expect(verdict).toEqual({
       verdict: 'block',
       ruleId: 'env-value',
@@ -201,13 +202,13 @@ describe('env-value check: the row-consulting verdict', () => {
   });
 
   test('several variables are listed once each, in the reason and in envVars', () => {
-    const verdict = createCheckEnvValue([ROW], { ...env, FAKE_BACKUP_TOKEN: VALUE })(`${VALUE} ${hex(VALUE)}`, 't');
+    const verdict = createEnvValueGuard([ROW], { ...env, FAKE_BACKUP_TOKEN: VALUE }).check(`${VALUE} ${hex(VALUE)}`, 't');
     expect(verdict?.envVars).toEqual(['FAKE_API_TOKEN', 'FAKE_BACKUP_TOKEN']);
     expect(verdict?.reason).toBe('the text contains a protected value — variables: FAKE_API_TOKEN, FAKE_BACKUP_TOKEN');
   });
 
   test('nothing in the verdict carries the value, in clear, base64 or hex', () => {
-    const verdict = createCheckEnvValue([ROW], env)(`${VALUE} ${b64(VALUE)} ${hex(VALUE)}`, '/tmp/out.ts');
+    const verdict = createEnvValueGuard([ROW], env).check(`${VALUE} ${b64(VALUE)} ${hex(VALUE)}`, '/tmp/out.ts');
     const serialized = JSON.stringify(verdict);
     for (const secret of [VALUE, b64(VALUE), unpadded(b64(VALUE)), hex(VALUE)]) {
       expect(serialized).not.toContain(secret);
@@ -216,7 +217,7 @@ describe('env-value check: the row-consulting verdict', () => {
 
   test('a path that itself carries the value is withheld from the verdict target', () => {
     for (const path of [`/tmp/${VALUE}.txt`, `/tmp/${b64(VALUE)}.txt`, `/tmp/${hex(VALUE)}.txt`]) {
-      const verdict = createCheckEnvValue([ROW], env)(VALUE, path);
+      const verdict = createEnvValueGuard([ROW], env).check(VALUE, path);
       expect(verdict?.target).toStartWith('(path withheld');
       expect(JSON.stringify(verdict)).not.toContain(VALUE);
       expect(JSON.stringify(verdict)).not.toContain(b64(VALUE));
@@ -225,32 +226,158 @@ describe('env-value check: the row-consulting verdict', () => {
   });
 
   test('no env-value row left (a consumer disabled it): the guard is off', () => {
-    expect(createCheckEnvValue([], env)(VALUE, 't')).toBeNull();
-    expect(createCheckEnvValue([{ id: ROW.id, regex: ROW.regex, reason: ROW.reason }], env)(VALUE, 't')).toBeNull();
+    expect(createEnvValueGuard([], env).check(VALUE, 't')).toBeNull();
+    expect(createEnvValueGuard([{ id: ROW.id, regex: ROW.regex, reason: ROW.reason }], env).check(VALUE, 't')).toBeNull();
   });
 
   test('a relax override (verdict_override) softens the verdict kind', () => {
     const relaxed = { ...ROW, verdict_override: 'confirm' } as RegexRule;
-    expect(createCheckEnvValue([relaxed], env)(VALUE, 't')?.verdict).toBe('confirm');
+    expect(createEnvValueGuard([relaxed], env).check(VALUE, 't')?.verdict).toBe('confirm');
   });
 
   test('the row\'s own `verdict` is honoured, and an override beats it', () => {
     const observed = { ...ROW, verdict: 'observe' } as const;
-    expect(createCheckEnvValue([observed], env)(VALUE, 't')?.verdict).toBe('observe');
-    expect(createCheckEnvValue([{ ...observed, verdict_override: 'block' } as RegexRule], env)(VALUE, 't')?.verdict).toBe(
+    expect(createEnvValueGuard([observed], env).check(VALUE, 't')?.verdict).toBe('observe');
+    expect(createEnvValueGuard([{ ...observed, verdict_override: 'block' } as RegexRule], env).check(VALUE, 't')?.verdict).toBe(
       'block',
     );
   });
 
   test('a replaced regex narrows which texts the guard looks at; except exempts one', () => {
     const narrowed = { ...ROW, regex: '^only-this$' };
-    expect(createCheckEnvValue([narrowed], env)(VALUE, 't')).toBeNull();
-    expect(createCheckEnvValue([{ ...ROW, except: 'allowed-file' }], env)(`allowed-file ${VALUE}`, 't')).toBeNull();
+    expect(createEnvValueGuard([narrowed], env).check(VALUE, 't')).toBeNull();
+    expect(createEnvValueGuard([{ ...ROW, except: 'allowed-file' }], env).check(`allowed-file ${VALUE}`, 't')).toBeNull();
   });
 
   test('no protected variable in the environment: silent', () => {
-    expect(createCheckEnvValue([ROW], { HOME: VALUE })(VALUE, 't')).toBeNull();
-    expect(createCheckEnvValue([ROW], env)('no secret here', 't')).toBeNull();
-    expect(createCheckEnvValue([ROW], env)('', 't')).toBeNull();
+    expect(createEnvValueGuard([ROW], { HOME: VALUE }).check(VALUE, 't')).toBeNull();
+    expect(createEnvValueGuard([ROW], env).check('no secret here', 't')).toBeNull();
+    expect(createEnvValueGuard([ROW], env).check('', 't')).toBeNull();
+  });
+});
+
+// Ticket 59 (ADR-0008 § 4): the same row, used to replace instead of refuse.
+describe('env-value redactor: what replaces what', () => {
+  const ROW: RegexRule = { id: 'env-value', regex: '[\\s\\S]', special: ENV_VALUE_SPECIAL, reason: 'r' };
+  const redact = (text: string, env: Record<string, string | undefined> = { FAKE_API_TOKEN: VALUE }) =>
+    createEnvValueGuard([ROW], env).redact(text);
+  const MARKER = '[redacted: FAKE_API_TOKEN]';
+  const FOUND = { names: ['FAKE_API_TOKEN'], ruleId: 'env-value' };
+
+  test.each([
+    ['plain', VALUE],
+    ['base64, padded', b64(VALUE)],
+    ['base64, unpadded', unpadded(b64(VALUE))],
+    ['base64, URL-safe', urlSafe(b64('?>?>made-up-0042'))],
+    ['hex, lowercase', hex(VALUE)],
+    ['hex, uppercase', hex(VALUE).toUpperCase()],
+  ])('%s: a standalone spelling is replaced whole, the text around it kept', (_form, spelling) => {
+    const env = { FAKE_API_TOKEN: spelling === urlSafe(b64('?>?>made-up-0042')) ? '?>?>made-up-0042' : VALUE };
+    expect(redact(`key=${spelling}\nnext line`, env)).toEqual({ text: `key=${MARKER}\nnext line`, found: FOUND });
+  });
+
+  test('every occurrence is replaced', () => {
+    expect(redact(`${VALUE}|${VALUE}|${hex(VALUE)}`).text).toBe(`${MARKER}|${MARKER}|${MARKER}`);
+  });
+
+  describe('base64: exactly the characters that carry the value go, never a neighbour', () => {
+    // 15, 16 and 17 bytes: a complete last group, then one and two bytes
+    // over (a partial last character, then `==` / `=` padding). `?>` puts
+    // `/` in the standard encoding, so the URL-safe spelling differs.
+    const VALUES = ['?>?>made-up-004', '?>?>made-up-0042', '?>?>made-up-00420'];
+    const spellings = (encoded: string): readonly string[] => [
+      encoded,
+      unpadded(encoded),
+      urlSafe(encoded),
+      urlSafe(unpadded(encoded)),
+    ];
+    // Each pair surrounds the encoding with characters of the base64 alphabets.
+    const NEIGHBOURS: ReadonlyArray<readonly [string, string]> = [
+      ['https://h/x/', '/next'],
+      ['id_', '_v2'],
+      ['a-', '-b'],
+      ['abc', 'xyz'],
+    ];
+
+    test.each(VALUES)('%p encoded alone, between alphabet neighbours: the neighbours stay', (value) => {
+      for (const spelling of spellings(b64(value))) {
+        for (const [before, after] of NEIGHBOURS) {
+          expect(redact(`${before}${spelling}${after}`, { FAKE_API_TOKEN: value }), `${before}|${spelling}|${after}`).toEqual({
+            text: `${before}${MARKER}${after}`,
+            found: FOUND,
+          });
+        }
+      }
+    });
+
+    test.each(VALUES)('%p inside a longer stream, at every alignment: the stream outside the value\'s bits stays', (value) => {
+      const length = Buffer.byteLength(value);
+      for (let before = 0; before < 6; before += 1) {
+        for (let after = 0; after < 6; after += 1) {
+          const stream = b64(`${'a'.repeat(before)}${value}${'z'.repeat(after)}`);
+          // Characters wholly inside the bytes before / after the value.
+          const keptBefore = Math.floor((8 * before) / 6);
+          const resumeAt = Math.ceil((8 * (before + length)) / 6);
+          for (const spelling of spellings(stream)) {
+            // With nothing after the value, what follows its last character is padding, part of the encoding.
+            const keptAfter = after === 0 ? '' : spelling.slice(resumeAt);
+            expect(redact(`https://h/x/${spelling}/next`, { FAKE_API_TOKEN: value }).text, `before=${before} after=${after} ${spelling}`)
+              .toBe(`https://h/x/${spelling.slice(0, keptBefore)}${MARKER}${keptAfter}/next`);
+          }
+        }
+      }
+    });
+  });
+
+  test('a marker is never scanned again: a value that spells part of another variable\'s marker stays a marker', () => {
+    const env = { ALPHA_TOKEN: 'made-up-alpha-0042', BETA_TOKEN: 'ted: ALPHA_TOKEN]' };
+    expect(redact('made-up-alpha-0042', env)).toEqual({
+      text: '[redacted: ALPHA_TOKEN]',
+      found: { names: ['ALPHA_TOKEN'], ruleId: 'env-value' },
+    });
+  });
+
+  test('one value under two names: named once, by the name that sorts first, whatever the environment order', () => {
+    const env = { ZULU_TOKEN: VALUE, ALPHA_TOKEN: VALUE };
+    expect(redact(VALUE, env)).toEqual({ text: '[redacted: ALPHA_TOKEN]', found: { names: ['ALPHA_TOKEN'], ruleId: 'env-value' } });
+  });
+
+  test('nothing to replace, an unprotected name, a value under the floor: the text comes back unchanged, nothing found', () => {
+    expect(redact('no secret here')).toEqual({ text: 'no secret here' });
+    expect(redact(VALUE, { HOME: VALUE })).toEqual({ text: VALUE });
+    const short = 'x'.repeat(MIN_ENV_VALUE_LENGTH - 1);
+    expect(redact(`${short} ${hex(short)}`, { FAKE_API_TOKEN: short })).toEqual({ text: `${short} ${hex(short)}` });
+  });
+
+  test('a value that is `__proto__` is a needle like any other', () => {
+    expect(redact('a __proto__ b', { WEIRD_TOKEN: '__proto__' }).text).toBe('a [redacted: WEIRD_TOKEN] b');
+  });
+});
+
+describe('env-value redactor: the row is the switch (decision H3)', () => {
+  const ROW: RegexRule = { id: 'env-value', regex: '[\\s\\S]', special: ENV_VALUE_SPECIAL, reason: 'r' };
+  const env = { FAKE_API_TOKEN: VALUE };
+
+  test('no env-value row (disabled): off', () => {
+    expect(createEnvValueGuard([], env).redact(VALUE)).toEqual({ text: VALUE });
+  });
+
+  test('a relaxed row (any verdict_override): redaction off, not softer — the same guard\'s write check is only softened', () => {
+    for (const verdict of ['confirm', 'observe'] as const) {
+      const guard = createEnvValueGuard([{ ...ROW, verdict_override: verdict } as RegexRule], env);
+      expect(guard.redact(VALUE)).toEqual({ text: VALUE });
+      expect(guard.check(VALUE, 't')?.verdict).toBe(verdict);
+    }
+  });
+
+  test('the row\'s regex / except gate writes only: the redaction scans every text (decision H6); its id names it', () => {
+    const marker = '[redacted: FAKE_API_TOKEN]';
+    const narrowed = createEnvValueGuard([{ ...ROW, regex: '^only-this$' }], env);
+    expect(narrowed.check(VALUE, 't')).toBeNull();
+    expect(narrowed.redact(VALUE)).toEqual({ text: marker, found: { names: ['FAKE_API_TOKEN'], ruleId: 'env-value' } });
+    const excepted = createEnvValueGuard([{ ...ROW, except: 'allowed-file' }], env);
+    expect(excepted.check(`allowed-file ${VALUE}`, 't')).toBeNull();
+    expect(excepted.redact(`allowed-file ${VALUE}`).text).toBe(`allowed-file ${marker}`);
+    expect(createEnvValueGuard([{ ...ROW, id: 'overlay-env-value' }], env).redact(VALUE).found?.ruleId).toBe('overlay-env-value');
   });
 });

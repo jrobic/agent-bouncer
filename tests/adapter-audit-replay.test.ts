@@ -232,10 +232,39 @@ describe('replayEntries', () => {
     expect(results).toEqual([{ excluded: 'write-secret' }]);
     expect(calls).toEqual([]);
   });
+
+  test('a post-tool redact line (ADR-0008) parses and stays as logged: the output was never logged, so it cannot be re-judged', async () => {
+    const line = JSON.stringify({
+      timestamp: '2026-10-13T10:00:00.000Z',
+      harness: 'claude-code',
+      session_id: 'session-1',
+      tool_name: 'Bash',
+      family: 'write-secret',
+      verdict: 'redact',
+      rule_id: 'env-value',
+      reason: 'tool output carried the value of a protected environment variable — replaced by [redacted: NAME]',
+      target: '(tool output)',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    const entries = parseLogEntries(`${line}\n`);
+    expect(entries).toMatchObject([{
+      family: 'write-secret',
+      verdict: 'redact',
+      ruleId: 'env-value',
+      target: '(tool output)',
+      toolName: 'Bash',
+    }]);
+
+    const { dispatcher, calls } = recordingDispatcher();
+    const { results } = await replayEntries(entries, 'claude-code', protocol({ Bash: { role: 'command', command: 'command' } }),
+      dispatcher);
+    expect(results).toEqual([{ excluded: 'write-secret' }]);
+    expect(calls).toEqual([]);
+  });
 });
 
 describe('transitionFor', () => {
-  const historicalVerdicts: readonly VerdictKind[] = ['block', 'confirm', 'observe', 'flag'];
+  const historicalVerdicts: readonly VerdictKind[] = ['block', 'confirm', 'observe', 'flag', 'redact'];
   const currentVerdicts: readonly (VerdictKind | 'allow')[] = ['allow', 'block', 'confirm', 'observe'];
   type Transition = 'resolved' | 'softened' | 'hardened' | 'drift' | null;
   const expected: Readonly<Record<VerdictKind, readonly Transition[]>> = {
@@ -243,6 +272,7 @@ describe('transitionFor', () => {
     confirm: ['resolved', 'hardened', null, 'softened'],
     observe: ['drift', 'hardened', 'hardened', null],
     flag: [null, null, null, null],
+    redact: [null, null, null, null],
   };
 
   test('classifies every historical and current verdict pair', () => {

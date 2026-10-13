@@ -159,11 +159,12 @@ function requireNonEmptyString(raw: object, key: string, label: string, issues: 
 
 // Review round 2 R2-1: absence is legal here (unlike requireNonEmptyString
 // above) — only a PRESENT-but-invalid value is an issue. Used for the
-// three keys that are genuinely optional on a harness's own protocol
-// (`input.prompt`, `events.prompt`, `events.session_start`) — a harness
-// that never judges prompts, or has no doctor-facing SessionStart
-// surface, declares neither rather than lying about a field it has no
-// envelope shape for.
+// keys that are genuinely optional on a harness's own protocol
+// (`input.prompt`, `events.prompt`, `events.session_start`, and
+// ADR-0008's `input.response`/`events.post_tool`) — a harness that never
+// judges prompts, has no doctor-facing SessionStart surface, or cannot
+// replace a tool result declares none rather than lying about a field it
+// has no envelope shape for.
 function optionalNonEmptyString(raw: object, key: string, label: string, issues: string[]): string | undefined {
   const value = field(raw, key);
   if (value === undefined) return undefined;
@@ -184,6 +185,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
   const prompt = optionalNonEmptyString(raw, 'prompt', `${label}.input`, issues);
   const cwd = requireNonEmptyString(raw, 'cwd', `${label}.input`, issues);
   const permission = optionalNonEmptyString(raw, 'permission', `${label}.input`, issues);
+  const response = optionalNonEmptyString(raw, 'response', `${label}.input`, issues);
   if (issues.length > 0) return { issues };
   return {
     value: {
@@ -194,6 +196,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
       ...(prompt !== undefined ? { prompt } : {}),
       cwd: cwd!,
       ...(permission !== undefined ? { permission } : {}),
+      ...(response !== undefined ? { response } : {}),
     },
     issues,
   };
@@ -205,12 +208,14 @@ function parseProtocolEvents(raw: unknown, label: string): HarnessParseResult<Ha
   const preTool = requireNonEmptyString(raw, 'pre_tool', `${label}.events`, issues);
   const prompt = optionalNonEmptyString(raw, 'prompt', `${label}.events`, issues);
   const sessionStart = optionalNonEmptyString(raw, 'session_start', `${label}.events`, issues);
+  const postTool = optionalNonEmptyString(raw, 'post_tool', `${label}.events`, issues);
   if (issues.length > 0) return { issues };
   return {
     value: {
       pre_tool: preTool!,
       ...(prompt !== undefined ? { prompt } : {}),
       ...(sessionStart !== undefined ? { session_start: sessionStart } : {}),
+      ...(postTool !== undefined ? { post_tool: postTool } : {}),
     },
     issues,
   };
@@ -356,7 +361,8 @@ const PROBE_VALUE = '"\\\n}';
 // placeholder names, never more: `deny`/`ask` templates get `reason`,
 // `rule` (the bare ruleId), and `verdict` (the abstract verdict,
 // `runPreToolUse`); `context`/`session_start` templates get `context`
-// only (`runUserPromptSubmit`/`runSessionStart`). Belt 2 above proves a
+// only (`runUserPromptSubmit`/`runSessionStart`); the `redact` template
+// gets `response` only (ADR-0008, `runPostTool`). Belt 2 above proves a
 // template's JSON SHAPE survives substitution; it says nothing about
 // whether the renderer can actually FILL a given name — a template
 // naming `${rule}` in a `context` template (or any name outside this
@@ -368,7 +374,24 @@ const TEMPLATE_ALLOWED_PLACEHOLDERS: Readonly<Record<HarnessTemplateKey, Readonl
   ask: new Set(['reason', 'rule', 'verdict']),
   context: new Set(['context']),
   session_start: new Set(['context']),
+  redact: new Set(['response']),
 };
+
+// ADR-0008 § 3: the post-tool answer IS the rewritten response. A `redact`
+// template that does not carry `${response}` would hand the harness a
+// fixed answer (an empty patch: the original output shown), and one that
+// sets `exit` would answer with a process status instead of the rewrite —
+// both fail open, silently, so both are rejected here rather than trusted.
+function redactTemplateIssues(template: HarnessTemplate, label: string): string[] {
+  const issues: string[] = [];
+  if (template.stdout === undefined || !template.stdout.includes('${response}')) {
+    issues.push(`${label}.output.redact.stdout must carry \${response} — the rewritten tool response is the whole answer`);
+  }
+  if (template.exit !== undefined) {
+    issues.push(`${label}.output.redact.exit must not be set — the post-tool answer is stdout, never a process status`);
+  }
+  return issues;
+}
 
 function templateStdoutIssues(stdout: string, key: HarnessTemplateKey, label: string): string[] {
   const issues: string[] = [];
@@ -467,6 +490,20 @@ function parseTemplates(
     issues.push(`${label}.output.session_start is present but events.session_start is not declared — a dead template`);
   }
 
+  // ADR-0008 § 3: the post-tool answer has its own template, required
+  // exactly when `events.post_tool` is declared and a dead template
+  // otherwise — the same rule `session_start` follows above.
+  if (events.post_tool !== undefined) {
+    const redactParsed = parseTemplate(field(outputRaw, 'redact'), 'redact', label);
+    issues.push(...redactParsed.issues);
+    if (redactParsed.value !== undefined) {
+      issues.push(...redactTemplateIssues(redactParsed.value, label));
+      templates.redact = redactParsed.value;
+    }
+  } else if (field(outputRaw, 'redact') !== undefined) {
+    issues.push(`${label}.output.redact is present but events.post_tool is not declared — a dead template`);
+  }
+
   if (issues.length > 0) return { issues };
   return { value: templates, issues };
 }
@@ -490,6 +527,23 @@ function protocolCoherenceIssues(
     issues.push(
       `${label}.output.flag must be "silent" when events.prompt is not declared — this harness never judges a prompt`,
     );
+  }
+  // ADR-0008 § 3: `input.response` and `events.post_tool` are a lockstep
+  // pair (a post-tool event with no response to rewrite, or a selector no
+  // event ever reads), and the post-tool event must not share a name with
+  // another event — run() routes post_tool before pre_tool, so a shared
+  // name would send every tool call to the post-tool branch, unjudged.
+  if (events.post_tool !== undefined && input.response === undefined) {
+    issues.push(`${label}.input.response is required when events.post_tool is declared`);
+  }
+  if (events.post_tool === undefined && input.response !== undefined) {
+    issues.push(`${label}.input.response is declared but events.post_tool is not — a dead selector`);
+  }
+  if (events.post_tool !== undefined) {
+    const others = [events.pre_tool, events.prompt, events.session_start];
+    if (others.includes(events.post_tool)) {
+      issues.push(`${label}.events.post_tool must differ from every other declared event name`);
+    }
   }
   return issues;
 }

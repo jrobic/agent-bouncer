@@ -227,7 +227,8 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 ## References
 
 - `src/adapter/canary.ts`, `src/adapter/doctor.ts`, `src/cli-commands.ts`,
-  `src/adapter/run.ts` (`withDispatcherLikeRun`).
+  `src/adapter/run.ts` (`withPolicyLikeRun`, named `withDispatcherLikeRun`
+  until ticket 59).
 - `docs/reference/cli.md` § `ping`, § `doctor`;
   `docs/how-to/wire-into-claude-code.md` step 4.
 - Ticket 01 (settings hardening, `ask` on settings edits), ticket 07

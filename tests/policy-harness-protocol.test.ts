@@ -433,3 +433,76 @@ describe('review round 2 R2-1: minimal declaration (no prompt/session_start surf
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
 });
+
+// ADR-0008 § 3: the post-tool event is fail-closed by lint — every way a
+// half-declared surface would answer nothing (or answer before judging) is
+// rejected as a unit.
+describe('ADR-0008: the post-tool event (events.post_tool, input.response, output.redact)', () => {
+  function postToolProtocol(): string {
+    return `${
+      replaceOne(
+        replaceOne(minimalProtocol(), 'cwd = "cwd"', 'cwd = "cwd"\nresponse = "tool_response"'),
+        'pre_tool = "PreToolUse"',
+        'pre_tool = "PreToolUse"\npost_tool = "PostToolUse"',
+      )
+    }\n[harness.protocol.output.redact]\nstdout = '{"updated":\${response}}'\n`;
+  }
+
+  test('a complete declaration lints OK and carries the event, the selector and the template', () => {
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', postToolProtocol())]);
+    expect(result.warnings).toEqual([]);
+    const protocol = result.policy.harness.find((h) => h.id === 'acme')?.protocol;
+    expect(protocol?.events.post_tool).toBe('PostToolUse');
+    expect(protocol?.input.response).toBe('tool_response');
+    expect(protocol?.templates.redact).toEqual({ stdout: '{"updated":${response}}' });
+  });
+
+  test.each([
+    [
+      'post_tool without input.response',
+      (p: string) => replaceOne(p, '\nresponse = "tool_response"', ''),
+      'input.response is required when events.post_tool is declared',
+    ],
+    [
+      'input.response without post_tool (a dead selector)',
+      (p: string) =>
+        replaceOne(replaceOne(p, '\npost_tool = "PostToolUse"', ''),
+          `\n[harness.protocol.output.redact]\nstdout = '{"updated":\${response}}'\n`, ''),
+      'input.response is declared but events.post_tool is not',
+    ],
+    [
+      'post_tool without an output.redact template',
+      (p: string) => replaceOne(p, `\n[harness.protocol.output.redact]\nstdout = '{"updated":\${response}}'\n`, ''),
+      'output.redact must be a table',
+    ],
+    [
+      'output.redact without post_tool (a dead template)',
+      (p: string) => replaceOne(replaceOne(p, '\npost_tool = "PostToolUse"', ''), '\nresponse = "tool_response"', ''),
+      'output.redact is present but events.post_tool is not declared',
+    ],
+    [
+      'a redact template that drops ${response}',
+      (p: string) => replaceOne(p, `'{"updated":\${response}}'`, `'{"updated":{}}'`),
+      'output.redact.stdout must carry ${response}',
+    ],
+    [
+      'a redact template that exits instead of answering',
+      (p: string) => `${p}exit = 2\n`,
+      'output.redact.exit must not be set',
+    ],
+    [
+      'a redact template naming a placeholder the renderer never fills there',
+      (p: string) => replaceOne(p, `'{"updated":\${response}}'`, `'{"updated":\${response},"why":\${reason}}'`),
+      'unknown placeholder ${reason}',
+    ],
+    [
+      'post_tool sharing the pre_tool event name',
+      (p: string) => replaceOne(p, 'post_tool = "PostToolUse"', 'post_tool = "PreToolUse"'),
+      'events.post_tool must differ from every other declared event name',
+    ],
+  ])('%s rejects the block as a unit', (_label, transform, message) => {
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', transform(postToolProtocol()))]);
+    expect(result.warnings.some((w) => w.includes(message))).toBe(true);
+    expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
+  });
+});

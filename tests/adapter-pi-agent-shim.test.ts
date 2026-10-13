@@ -12,6 +12,7 @@
 import { describe, expect, test } from 'bun:test';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { POST_TOOL_WITHHELD } from '../src/adapter/post-tool.ts';
 import { tmpDir } from './tmp.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
@@ -43,6 +44,11 @@ type BeforeAgentStartHandler = (
   event: unknown,
   ctx: FakeCtx,
 ) => { message?: { customType: string; content: string; display: boolean; }; } | undefined;
+// Rule 4 (ADR-0008): a `{ content }` patch, or `undefined` to keep the output.
+type ToolResultHandler = (
+  event: { toolName: string; input: unknown; content: unknown; isError?: boolean; details?: unknown; },
+  ctx: FakeCtx,
+) => Promise<{ content: unknown[]; } | undefined>;
 
 // The slice of pi-tui's `Component` the shim's `bouncer-doctor` renderer returns.
 interface RenderedNotice {
@@ -59,6 +65,7 @@ interface LoadedShim {
   readonly sessionStart: SessionStartHandler;
   readonly beforeAgentStart: BeforeAgentStartHandler;
   readonly renderers: Readonly<Record<string, NoticeRenderer>>;
+  readonly toolResult: ToolResultHandler;
 }
 
 function fakeCtx(overrides: Partial<FakeCtx> = {}): FakeCtx {
@@ -130,15 +137,15 @@ async function loadShim(
     else process.env.BOUNCER_BIN = originalBouncerBin;
   }
 
-  // Three fixed, statically-known registration keys (the shim only ever
+  // Four fixed, statically-known registration keys (the shim only ever
   // calls `pi.on("tool_call", …)`/`pi.on("session_start", …)`/
-  // `pi.on("before_agent_start", …)`) — a plain record, not a Map, per
-  // this codebase's own lookup-table convention.
-  const handlers: { tool_call?: unknown; session_start?: unknown; before_agent_start?: unknown; } = {};
+  // `pi.on("before_agent_start", …)`/`pi.on("tool_result", …)`) — a plain
+  // record, not a Map, per this codebase's own lookup-table convention.
+  const handlers: { tool_call?: unknown; session_start?: unknown; before_agent_start?: unknown; tool_result?: unknown; } = {};
   const renderers: Record<string, NoticeRenderer> = {};
   mod.default({
     on: (event, handler) => {
-      handlers[event as 'tool_call' | 'session_start' | 'before_agent_start'] = handler;
+      handlers[event as 'tool_call' | 'session_start' | 'before_agent_start' | 'tool_result'] = handler;
     },
     ...(events === undefined ? {} : { events }),
     registerMessageRenderer: registerMessageRenderer ?? ((customType, renderer) => {
@@ -150,6 +157,7 @@ async function loadShim(
     sessionStart: handlers.session_start as SessionStartHandler,
     beforeAgentStart: handlers.before_agent_start as BeforeAgentStartHandler,
     renderers,
+    toolResult: handlers.tool_result as ToolResultHandler,
   };
 }
 
@@ -543,5 +551,114 @@ describe('pi-agent shim: BOUNCER_PROBE_LOG (probe-phase stdin capture)', () => {
     const shim = await loadShim(fakePath);
     const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
     expect(result).toBeUndefined();
+  });
+});
+
+// Rule 4 (ADR-0008): every tool's result goes to bouncer; its `{ content }`
+// answer comes back as is, silence keeps the output, and every failure
+// withholds it — the handler never throws (a throwing handler keeps the
+// ORIGINAL output on both binaries, measured 2026-10-13).
+// The shim carries its own copy of the text (it imports nothing from
+// bouncer); the source's constant is the reference it must match.
+const WITHHELD = { content: [{ type: 'text', text: POST_TOOL_WITHHELD }] };
+const RESULT_EVENT = {
+  toolName: 'bash',
+  input: { command: 'printenv' },
+  content: [{ type: 'text', text: 'some output' }],
+  isError: false,
+  details: { truncation: { content: 'some output' } },
+};
+
+describe('pi-agent shim: tool_result — every failure withholds the output', () => {
+  test.each([
+    ['spawn impossible (BOUNCER_BIN names a path that does not exist)', null],
+    ['non-zero exit', 'exit 1'],
+    ['unparseable stdout (not valid JSON)', 'printf "not json {{{"'],
+    ['a JSON answer with no content array', String.raw`printf '{"block":true,"reason":"x"}'`],
+  ])('%s → the withheld content', async (_label, body) => {
+    const shim = await loadShim(body === null ? '/nonexistent/path/to/bouncer' : await fakeBouncerScript(body));
+    expect(await shim.toolResult(RESULT_EVENT, fakeCtx())).toEqual(WITHHELD);
+  });
+
+  test('a spawn exceeding the 2s timeout → the withheld content', async () => {
+    const shim = await loadShim(await fakeBouncerScript('sleep 5'));
+    expect(await shim.toolResult(RESULT_EVENT, fakeCtx())).toEqual(WITHHELD);
+  }, 10_000);
+
+  test('a context that throws while the payload is built → the withheld content, never a throw', async () => {
+    const shim = await loadShim(await fakeBouncerScript('exit 0'));
+    const ctx = fakeCtx({
+      sessionManager: {
+        getSessionId: () => {
+          throw new Error('session manager gone');
+        },
+      },
+    });
+    expect(await shim.toolResult(RESULT_EVENT, ctx)).toEqual(WITHHELD);
+  });
+});
+
+describe('pi-agent shim: tool_result — silence and answers', () => {
+  test('empty stdout (exit 0) → undefined: the output is kept as the harness has it', async () => {
+    const shim = await loadShim(await fakeBouncerScript('exit 0'));
+    expect(await shim.toolResult(RESULT_EVENT, fakeCtx())).toBeUndefined();
+  });
+
+  test('a { content } answer is returned as is — the shim judges nothing of what it carries', async () => {
+    // Whatever bouncer answers is what the model gets: the shim neither
+    // redacts nor inspects (no policy, ADR-0006 § 7), so text the shim
+    // could have judged comes back untouched.
+    const content = [{ type: 'text', text: 'token=[redacted: FAKE_API_TOKEN] and a raw-looking value Zq7-made-up-0042' }];
+    const shim = await loadShim(await fakeBouncerScript(`printf '%s' '${JSON.stringify({ content })}'`));
+    expect(await shim.toolResult(RESULT_EVENT, fakeCtx())).toEqual({ content });
+  });
+
+  test('relays { event, toolName, input, content, isError, session, cwd } — never details', async () => {
+    const stdinPath = join(tmpDir('bouncer-shim-relay-'), 'stdin.json');
+    const shim = await loadShim(await fakeBouncerScript(`cat > '${stdinPath}'`));
+    await shim.toolResult({ ...RESULT_EVENT, isError: true }, fakeCtx());
+    expect(JSON.parse(await readFile(stdinPath, 'utf8'))).toEqual({
+      event: 'tool_result',
+      toolName: 'bash',
+      input: { command: 'printenv' },
+      content: [{ type: 'text', text: 'some output' }],
+      isError: true,
+      session: 'fake-session',
+      cwd: '/tmp/probe-cwd',
+    });
+  });
+
+  test('BOUNCER_PROBE_LOG records a result\'s shape and size only — never the output text', async () => {
+    const logPath = join(tmpDir('bouncer-shim-probe-log-'), 'stdin.log');
+    const shim = await loadShim(await fakeBouncerScript('exit 0'));
+    const content = [{ type: 'text', text: 'token=Zq7-made-up-0042 — é' }, { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }];
+    const originalProbeLog = process.env.BOUNCER_PROBE_LOG;
+    process.env.BOUNCER_PROBE_LOG = logPath;
+    try {
+      await shim.toolResult({ ...RESULT_EVENT, content }, fakeCtx());
+      const logged = await readFile(logPath, 'utf8');
+      expect(JSON.parse(logged.trim())).toEqual({
+        event: 'tool_result',
+        toolName: 'bash',
+        isError: false,
+        session: 'fake-session',
+        cwd: '/tmp/probe-cwd',
+        contentTypes: ['text', 'image'],
+        contentBytes: Buffer.byteLength(JSON.stringify(content)),
+      });
+      for (const leak of ['Zq7-made-up-0042', 'iVBORw0KGgo=']) expect(logged).not.toContain(leak);
+    } finally {
+      if (originalProbeLog === undefined) delete process.env.BOUNCER_PROBE_LOG;
+      else process.env.BOUNCER_PROBE_LOG = originalProbeLog;
+    }
+  });
+
+  test('an answer above Node\'s 1 MiB spawnSync default still comes back (a transport limit, not a withheld output)', async () => {
+    const dir = tmpDir('bouncer-shim-big-answer-');
+    const answerPath = join(dir, 'answer.json');
+    const content = [{ type: 'text', text: 'x'.repeat(3 * 1024 * 1024) }];
+    await writeFile(answerPath, JSON.stringify({ content }), 'utf8');
+    const shim = await loadShim(await fakeBouncerScript(`cat '${answerPath}'`));
+    expect(await shim.toolResult(RESULT_EVENT, fakeCtx())).toEqual({ content });
   });
 });

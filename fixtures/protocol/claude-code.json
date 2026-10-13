@@ -181,9 +181,59 @@
       }
     },
     {
-      "id": "posttooluse-event-silent",
+      "id": "posttooluse-no-response-silent",
       "argv": [],
       "stdin": "{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi\"}}",
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttooluse-bash-redact",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"capture-session\",\"tool_name\":\"Bash\",\"tool_input\":{},\"tool_response\":{\"stdout\":\"token=Zq7-made-up-0042\\n\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false,\"noOutputExpected\":false}}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedToolOutput\":{\"stdout\":\"token=[redacted: FAKE_API_TOKEN]\\n\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false,\"noOutputExpected\":false}}}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttooluse-mcp-redact",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"capture-session\",\"tool_name\":\"mcp__probe__leak\",\"tool_input\":{},\"tool_response\":[{\"type\":\"text\",\"text\":\"mcp says: WnE3LW1hZGUtdXAtMDA0Mg==\"}]}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedToolOutput\":[{\"type\":\"text\",\"text\":\"mcp says: [redacted: FAKE_API_TOKEN]\"}]}}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttooluse-clean-silent",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"capture-session\",\"tool_name\":\"Read\",\"tool_input\":{},\"tool_response\":{\"type\":\"text\",\"file\":{\"filePath\":\"/tmp/capture-scratch.txt\",\"content\":\"hello\",\"numLines\":1,\"startLine\":1,\"totalLines\":1}}}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttooluse-shadow-silent",
+      "argv": [
+        "--shadow"
+      ],
+      "stdin": "{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"capture-session\",\"tool_name\":\"Bash\",\"tool_input\":{},\"tool_response\":{\"stdout\":\"Zq7-made-up-0042\",\"stderr\":\"\",\"interrupted\":false,\"isImage\":false,\"noOutputExpected\":false}}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
       "expected": {
         "stdout": null,
         "exit": 0
