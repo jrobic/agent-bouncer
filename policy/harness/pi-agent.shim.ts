@@ -68,15 +68,11 @@
 //
 // `session_start`'s own doctor context is delivered TWO ways, both fixed
 // rules (never a per-harness choice): `ctx.ui.notify` (an immediate,
-// best-effort toast — measured live, ticket 15c: rendered as a startup
-// banner under `pi` 0.84.1's TUI; not independently isolated under
-// `omp` 18.1.10's TUI — the one live `omp` run that showed a startup
-// banner used a shim build where the SECOND path below was already
-// live too, and only that second path left hard proof in the session's
-// own transcript, so this toast's presence on `omp` specifically is
-// unconfirmed, not disproven) AND a message queued for the FIRST
-// `before_agent_start` turn (`pi.sendMessage`'s own sibling mechanism —
-// the RETURN-based `{ message: {...} }` shape, `customType:
+// best-effort toast — measured live: a startup banner under `pi` 0.84.1's
+// TUI, ticket 15c; a `Warning:` line in the chat under `omp` 18.10.3's
+// TUI, and under `pi` 0.84.1's again, 2026-10-13) AND a message queued
+// for the FIRST `before_agent_start` turn (`pi.sendMessage`'s own sibling
+// mechanism — the RETURN-based `{ message: {...} }` shape, `customType:
 // "bouncer-doctor"`, `display: true` — the same shape Claude Code's
 // `UserPromptSubmit` `additionalContext` fills). This second path is
 // confirmed live on BOTH binaries two ways: headless (`-p`), directly,
@@ -92,6 +88,20 @@
 // UI toast. Delivered exactly ONCE per session (cleared after the first
 // `before_agent_start` turn consumes it), never repeated on later turns
 // of the same session.
+//
+// Both are FOLDED for display only (2026-10-13): a doctor notice is
+// headline lines, each followed by indented detail lines, and an active
+// overlay's relaxations alone fill a screen at every session start. The
+// toast shows the headlines and a count of the detail lines; the
+// `bouncer-doctor` message renders the same fold through
+// `pi.registerMessageRenderer` while collapsed, and hands back to the
+// host's own full rendering when expanded — ctrl+o (`app.tools.expand`),
+// measured live on `omp` 18.10.3 and `pi` 0.84.1. The message's content,
+// what the model receives, is never folded. A host without
+// `registerMessageRenderer`, or one whose registration throws, keeps its
+// own full rendering: registration runs last and is swallowed, so it can
+// never keep the guard handlers from loading.
+//
 // Imports nothing from the harness itself but the type aliases below
 // (structural, not a real import) — `pi` and `omp` share one extension
 // API (ADR-0006 fact 5) and load this same file unmodified as an
@@ -149,6 +159,24 @@ interface BeforeAgentStartResult {
   message?: BeforeAgentStartMessage;
 }
 
+// What a `registerMessageRenderer` renderer reads from the message and the
+// component it returns: pi-tui's `Component` contract (`render(width)` →
+// lines, `invalidate()`), shared by both hosts' TUIs.
+interface CustomMessage {
+  content: string | readonly { type: string; text?: string; }[];
+}
+
+interface RenderedComponent {
+  render(width: number): string[];
+  invalidate(): void;
+}
+
+interface PiTheme {
+  fg(color: string, text: string): string;
+}
+
+type MessageRenderer = (message: CustomMessage, options: { expanded: boolean; }, theme: PiTheme) => RenderedComponent | undefined;
+
 // The payload of omp's `herdr:blocked` event (Herdr's own omp integration
 // reads `active` and `label`) — see this file's own header comment.
 interface HerdrBlockedSignal {
@@ -163,6 +191,9 @@ interface PiExtensionHost {
   on(event: 'tool_call', handler: (event: ToolCallEvent, ctx: PiContext) => Promise<ToolCallResult | undefined>): void;
   on(event: 'session_start', handler: (event: unknown, ctx: PiContext) => Promise<void>): void;
   on(event: 'before_agent_start', handler: (event: unknown, ctx: PiContext) => BeforeAgentStartResult | undefined): void;
+  // Optional on purpose, like `events`: without it the `bouncer-doctor`
+  // message keeps the host's own full rendering.
+  registerMessageRenderer?(customType: string, renderer: MessageRenderer): void;
 }
 
 type SpawnOutcome =
@@ -243,6 +274,118 @@ function emitHerdrBlocked(pi: PiExtensionHost, signal: HerdrBlockedSignal): void
   }
 }
 
+const NOTICE_TYPE = 'bouncer-doctor';
+
+// A doctor notice is headline lines, each followed by its indented detail
+// lines (`  - …`, src/adapter/doctor.ts's buildSessionStartContext). The
+// fold keeps the headlines and counts the details. Display only: the model
+// always receives the full text (`before_agent_start` below).
+interface FoldedNotice {
+  readonly headlines: readonly string[];
+  readonly hidden: number;
+}
+
+function foldNotice(text: string): FoldedNotice | undefined {
+  const lines = text.split('\n').filter((line) => line.trim() !== '');
+  const headlines = lines.filter((line) => !/^\s/.test(line));
+  const hidden = lines.length - headlines.length;
+  return hidden === 0 || headlines.length === 0 ? undefined : { headlines, hidden };
+}
+
+// The toast cannot expand, so its last line names where the details are.
+function noticeToast(text: string): string {
+  const folded = foldNotice(text);
+  if (folded === undefined) return text;
+  return [...folded.headlines, `… ${folded.hidden} more line(s) — ctrl+o expands them on the bouncer doctor message`].join('\n');
+}
+
+// pi's TUI throws when a rendered line is wider than the terminal
+// ("Rendered line N exceeds terminal width"), so cells are counted never
+// below what either host measures: one for ASCII, Latin-1 and General
+// Punctuation (`—`, `…`), two for anything else. Control characters (a tab
+// is three cells to pi-tui) are turned into spaces before measuring.
+function cellWidth(ch: string): number {
+  const cp = ch.codePointAt(0) ?? 0;
+  return cp < 0x300 || (cp >= 0x2000 && cp <= 0x206f) ? 1 : 2;
+}
+
+function wrapToCells(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  let used = 0;
+  for (const word of text.replace(/\p{Cc}/gu, ' ').split(' ')) {
+    const chars = [...word];
+    const wordCells = chars.reduce((sum, ch) => sum + cellWidth(ch), 0);
+    if (used > 0 && used + 1 + wordCells <= width) {
+      line += ` ${word}`;
+      used += 1 + wordCells;
+      continue;
+    }
+    if (used > 0) {
+      lines.push(line);
+      line = '';
+      used = 0;
+    }
+    for (const raw of chars) {
+      const fits = cellWidth(raw) <= width;
+      const cells = fits ? cellWidth(raw) : 1;
+      if (used + cells > width) {
+        lines.push(line);
+        line = '';
+        used = 0;
+      }
+      line += fits ? raw : '?';
+      used += cells;
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
+function paint(theme: PiTheme, color: string, text: string): string {
+  try {
+    return theme.fg(color, text);
+  } catch {
+    return text;
+  }
+}
+
+function messageText(message: CustomMessage): string {
+  const { content } = message;
+  if (typeof content === 'string') return content;
+  return content.flatMap((part) => (part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('\n');
+}
+
+// The `bouncer-doctor` message, collapsed: the folded notice. Expanded
+// (ctrl+o, `app.tools.expand` on both hosts), or nothing to fold:
+// `undefined` hands the message back to the host's own full rendering.
+const renderNotice: MessageRenderer = (message, { expanded }, theme) => {
+  if (expanded) return undefined;
+  const folded = foldNotice(messageText(message));
+  if (folded === undefined) return undefined;
+  const rows: (readonly [string, string])[] = [
+    ...folded.headlines.map((headline) => ['warning', headline] as const),
+    ['muted', `… ${folded.hidden} more line(s) — ctrl+o to expand`],
+  ];
+  let cache: { readonly width: number; readonly lines: string[]; } | undefined;
+  return {
+    render(width) {
+      if (cache?.width !== width) {
+        const pad = width >= 3 ? 1 : 0;
+        const inner = Math.max(1, width - 2 * pad);
+        const lines = rows.flatMap(([color, text]) =>
+          wrapToCells(text, inner).map((part) => `${' '.repeat(pad)}${paint(theme, color, part)}`)
+        );
+        cache = { width, lines };
+      }
+      return cache.lines;
+    },
+    invalidate() {
+      cache = undefined;
+    },
+  };
+};
+
 export default function(pi: PiExtensionHost): void {
   // Set by `session_start`, consumed once by the FIRST `before_agent_start`
   // turn, then cleared — see this file's own header comment for why two
@@ -299,7 +442,7 @@ export default function(pi: PiExtensionHost): void {
     const { notify } = outcome.value;
     if (typeof notify === 'string') {
       pendingSessionNotice = notify;
-      ctx.ui.notify(notify, 'warning');
+      ctx.ui.notify(noticeToast(notify), 'warning');
     }
   });
 
@@ -307,6 +450,14 @@ export default function(pi: PiExtensionHost): void {
     if (pendingSessionNotice === undefined) return undefined;
     const content = pendingSessionNotice;
     pendingSessionNotice = undefined;
-    return { message: { customType: 'bouncer-doctor', content, display: true } };
+    return { message: { customType: NOTICE_TYPE, content, display: true } };
   });
+
+  // Last, and never allowed to throw: a renderer that fails to register
+  // must not keep the guard handlers above from loading.
+  try {
+    pi.registerMessageRenderer?.(NOTICE_TYPE, renderNotice);
+  } catch {
+    // Swallowed: the message keeps the host's own full rendering.
+  }
 }

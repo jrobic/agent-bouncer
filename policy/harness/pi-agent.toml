@@ -91,12 +91,8 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # (`policy/harness/pi-agent.shim.ts`'s own fixed rule, never a per-harness
 # choice — see that file's header comment): `ctx.ui.notify` (immediate
 # best-effort toast — measured live: renders as a startup warning banner
-# under `pi` 0.84.1's TUI; NOT independently isolated under `omp`
-# 18.1.10's TUI — the one live interactive `omp` run that showed a
-# startup banner used a shim build where the second path below was
-# already live too, and only that second path left hard proof in the
-# session's own transcript, so this toast's presence specifically on
-# `omp` stays unconfirmed either way, never disproven) AND a message
+# under `pi` 0.84.1's TUI, ticket 15c, and as a `Warning:` line in the
+# chat under `omp` 18.10.3's TUI, 2026-10-13) AND a message
 # queued for the session's FIRST `before_agent_start` turn (`customType:
 # "bouncer-doctor"`, `display: true` — the same shape Claude Code's
 # `UserPromptSubmit` `additionalContext` fills). The second path is
@@ -112,6 +108,13 @@ reason = "pi-agent (and Oh My Pi) executes extensions at agent boot"
 # visual recollection. See the 15c report's "Doctor notices" evidence
 # and `docs/how-to/wire-into-pi-agent.md`'s own section — one wording,
 # copied here (review round 2 C-1).
+#
+# Both are folded for display only (2026-10-13, see the shim's header
+# comment): the toast and the collapsed `bouncer-doctor` message show the
+# notice's headline lines and a count of its indented detail lines; ctrl+o
+# expands the message to the host's own full rendering (measured live on
+# `omp` 18.10.3 and `pi` 0.84.1). The message's content, what the model
+# receives, is never folded.
 #
 # `expandPathCandidates` (`src/adapter/neutral-call.ts`, review round 1
 # L-1, a reviewer finding): a selector suffix or `;`-list riding

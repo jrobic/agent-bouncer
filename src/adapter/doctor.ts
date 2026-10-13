@@ -307,7 +307,10 @@ export function formatDoctorChecklist(report: DoctorReport): string {
  * then calm blocks for override/relaxation state, unprovable wiring, and
  * a source or dirty binary. Each warning remains non-failing; it never
  * joins the scream. Story 19's "impossible to overlook, never silent"
- * applies even when nothing is actually broken.
+ * applies even when nothing is actually broken. Layout is a contract:
+ * every headline starts at column 0 and every detail line under it is
+ * indented — the pi-agent shim folds the indented lines for display
+ * (policy/harness/pi-agent.shim.ts's `foldNotice`).
  */
 export function buildSessionStartContext(report: DoctorReport): string | null {
   const failing = report.checks.filter((c) => !c.ok);

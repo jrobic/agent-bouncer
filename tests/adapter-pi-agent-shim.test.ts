@@ -44,10 +44,21 @@ type BeforeAgentStartHandler = (
   ctx: FakeCtx,
 ) => { message?: { customType: string; content: string; display: boolean; }; } | undefined;
 
+// The slice of pi-tui's `Component` the shim's `bouncer-doctor` renderer returns.
+interface RenderedNotice {
+  render: (width: number) => string[];
+}
+type NoticeRenderer = (
+  message: { content: string; },
+  options: { expanded: boolean; },
+  theme: { fg: (color: string, text: string) => string; },
+) => RenderedNotice | undefined;
+
 interface LoadedShim {
   readonly toolCall: ToolCallHandler;
   readonly sessionStart: SessionStartHandler;
   readonly beforeAgentStart: BeforeAgentStartHandler;
+  readonly renderers: Readonly<Record<string, NoticeRenderer>>;
 }
 
 function fakeCtx(overrides: Partial<FakeCtx> = {}): FakeCtx {
@@ -79,8 +90,13 @@ async function ensureBuilt(): Promise<void> {
 // `BOUNCER` (`process.execPath` of `dist/bouncer` at print time), which
 // `BOUNCER_BIN` always overrides at the shim's own runtime, per its own
 // contract. `events` is the fake `pi.events` bus handed to the shim; left
-// undefined, the fake `pi` has NO `events` property at all.
-async function loadShim(bouncerBin: string, events?: FakeEvents): Promise<LoadedShim> {
+// undefined, the fake `pi` has NO `events` property at all. `registerMessageRenderer`
+// replaces the fake host's recording one (a host that throws on registration).
+async function loadShim(
+  bouncerBin: string,
+  events?: FakeEvents,
+  registerMessageRenderer?: (customType: string, renderer: NoticeRenderer) => void,
+): Promise<LoadedShim> {
   await ensureBuilt();
   const printed = Bun.spawn([join(PROJECT_ROOT, 'dist', 'bouncer'), 'harness', 'shim', 'pi-agent'], {
     stdout: 'pipe',
@@ -96,7 +112,13 @@ async function loadShim(bouncerBin: string, events?: FakeEvents): Promise<Loaded
 
   const originalBouncerBin = process.env.BOUNCER_BIN;
   process.env.BOUNCER_BIN = bouncerBin;
-  let mod: { default: (pi: { on: (event: string, handler: unknown) => void; events?: FakeEvents; }) => void; };
+  let mod: {
+    default: (pi: {
+      on: (event: string, handler: unknown) => void;
+      events?: FakeEvents;
+      registerMessageRenderer: (customType: string, renderer: NoticeRenderer) => void;
+    }) => void;
+  };
   try {
     // Exception to ts-no-dynamic-import: `file` is a fresh temp path
     // computed at test time (a distinct copy of the printed shim per
@@ -113,16 +135,21 @@ async function loadShim(bouncerBin: string, events?: FakeEvents): Promise<Loaded
   // `pi.on("before_agent_start", …)`) — a plain record, not a Map, per
   // this codebase's own lookup-table convention.
   const handlers: { tool_call?: unknown; session_start?: unknown; before_agent_start?: unknown; } = {};
+  const renderers: Record<string, NoticeRenderer> = {};
   mod.default({
     on: (event, handler) => {
       handlers[event as 'tool_call' | 'session_start' | 'before_agent_start'] = handler;
     },
     ...(events === undefined ? {} : { events }),
+    registerMessageRenderer: registerMessageRenderer ?? ((customType, renderer) => {
+      renderers[customType] = renderer;
+    }),
   });
   return {
     toolCall: handlers.tool_call as ToolCallHandler,
     sessionStart: handlers.session_start as SessionStartHandler,
     beforeAgentStart: handlers.before_agent_start as BeforeAgentStartHandler,
+    renderers,
   };
 }
 
@@ -424,6 +451,66 @@ describe('pi-agent shim: before_agent_start (cross-binary notice delivery)', () 
     const fakePath = await fakeBouncerScript('exit 0');
     const shim = await loadShim(fakePath);
     expect(shim.beforeAgentStart({}, fakeCtx())).toBeUndefined();
+  });
+});
+
+describe('pi-agent shim: folded doctor notice (display only)', () => {
+  // Test data, not doctor's wording: the second headline carries wide
+  // characters, a tab and an unbreakable token to stress the wrap.
+  const HEADLINES = [
+    'bouncer doctor: 2 active override(s)/relaxation(s) — the effective policy is relaxed from the vetted baseline:',
+    'bouncer doctor: 中文 🙂\tsecond headline a_very_long_unbroken_token_longer_than_any_narrow_terminal_width_xxxxxxxxxxxxxxxxxx',
+  ];
+  const NOTICE = [
+    HEADLINES[0],
+    '  - command.git.ask_flags:worktree (relax) — worktree autonome pour les leads multi-agents',
+    '  - command.git.ask_flags:branch (relax) — cleanup des branches sous-agents après merge',
+    HEADLINES[1],
+    '  - wiring:shim: unprovable',
+  ].join('\n');
+  // Wraps in escape codes like the hosts' own themes: they take no cells.
+  const THEME = { fg: (_color: string, text: string) => `\u001B[33m${text}\u001B[39m` };
+
+  async function noticeShim(): Promise<LoadedShim> {
+    return loadShim(await fakeBouncerScript(`cat <<'EOF'\n${JSON.stringify({ notify: NOTICE })}\nEOF`));
+  }
+
+  test('the toast keeps every headline and counts the detail lines; the model still receives the full notice', async () => {
+    const shim = await noticeShim();
+    const toasts: string[] = [];
+    await shim.sessionStart({}, fakeCtx({ ui: { select: async () => undefined, notify: (text) => toasts.push(text) } }));
+    const lines = (toasts[0] ?? '').split('\n');
+    expect(lines.slice(0, -1)).toEqual(HEADLINES);
+    expect(lines.at(-1)).toMatch(/\b3\b/);
+    expect(shim.beforeAgentStart({}, fakeCtx())?.message?.content).toBe(NOTICE);
+  });
+
+  test('collapsed, the bouncer-doctor message renders the same fold, every line within the terminal width', async () => {
+    const shim = await noticeShim();
+    const component = shim.renderers['bouncer-doctor']?.({ content: NOTICE }, { expanded: false }, THEME);
+    if (component === undefined) throw new Error('no collapsed component');
+    for (let width = 1; width <= 160; width++) {
+      for (const line of component.render(width)) expect(Bun.stringWidth(line)).toBeLessThanOrEqual(width);
+    }
+    const unwrapped = component.render(1000).map((line) => Bun.stripANSI(line).trim());
+    expect(unwrapped.slice(0, -1)).toEqual(HEADLINES.map((headline) => headline.replace('\t', ' ')));
+    expect(unwrapped.at(-1)).toMatch(/\b3\b/);
+  });
+
+  test('expanded, or with nothing to fold, the message goes back to the host\'s own full rendering', async () => {
+    const shim = await noticeShim();
+    const render = shim.renderers['bouncer-doctor'];
+    expect(render?.({ content: NOTICE }, { expanded: true }, THEME)).toBeUndefined();
+    expect(render?.({ content: 'bouncer: spawn failed — failing closed' }, { expanded: false }, THEME)).toBeUndefined();
+  });
+
+  test('a host whose registerMessageRenderer throws still loads every guard handler', async () => {
+    const fakePath = await fakeBouncerScript(String.raw`printf '{"block":true,"reason":"rule: why"}'`);
+    const shim = await loadShim(fakePath, undefined, () => {
+      throw new Error('renderer registry unavailable');
+    });
+    const result = await shim.toolCall({ toolName: 'bash', input: { command: 'echo hi' } }, fakeCtx());
+    expect(result).toEqual({ block: true, reason: 'rule: why' });
   });
 });
 
