@@ -513,20 +513,24 @@ const EXPECTED_ALLOWED_ENV: readonly string[] = [
   '1 GIT_COMMITTER_*',
   '2 GIT_TERMINAL_PROMPT',
   '3 GIT_INDEX_FILE',
-  '4 GIT_TRACE*',
-  '5 LC_ALL',
-  '6 LANG',
-  '7 TZ',
-  '8 NO_COLOR',
-  '9 CI',
-  '10 GIT_DIR',
-  '11 GIT_WORK_TREE',
-  '12 GIT_EDITOR=true',
-  '13 GIT_EDITOR=:',
-  '14 GIT_SEQUENCE_EDITOR=true',
-  '15 GIT_SEQUENCE_EDITOR=:',
-  '16 GIT_PAGER=cat',
-  '17 PAGER=cat',
+  '4 LC_ALL',
+  '5 LANG',
+  '6 TZ',
+  '7 NO_COLOR',
+  '8 CI',
+  '9 GIT_DIR',
+  '10 GIT_WORK_TREE',
+  '11 GIT_TRACE=0',
+  '12 GIT_TRACE=1',
+  '13 GIT_TRACE=2',
+  '14 GIT_TRACE=true',
+  '15 GIT_TRACE=false',
+  '16 GIT_EDITOR=true',
+  '17 GIT_EDITOR=:',
+  '18 GIT_SEQUENCE_EDITOR=true',
+  '19 GIT_SEQUENCE_EDITOR=:',
+  '20 GIT_PAGER=cat',
+  '21 PAGER=cat',
 ];
 
 describe('guards-digest: tamper lock — the git-config-exec allow-lists', () => {
@@ -540,7 +544,7 @@ describe('guards-digest: tamper lock — the git-config-exec allow-lists', () =>
     expect(orderedValueDigest(git.allowed_config)).toEqual([...EXPECTED_ALLOWED_CONFIG]);
   });
 
-  test('command.git.allowed_env matches the frozen ordered digest (18 entries)', () => {
+  test('command.git.allowed_env matches the frozen ordered digest (22 entries)', () => {
     expect(orderedValueDigest(git.allowed_env)).toEqual([...EXPECTED_ALLOWED_ENV]);
   });
 });

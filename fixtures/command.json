@@ -3665,12 +3665,38 @@
       "expected": []
     },
     {
-      "id": "git-config-exec-env-trace-allowed",
+      "id": "git-config-exec-env-trace-harmless-value-allowed",
       "toolName": "Bash",
       "toolInput": {
-        "command": "GIT_TRACE=1 GIT_TRACE_PACKET=1 git status"
+        "command": "GIT_TRACE=1 git status"
       },
       "expected": []
+    },
+    {
+      "id": "git-config-exec-env-trace-path-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TRACE=/tmp/x git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "git-config-exec-env-trace-variant-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_TRACE_PACKET=1 git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
     },
     {
       "id": "git-config-exec-env-git-dir-and-work-tree-allowed",

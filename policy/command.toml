@@ -434,13 +434,17 @@ allowed_config = [
   ]
 # Environment variables for a prefix, same entry grammar, names compared
 # exactly. `GIT_DIR` and `GIT_WORK_TREE` are the variable forms of the
-# `--git-dir` and `--work-tree` options listed above.
+# `--git-dir` and `--work-tree` options listed above. `GIT_TRACE` is listed
+# only at the values that switch tracing on or off: any other value is a file
+# git appends its trace to, a write nothing else looks at, and the other
+# `GIT_TRACE*` variables are not listed. `GIT_INDEX_FILE` is listed at any
+# value: with a subcommand allowed above it creates a new file at most, and
+# `read-tree`, which can overwrite one, asks on its own.
 allowed_env = [
     "GIT_AUTHOR_*",
     "GIT_COMMITTER_*",
     "GIT_TERMINAL_PROMPT",
     "GIT_INDEX_FILE",
-    "GIT_TRACE*",
     "LC_ALL",
     "LANG",
     "TZ",
@@ -448,6 +452,11 @@ allowed_env = [
     "CI",
     "GIT_DIR",
     "GIT_WORK_TREE",
+    "GIT_TRACE=0",
+    "GIT_TRACE=1",
+    "GIT_TRACE=2",
+    "GIT_TRACE=true",
+    "GIT_TRACE=false",
     "GIT_EDITOR=true",
     "GIT_EDITOR=:",
     "GIT_SEQUENCE_EDITOR=true",
