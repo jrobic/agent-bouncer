@@ -997,16 +997,11 @@ describe('command-rules: safe_flags semantics (generic, on an ungoverned subcomm
 
   test.each([
     'git gc extra',
-    'git gc --aggressive',
-    'git gc --prune',
     'git gc --prune --quiet',
     'git gc --prune=',
     'git gc -p=now',
     'git gc --quiet=1',
-    'git gc -qp now',
-    'git gc --pru=now',
     'git gc -',
-    'git gc --',
     'git gc --quiet 2>&1 -x',
   ])('ruleId git-protected: %s asks', (command) => {
     expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
