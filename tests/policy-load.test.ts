@@ -186,22 +186,36 @@ describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-list
     });
   });
 
+  // Each command below passes once its entry is accepted (see the tests above),
+  // so it asks only because the layer was rejected.
   test.each([
-    'command.git.allowed_global_options',
-    'command.git.allowed_config',
-    'command.git.allowed_env',
-  ])('a [[relax]] on %s without a reason rejects the layer and the baseline holds', (list) => {
-    const loaded = loadPolicyFromOverlayText(`[[relax]]\nlist = "${list}"\nvalue = "GIT_SSH_COMMAND"\nreason = ""\n`);
+    ['command.git.allowed_env', 'GIT_SSH_COMMAND', ssh('ssh -o BatchMode=yes')],
+    ['command.git.allowed_config', 'core.sshCommand', 'git -c core.sshCommand=/x ls-remote ssh://h/r'],
+    ['command.git.allowed_global_options', '--namespace', 'git --namespace=x status'],
+  ])('a [[relax]] on %s without a reason rejects the layer and the baseline holds', (list, value, command) => {
+    const loaded = loadPolicyFromOverlayText(`[[relax]]\nlist = "${list}"\nvalue = "${value}"\nreason = ""\n`);
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain('reason');
-    expect(createCommandChecker(loaded.policy.command).checkGit(ssh('ssh -o BatchMode=yes'))?.ruleId).toBe('git-config-exec');
+    expect(createCommandChecker(loaded.policy.command).checkGit(command)?.ruleId).toBe('git-config-exec');
   });
 
-  // A value that names nothing is rejected rather than loaded as an entry that
-  // allows everything (`*`) or never matches (`--namespace=x`).
+  // A bare `*` would allow every variable or key at every value: the command
+  // is one the entry would let through.
   test.each([
-    ['command.git.allowed_env', '*'],
-    ['command.git.allowed_config', '*'],
+    ['command.git.allowed_env', 'GIT_EXTERNAL_DIFF=/x git diff'],
+    ['command.git.allowed_config', 'git -c core.fsmonitor=x status'],
+  ])('a [[relax]] of "*" on %s is rejected and the baseline holds', (list, command) => {
+    const loaded = loadPolicyFromOverlayText(relax(list, '*'));
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain(list);
+    expect(loaded.warnings.join(' ')).toContain('"*"');
+    expect(createCommandChecker(loaded.policy.command).checkGit(command)?.ruleId).toBe('git-config-exec');
+  });
+
+  // These entries would load and never match anything, so there is no command
+  // they change: the rejection itself, with its list and value named, is the
+  // behaviour.
+  test.each([
     ['command.git.allowed_env', '*=true'],
     ['command.git.allowed_env', '=true'],
     ['command.git.allowed_config', '=cat'],
@@ -209,12 +223,11 @@ describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-list
     ['command.git.allowed_global_options', '-C=x'],
     ['command.git.allowed_global_options', '-c'],
     ['command.git.allowed_global_options', '--config-env'],
-  ])('a [[relax]] on %s with the value %j is rejected with its list and value named', (list, value) => {
+  ])('a [[relax]] on %s with the dead value %j is rejected with its list and value named', (list, value) => {
     const loaded = loadPolicyFromOverlayText(relax(list, value));
     expect(loaded.overlayApplied).toBe(false);
     expect(loaded.warnings.join(' ')).toContain(list);
     expect(loaded.warnings.join(' ')).toContain(JSON.stringify(value));
-    expect(createCommandChecker(loaded.policy.command).checkGit('GIT_EXTERNAL_DIFF=/x git diff')?.ruleId).toBe('git-config-exec');
   });
 
   test.each([
