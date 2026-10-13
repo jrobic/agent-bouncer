@@ -93,7 +93,7 @@ export type WrapperOptionPolicy = {
 // Tokenizer grammar, not security policy — how far a wrapper's OWN options
 // extend before the wrapped command begins. Stays engine code: these are
 // parsing rules for the structural tokenizer below, not a table of
-// verdicts, and none of the three declarative git-conditional forms model
+// verdicts, and none of the four declarative git-conditional forms model
 // "how many tokens does this prefix consume".
 export const WRAPPER_OPTION_POLICIES: Readonly<Record<string, WrapperOptionPolicy>> = {
   rtk: { flags: new Set(), optionsWithArg: new Set() },

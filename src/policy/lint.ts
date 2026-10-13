@@ -1,6 +1,6 @@
 // Policy validation: the RE2-like (lookaround-free, backreference-free)
 // regex dialect — enforced by actually COMPILING every regex, not by
-// string-matching a denylist of syntax — the shape of the three
+// string-matching a denylist of syntax — the shape of the four
 // declarative git-conditional overlay forms, `[[relax]]` entries, and
 // `[[override]]` resolution. Both baseline and overlay run through this
 // before being trusted — the baseline is expected to always pass (it is
@@ -229,7 +229,7 @@ export function lintOverrides(
   return issues;
 }
 
-// Shape validation for the three declarative git-conditional overlay
+// Shape validation for the four declarative git-conditional overlay
 // forms — without this, a malformed entry (e.g. ask_flags with no
 // `flags` field) throws at MATCH time, deep inside gitSubcommandNeedsConfirm,
 // instead of failing lint up front.
@@ -335,6 +335,48 @@ export function lintSafeGrammarShape(entries: readonly unknown[]): LintIssue[] {
   return issues;
 }
 
+const SAFE_FLAGS_KEYS: Record<string, true> = { sub: true, flags: true, value_flags: true, max_positionals: true, reason: true };
+
+function lintSafeFlagsOptionList(label: string, field: 'flags' | 'value_flags', value: unknown): LintIssue[] {
+  if (!isStringArray(value)) {
+    return [{ message: `${label}: "${field}" must be an array of option strings` }];
+  }
+  return value
+    .filter((option) => !option.startsWith('-'))
+    .map((option) => ({ message: `${label}: "${field}" entry ${JSON.stringify(option)} must start with "-"` }));
+}
+
+// Unlike the three older forms, `safe_flags` rejects an unknown key: a
+// misspelled `value_flag` or `max_positional` would otherwise be dropped
+// silently, and an allow-list that silently lost a field is read in the
+// permissive direction (a missing cap, a missing value option).
+export function lintSafeFlagsShape(entries: readonly unknown[]): LintIssue[] {
+  const issues: LintIssue[] = [];
+  entries.forEach((raw, i) => {
+    if (raw === null || typeof raw !== 'object') {
+      issues.push({ message: `command.git.safe_flags[${i}]: must be a table` });
+      return;
+    }
+    const e = raw as Record<string, unknown>;
+    const label = isNonEmptyString(e.sub)
+      ? `command.git.safe_flags[${i}] (sub=${JSON.stringify(e.sub)})`
+      : `command.git.safe_flags[${i}]`;
+    if (!isNonEmptyString(e.sub)) issues.push({ message: `${label}: "sub" must be a non-empty string` });
+    issues.push(...lintSafeFlagsOptionList(label, 'flags', e.flags));
+    issues.push(...lintSafeFlagsOptionList(label, 'value_flags', e.value_flags));
+    if (typeof e.max_positionals !== 'number' || !Number.isInteger(e.max_positionals) || e.max_positionals < 0) {
+      issues.push({ message: `${label}: "max_positionals" must be a non-negative integer` });
+    }
+    if (e.reason !== undefined && typeof e.reason !== 'string') {
+      issues.push({ message: `${label}: "reason" must be a string` });
+    }
+    for (const key of Object.keys(e)) {
+      if (!Object.hasOwn(SAFE_FLAGS_KEYS, key)) issues.push({ message: `${label}: unknown key ${JSON.stringify(key)}` });
+    }
+  });
+  return issues;
+}
+
 const EXACT_MCP_TOOL_NAME = /^mcp__[^\s*?[\]{}\\]+__[^\s*?[\]{}\\]+$(?![\s\S])/;
 
 // `[[relax]]` entries are the ONLY sanctioned way to add to the four
@@ -369,10 +411,10 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
   return issues;
 }
 
-// A git-conditional overlay entry (ask_flags/safe_first_arg/safe_grammar)
-// whose `sub` is ALREADY governed by the baseline (present in baseline's
-// safe_subcommands, or in any of the three declarative tables, or one of
-// the two engine-escape names) can only SUBSTITUTE — and therefore only
+// A git-conditional overlay entry (ask_flags/safe_first_arg/safe_grammar/
+// safe_flags) whose `sub` is ALREADY governed by the baseline (present in
+// baseline's safe_subcommands, or in any of the four declarative tables,
+// or one of the two engine-escape names) can only SUBSTITUTE — and therefore only
 // relax — the baseline's own behavior for that subcommand: the merge puts
 // overlay entries ahead of baseline ones (see load.ts's
 // overlayTakesPrecedence), so this entry wins over the vetted one. Such an
@@ -381,7 +423,7 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
 // a substitution, and stays reason-optional.
 export function lintGitConditionalRelaxation(
   entries: readonly FileTagged<{ readonly sub: string; readonly reason?: string; }>[],
-  table: 'ask_flags' | 'safe_first_arg' | 'safe_grammar',
+  table: 'ask_flags' | 'safe_first_arg' | 'safe_grammar' | 'safe_flags',
   governedSubs: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
@@ -400,7 +442,7 @@ export function lintGitConditionalRelaxation(
 // The full lint pass a policy file must clear: RE2 dialect on every regex,
 // and (if present) override resolution + reason. Used identically for the
 // baseline (expected to always be clean) and for `rules lint`. Does NOT
-// cover `[[relax]]`, the three declarative shape checks, or the
+// cover `[[relax]]`, the four declarative shape checks, or the
 // substitution-reason check — those need the raw overlay's own arrays and
 // the baseline's governed-subs set, which only src/policy/load.ts's
 // loadPolicyFromOverlayText has in scope; this function is the

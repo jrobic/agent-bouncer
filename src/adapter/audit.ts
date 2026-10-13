@@ -314,7 +314,7 @@ export function clusterPolicyDelta(entries: readonly PolicyDeltaEntry[]): Policy
 // ─── dead conditional rules ────────────────────────────────────────────
 
 /** Every `git-conditional-<sub>` id the given git policy can EVER produce —
- * the three declarative tables (each entry can fire an observe verdict for
+ * the four declarative tables (each entry can fire an observe verdict for
  * its `sub`) plus the two engine-escape names (checkout/restore, which
  * classifyGitAllowWith in src/command-rules.ts treats identically to a
  * table-driven conditional). Unconditionally-safe subcommands

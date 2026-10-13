@@ -411,6 +411,151 @@ describe('loadPolicyFromOverlayText: the declarative overlay forms are shape-val
   });
 });
 
+describe('loadPolicyFromOverlayText: the safe_flags overlay form', () => {
+  test('an entry for a subcommand the baseline does not govern is added, with no reason and no relaxation', () => {
+    const overlay = `
+      [[rules.command.git.safe_flags]]
+      sub = "gc"
+      flags = ["--quiet"]
+      value_flags = ["--prune"]
+      max_positionals = 0
+    `;
+    const loaded = loadPolicyFromOverlayText(overlay);
+    expect(loaded.warnings).toEqual([]);
+    expect(loaded.overlayApplied).toBe(true);
+    expect(loaded.activeRelaxations).toEqual([]);
+
+    const checker = createCommandChecker(loaded.policy.command);
+    expect(checker.checkGit('git gc --quiet --prune=now')).toBeNull();
+    expect(checker.checkGit('git gc --aggressive')).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+    // The baseline's own init entry is untouched by an unrelated addition.
+    expect(checker.checkGit('git init -q')).toBeNull();
+    expect(checker.checkGit('git init --bare')?.ruleId).toBe('git-protected');
+  });
+
+  test('widening init through an overlay entry (--bare added) changes the verdict, and is a reported relaxation', () => {
+    const overlay = `
+      [[rules.command.git.safe_flags]]
+      sub = "init"
+      flags = ["-q", "--quiet", "--bare"]
+      value_flags = ["-b", "--initial-branch"]
+      max_positionals = 1
+      reason = "bare scratch repositories are routine on this machine"
+    `;
+    const loaded = loadPolicyFromOverlayText(overlay);
+    expect(loaded.warnings).toEqual([]);
+    expect(loaded.activeRelaxations).toEqual([{
+      list: 'command.git.safe_flags',
+      value: 'init',
+      reason: 'bare scratch repositories are routine on this machine',
+      sourceFile: 'profile:policy.toml',
+    }]);
+
+    const checker = createCommandChecker(loaded.policy.command);
+    expect(checker.checkGit('git init --bare /tmp/x')).toBeNull();
+    expect(checker.checkGit('git init --shared')?.ruleId).toBe('git-protected');
+    // The overlay entry comes first in the merged table, so it is the one
+    // `find` returns: the baseline entry for init no longer decides.
+    expect(loaded.policy.command.git.safe_flags[0]?.flags).toContain('--bare');
+  });
+
+  test('narrowing init through an overlay entry takes effect too', () => {
+    const loaded = loadPolicyFromOverlayText(`
+      [[rules.command.git.safe_flags]]
+      sub = "init"
+      flags = ["-q"]
+      value_flags = []
+      max_positionals = 0
+      reason = "no directory argument and no branch name from an agent session"
+    `);
+    expect(loaded.warnings).toEqual([]);
+    const checker = createCommandChecker(loaded.policy.command);
+    expect(checker.checkGit('git init -q')).toBeNull();
+    expect(checker.checkGit('git init -q /tmp/x')?.ruleId).toBe('git-protected');
+    expect(checker.checkGit('git init -b main')?.ruleId).toBe('git-protected');
+  });
+
+  test.each(['safe_flags', 'ask_flags', 'safe_first_arg', 'safe_grammar'])(
+    'an overlay %s entry for init is a substitution of a governed subcommand and needs a reason',
+    (table) => {
+      const body: Record<string, string> = {
+        safe_flags: 'flags = []\nvalue_flags = []\nmax_positionals = 0',
+        ask_flags: 'flags = []',
+        safe_first_arg: 'values = ["x"]\nsafe_when_absent = true',
+        safe_grammar: 'sequences = [ ["-q"] ]',
+      };
+      const loaded = loadPolicyFromOverlayText(`[[rules.command.git.${table}]]\nsub = "init"\n${body[table]}\n`);
+      expect(loaded.overlayApplied).toBe(false);
+      expect(loaded.warnings.join(' ')).toContain('"reason" must not be empty');
+      // Rejected layer: the baseline's init behavior stays in force.
+      const checker = createCommandChecker(loaded.policy.command);
+      expect(checker.checkGit('git init -q')).toBeNull();
+      expect(checker.checkGit('git init --bare')?.ruleId).toBe('git-protected');
+    },
+  );
+
+  // Each case breaks ONE field of an otherwise valid entry (`undefined`
+  // drops the field); every field except `reason` is required.
+  const validEntry: Record<string, string | undefined> = {
+    sub: '"gc"',
+    flags: '[]',
+    value_flags: '[]',
+    max_positionals: '0',
+  };
+
+  test.each<[string, Record<string, string | undefined>, string]>([
+    ['a missing sub', { sub: undefined }, '"sub" must be a non-empty string'],
+    ['an empty sub', { sub: '""' }, '"sub" must be a non-empty string'],
+    ['a non-text sub', { sub: '3' }, '"sub" must be a non-empty string'],
+    ['missing flags', { flags: undefined }, '"flags" must be an array of option strings'],
+    ['flags that is not an array', { flags: '"-q"' }, '"flags" must be an array of option strings'],
+    ['flags holding a non-text item', { flags: '["-q", 1]' }, '"flags" must be an array of option strings'],
+    ['flags holding a word that is no option', { flags: '["quiet"]' }, '"flags" entry "quiet" must start with "-"'],
+    ['an empty option', { flags: '[""]' }, '"flags" entry "" must start with "-"'],
+    ['missing value_flags', { value_flags: undefined }, '"value_flags" must be an array of option strings'],
+    ['value_flags that is not an array', { value_flags: '7' }, '"value_flags" must be an array of option strings'],
+    ['value_flags holding a word that is no option', { value_flags: '["prune"]' }, '"value_flags" entry "prune" must start with "-"'],
+    ['a negative max_positionals', { max_positionals: '-1' }, '"max_positionals" must be a non-negative integer'],
+    ['a fractional max_positionals', { max_positionals: '1.5' }, '"max_positionals" must be a non-negative integer'],
+    ['a text max_positionals', { max_positionals: '"1"' }, '"max_positionals" must be a non-negative integer'],
+    ['a missing max_positionals', { max_positionals: undefined }, '"max_positionals" must be a non-negative integer'],
+    ['a non-text reason', { reason: '4' }, '"reason" must be a string'],
+    ['an unknown key', { extra: 'true' }, 'unknown key "extra"'],
+  ])('%s rejects the overlay with an explicit message', (_name, broken, message) => {
+    const fields = Object.entries({ ...validEntry, ...broken }).flatMap(([key, value]) => value === undefined ? [] : [`${key} = ${value}`]);
+    const loaded = loadPolicyFromOverlayText(`[[rules.command.git.safe_flags]]\n${fields.join('\n')}\n`);
+    expect(loaded.overlayApplied).toBe(false);
+    expect(loaded.warnings.join(' ')).toContain('command.git.safe_flags[0]');
+    expect(loaded.warnings.join(' ')).toContain(message);
+    // Never read permissively: the baseline alone is in force.
+    expect(loaded.policy.command.git.safe_flags.map((r) => r.sub)).toEqual(['init']);
+  });
+
+  test('a malformed safe_flags entry rejects its own layer only', () => {
+    const loaded = loadPolicyFromLayers([
+      {
+        name: 'common',
+        files: [{
+          filename: 'policy.toml',
+          text: '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+        }],
+      },
+      {
+        name: 'profile',
+        files: [{
+          filename: 'policy.toml',
+          text: '[[rules.command.git.safe_flags]]\nsub = "rebase"\nflags = ["quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+        }],
+      },
+    ]);
+    expect(loaded.layers.find((layer) => layer.name === 'profile')?.rejected?.file).toBe('policy.toml');
+    expect(loaded.layers.find((layer) => layer.name === 'common')?.rejected).toBeUndefined();
+    const checker = createCommandChecker(loaded.policy.command);
+    expect(checker.checkGit('git gc --quiet')).toBeNull();
+    expect(checker.checkGit('git rebase --quiet')?.ruleId).toBe('git-protected');
+  });
+});
+
 describe('loadPolicyFromOverlayText: the lint pass actually compiles every regex (round-3 review, blocking item 1)', () => {
   test('an overlay rule with an unclosed group is rejected — baseline stays active, the hook still responds', () => {
     const overlay = `

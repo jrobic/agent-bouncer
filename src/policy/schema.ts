@@ -42,7 +42,7 @@ export interface AskFlagsRule {
   // tokens are present — symbolic-ref's "at most one ref name" rule.
   readonly max_positionals?: number;
   // Mandatory (lint-enforced) when `sub` is already governed by the
-  // baseline (safe_subcommands, or any of the three declarative tables) —
+  // baseline (safe_subcommands, or any of the four declarative tables) —
   // such an overlay entry can only SUBSTITUTE, and therefore only relax,
   // the baseline's own behavior for that subcommand. Optional when `sub`
   // is genuinely new. See src/policy/lint.ts's lintGitConditionalRelaxation.

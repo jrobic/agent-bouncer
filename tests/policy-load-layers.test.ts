@@ -148,6 +148,31 @@ describe('loadPolicyFromLayers: precedence — the profile wins on all four targ
     expect(relax?.shadows).toBe('common:policy.toml');
   });
 
+  test('git-conditional sub (safe_flags): the profile entry wins the lookup, common entry is gone', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [
+        file(
+          'policy.toml',
+          '[[rules.command.git.safe_flags]]\nsub = "init"\nflags = ["-q", "--bare"]\nvalue_flags = []\nmax_positionals = 1\n'
+            + 'reason = "common widening"\n',
+        ),
+      ]),
+      layer('profile', [
+        file(
+          'policy.toml',
+          '[[rules.command.git.safe_flags]]\nsub = "init"\nflags = ["-q"]\nvalue_flags = []\nmax_positionals = 0\n'
+            + 'reason = "profile narrowing"\n',
+        ),
+      ]),
+    ]);
+    expect(result.warnings).toEqual([]);
+    const initRule = result.policy.command.git.safe_flags.find((r) => r.sub === 'init');
+    expect(initRule).toMatchObject({ flags: ['-q'], max_positionals: 0 });
+    const relax = result.activeRelaxations.find((r) => r.list === 'command.git.safe_flags');
+    expect(relax).toMatchObject({ value: 'init', reason: 'profile narrowing', sourceFile: 'profile:policy.toml' });
+    expect(relax?.shadows).toBe('common:policy.toml');
+  });
+
   test('positional: the shadowing profile row sits AFTER every surviving common row, not spliced into the dropped row\'s old slot', () => {
     const result = loadPolicyFromLayers([
       layer('common', [
@@ -262,6 +287,26 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
     ]);
     expect(result.overlayApplied).toBe(false);
     expect(result.warnings.join(' ')).toContain('branch');
+    expect(result.warnings.join(' ')).toContain('common:policy.d/10-a.toml');
+    expect(result.warnings.join(' ')).toContain('common:policy.d/20-b.toml');
+  });
+
+  test('two common files declaring the same safe_flags sub is rejected, profile is unaffected', () => {
+    const result = loadPolicyFromLayers([
+      layer('common', [
+        file(
+          'policy.d/10-a.toml',
+          '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["--quiet"]\nvalue_flags = []\nmax_positionals = 0\n',
+        ),
+        file(
+          'policy.d/20-b.toml',
+          '[[rules.command.git.safe_flags]]\nsub = "gc"\nflags = ["-q"]\nvalue_flags = []\nmax_positionals = 0\n',
+        ),
+      ]),
+      layer('profile', []),
+    ]);
+    expect(result.overlayApplied).toBe(false);
+    expect(result.warnings.join(' ')).toContain('command.git.safe_flags');
     expect(result.warnings.join(' ')).toContain('common:policy.d/10-a.toml');
     expect(result.warnings.join(' ')).toContain('common:policy.d/20-b.toml');
   });

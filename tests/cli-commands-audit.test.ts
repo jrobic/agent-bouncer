@@ -249,6 +249,29 @@ describe('runAudit: current-policy replay', () => {
     expect(loadPolicyFromOverlayText(suggestion.text).warnings).toEqual([]);
   });
 
+  test('a historical git init confirmation is softened to observe by the baseline safe_flags entry; a bare one stays friction', async () => {
+    const dir = freshAccountDir();
+    await writeLog(dir, [
+      verdictLine({ target: 'git init -q /tmp/scratch' }),
+      verdictLine({ target: 'git init --bare /tmp/scratch.git' }),
+    ]);
+
+    const report = await runAudit({ days: 30, suggest: false, diff: false });
+    expect(sectionOf(report.text, 'Policy delta (replayed against the current policy)')).toContain('git init');
+    expect(sectionOf(report.text, 'Policy delta (replayed against the current policy)')).toContain(
+      '→ now observe [git-conditional-init]',
+    );
+    expect(sectionOf(report.text, 'Frequent friction')).toContain('git init --bare');
+    expect(sectionOf(report.text, 'Frequent friction')).not.toContain('git init -q');
+    expect(sectionOf(report.text, 'Conditional rules that fired')).toContain('git-conditional-init');
+    expect(sectionOf(report.text, 'Dead conditional rules')).not.toContain('git-conditional-init');
+
+    // The allowed shape is no longer friction, so it is not suggested for relaxation.
+    const suggestion = await runAudit({ days: 30, suggest: true, diff: false });
+    expect(suggestion.text).toContain('git init --bare');
+    expect(suggestion.text).not.toContain('git init -q');
+  });
+
   test('retains a legacy-truncated entry as logged and counts it separately from replay', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [verdictLine({ target: `${'x'.repeat(197)}...` })]);

@@ -53,6 +53,7 @@ import {
   lintRegexSource,
   lintRelaxEntries,
   lintSafeFirstArgShape,
+  lintSafeFlagsShape,
   lintSafeGrammarShape,
   resolvableRuleIds,
 } from './lint.ts';
@@ -67,6 +68,7 @@ import type {
   RelaxationEntry,
   RulesPolicy,
   SafeFirstArgRule,
+  SafeFlagsRule,
   SafeGrammarRule,
 } from './schema.ts';
 
@@ -246,16 +248,17 @@ export interface FileTagged<T> {
   readonly shadows?: string;
 }
 
-// The askFlags/safeFirstArg/safeGrammar trio: three parallel per-family
-// lists of git-conditional overlay entries that get threaded through the
-// merge (mergeGitPolicy), the active-relaxation report
+// The askFlags/safeFirstArg/safeGrammar/safeFlags quartet: four parallel
+// per-family lists of git-conditional overlay entries that get threaded
+// through the merge (mergeGitPolicy), the active-relaxation report
 // (buildActiveRelaxations), and the cross-file conflict check together,
 // as one unit, at every call site — bundled here so a call site takes one
-// value instead of three positionally-ordered ones.
+// value instead of four positionally-ordered ones.
 interface GitConditionalEntries {
   readonly askFlags: readonly FileTagged<AskFlagsRule>[];
   readonly safeFirstArg: readonly FileTagged<SafeFirstArgRule>[];
   readonly safeGrammar: readonly FileTagged<SafeGrammarRule>[];
+  readonly safeFlags: readonly FileTagged<SafeFlagsRule>[];
 }
 
 // One issue a compose attempt failed on, POSED by the throw site that
@@ -383,13 +386,13 @@ function appendedAfterBaseline<T>(baseline: readonly T[], overlay: readonly T[])
   return [...baseline, ...overlay];
 }
 
-// The git-conditional keyed tables (ask_flags/safe_first_arg/safe_grammar):
-// overlay entries come FIRST, so `Array.find()` (which every consumer of
-// these tables uses to look up a `sub`) picks the overlay's entry over the
-// baseline's when both govern the same subcommand. The name says the
-// order: overlay wins position, which is exactly what makes such an entry
-// a SUBSTITUTION — and therefore a relaxation requiring `reason` — when the
-// `sub` was already baseline-governed (see lint.ts's
+// The git-conditional keyed tables (ask_flags/safe_first_arg/safe_grammar/
+// safe_flags): overlay entries come FIRST, so `Array.find()` (which every
+// consumer of these tables uses to look up a `sub`) picks the overlay's
+// entry over the baseline's when both govern the same subcommand. The name
+// says the order: overlay wins position, which is exactly what makes such
+// an entry a SUBSTITUTION — and therefore a relaxation requiring `reason` —
+// when the `sub` was already baseline-governed (see lint.ts's
 // lintGitConditionalRelaxation, which this asymmetry is what makes
 // necessary). The SAME `sub` substituted by two DIFFERENT overlay files
 // of the SAME layer is rejected outright before this function ever runs
@@ -441,7 +444,7 @@ function mergeGitPolicy(
     ask_flags: overlayTakesPrecedence(entries.askFlags.map((t) => t.raw), baseline.ask_flags),
     safe_first_arg: overlayTakesPrecedence(entries.safeFirstArg.map((t) => t.raw), baseline.safe_first_arg),
     safe_grammar: overlayTakesPrecedence(entries.safeGrammar.map((t) => t.raw), baseline.safe_grammar),
-    safe_flags: baseline.safe_flags,
+    safe_flags: overlayTakesPrecedence(entries.safeFlags.map((t) => t.raw), baseline.safe_flags),
   };
 }
 
@@ -629,7 +632,7 @@ function mergedBaselineOnly(): MergedPolicy {
       bash: mergeRegexFamily('command.bash', baseline.command.bash, []),
       rm_rf: { dangerous_targets: baseline.command.rm_rf.dangerous_targets },
       privilege_escalation: { commands: baseline.command.privilege_escalation.commands },
-      git: mergeGitPolicy(baseline.command.git, { askFlags: [], safeFirstArg: [], safeGrammar: [] }, []),
+      git: mergeGitPolicy(baseline.command.git, { askFlags: [], safeFirstArg: [], safeGrammar: [], safeFlags: [] }, []),
     },
     secret: {
       path: mergeRegexFamily('secret.path', baseline.secret.path, []),
@@ -702,6 +705,7 @@ function buildActiveRelaxations(
     ...fromGitConditional(entries.askFlags, 'ask_flags'),
     ...fromGitConditional(entries.safeFirstArg, 'safe_first_arg'),
     ...fromGitConditional(entries.safeGrammar, 'safe_grammar'),
+    ...fromGitConditional(entries.safeFlags, 'safe_flags'),
   ];
 }
 
@@ -956,6 +960,7 @@ interface FileEntries {
   readonly askFlags: readonly AskFlagsRule[];
   readonly safeFirstArg: readonly SafeFirstArgRule[];
   readonly safeGrammar: readonly SafeGrammarRule[];
+  readonly safeFlags: readonly SafeFlagsRule[];
   readonly commandBash: readonly unknown[];
   readonly secretPath: readonly unknown[];
   readonly secretBash: readonly unknown[];
@@ -1002,11 +1007,19 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
     layer,
     filename,
   );
+  const fileSafeFlags = fileArray<Record<string, unknown>>(
+    parsed,
+    ['rules', 'command', 'git', 'safe_flags'],
+    'rules.command.git.safe_flags',
+    layer,
+    filename,
+  );
 
   const shapeIssues = [
     ...lintAskFlagsShape(fileAskFlags),
     ...lintSafeFirstArgShape(fileSafeFirstArg),
     ...lintSafeGrammarShape(fileSafeGrammar),
+    ...lintSafeFlagsShape(fileSafeFlags),
   ];
   if (shapeIssues.length > 0) {
     throw new PolicyRejected([{
@@ -1064,6 +1077,7 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
     askFlags: fileAskFlags as unknown as AskFlagsRule[],
     safeFirstArg: fileSafeFirstArg as unknown as SafeFirstArgRule[],
     safeGrammar: fileSafeGrammar as unknown as SafeGrammarRule[],
+    safeFlags: fileSafeFlags as unknown as SafeFlagsRule[],
     commandBash: fileArray<unknown>(parsed, ['rules', 'command', 'bash'], 'rules.command.bash', layer, filename),
     secretPath: fileArray<unknown>(parsed, ['rules', 'secret', 'path'], 'rules.secret.path', layer, filename),
     secretBash: fileArray<unknown>(parsed, ['rules', 'secret', 'bash'], 'rules.secret.bash', layer, filename),
@@ -1295,6 +1309,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   const rawAskFlags: L<AskFlagsRule>[] = [];
   const rawSafeFirstArg: L<SafeFirstArgRule>[] = [];
   const rawSafeGrammar: L<SafeGrammarRule>[] = [];
+  const rawSafeFlags: L<SafeFlagsRule>[] = [];
   let rawCommandBash: L<unknown>[] = [];
   let rawSecretPath: L<unknown>[] = [];
   let rawSecretBash: L<unknown>[] = [];
@@ -1320,6 +1335,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     for (const raw of entries.askFlags) rawAskFlags.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.safeFirstArg) rawSafeFirstArg.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.safeGrammar) rawSafeGrammar.push({ filename, layer, raw, seq: seq() });
+    for (const raw of entries.safeFlags) rawSafeFlags.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.commandBash) rawCommandBash.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.secretPath) rawSecretPath.push({ filename, layer, raw, seq: seq() });
     for (const raw of entries.secretBash) rawSecretBash.push({ filename, layer, raw, seq: seq() });
@@ -1368,6 +1384,13 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
     (e) => e.raw.sub,
     layerOrder,
     (label, files) => `conflicting command.git.safe_grammar entries for sub ${JSON.stringify(label)} in ${files.join(' and ')}`,
+  );
+  const safeFlags = resolvePrecedence(
+    rawSafeFlags,
+    (e) => e.raw.sub,
+    (e) => e.raw.sub,
+    layerOrder,
+    (label, files) => `conflicting command.git.safe_flags entries for sub ${JSON.stringify(label)} in ${files.join(' and ')}`,
   );
 
   const regexCandidates = regexIdCandidates(
@@ -1430,11 +1453,12 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
   const derivedRows = derivedHarnessRows(mergedHarnesses);
 
   const governedSubs = baselineGovernedSubs(BASELINE.rules.command.git);
-  const gitConditionalEntries: GitConditionalEntries = { askFlags, safeFirstArg, safeGrammar };
+  const gitConditionalEntries: GitConditionalEntries = { askFlags, safeFirstArg, safeGrammar, safeFlags };
   const conditionalReasonIssues = [
     ...lintGitConditionalRelaxation(gitConditionalEntries.askFlags, 'ask_flags', governedSubs),
     ...lintGitConditionalRelaxation(gitConditionalEntries.safeFirstArg, 'safe_first_arg', governedSubs),
     ...lintGitConditionalRelaxation(gitConditionalEntries.safeGrammar, 'safe_grammar', governedSubs),
+    ...lintGitConditionalRelaxation(gitConditionalEntries.safeFlags, 'safe_flags', governedSubs),
   ];
   if (conditionalReasonIssues.length > 0) throw new PolicyRejected(toRejectionIssues(conditionalReasonIssues));
 
@@ -1521,7 +1545,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
  * baseline, then every layer in `layers` order, each read the same way
  * (`policy.toml` first, then `policy.d/*.toml` lexicographically — the
  * adapter's job, not this function's). A LATER layer's entry for the
- * same target (a git `sub` in one of the three conditional tables, a
+ * same target (a git `sub` in one of the four conditional tables, a
  * `[[relax]]` list+value, an `[[override]]` rule, a regex row `id`)
  * replaces an EARLIER layer's — never a conflict — and carries `shadows`
  * naming the file(s) it replaced. Two files of the SAME layer sharing a
