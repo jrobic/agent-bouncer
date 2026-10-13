@@ -2,8 +2,8 @@
 [![Verify](https://github.com/jrobic/agent-bouncer/actions/workflows/verify.yml/badge.svg)](https://github.com/jrobic/agent-bouncer/actions/workflows/verify.yml)
 
 `bouncer` is one standalone binary that guards coding-agent tool calls before
-they run: destructive commands, protected writes, secret reads, MCP writes,
-and prompt-injection signatures.
+they run: destructive commands, protected writes, secret reads (files and the
+agent's own environment), MCP writes, and prompt-injection signatures.
 
 ## At a glance
 
@@ -169,6 +169,7 @@ The engine returns a harness response and records guarded verdicts in JSONL.
 | wire bouncer into pi-agent or omp | [Wire into pi-agent and omp](docs/how-to/wire-into-pi-agent.md) |
 | add a rule of my own | [Add a custom rule](docs/how-to/add-a-custom-rule.md) |
 | disable, soften, or safely widen a baseline rule | [Override a baseline rule](docs/how-to/override-a-baseline-rule.md) |
+| keep secrets exported in my environment away from the agent | [Keep environment secrets away from agents](docs/how-to/keep-env-secrets-away-from-agents.md) |
 | find recurring friction and dead rules | [Tune rules with the audit log](docs/how-to/tune-rules-with-audit.md) |
 | tune the policy with an agent | [`bouncer-policy`](skills/bouncer-policy/SKILL.md) |
 | look up a subcommand's flags, output, or exit code | [CLI reference](docs/reference/cli.md) |

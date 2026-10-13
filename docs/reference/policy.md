@@ -195,8 +195,8 @@ command, `printenv … NAME`, `declare -p … NAME` and jq's `env.NAME` /
 |---|---|---|
 | `env-ref-display` | `block` | the reference feeds a display: `echo`, `printf`, `print`, `println`, `puts`, `pp`, `console.log` (also `info`, `warn`, `error`, `debug`) or `node` / `bun -p` earlier in the same statement (no `;`, `&`, `\|` or newline between; a `\`-newline continuation does not end the statement, and the scan reaches at most 400 characters ahead), or the form prints by nature (`printenv NAME`, …). `echo $NAME \| cmd` is a display too: the regex cannot follow the pipe |
 | `env-ref-whole` | `block` | the environment object used as a whole — `process.env`, `Bun.env`, `Deno.env.toObject()`, `os.environ`, awk's `ENVIRON`, Ruby's `ENV` printed or enumerated (`p ENV`, `ENV.to_h`) — dumped, iterated, or spread into a child's environment |
-| `env-ref-computed` | `block` | a name computed at runtime: `os.environ.get(<expr>)`, `process.env[<expr>]`, `ENV[<expr>]`, `getenv(<expr>)`, shell `${!name}`, `printenv $name`. A literal name is a closed string right after the bracket or parenthesis; anything else (a call, a variable, `'AT' + 'LASSIAN_TOKEN'`) is computed, because a name rebuilt from pieces would slip past every name rule |
-| `env-ref` | `confirm` | any other reference — `curl -H "Authorization: Bearer $SONARQUBE_TOKEN" …`, `export GH_TOKEN=$GITHUB_TOKEN`, a heredoc or a commit message that spells a protected name (prose is command text) |
+| `env-ref-computed` | `block` | a name computed at runtime: `os.environ.get(<expr>)`, `process.env[<expr>]`, `ENV[<expr>]`, `getenv(<expr>)`, shell `${!name}`, `printenv $name`. A literal name is a closed string right after the bracket or parenthesis; anything else (a call, a variable, `'GITHUB_' + 'TOKEN'`) is computed, because a name rebuilt from pieces would slip past every name rule |
+| `env-ref` | `confirm` | any other reference — `curl -H "Authorization: Bearer $GITHUB_TOKEN" …`, `export GH_TOKEN=$GITHUB_TOKEN`, a heredoc or a commit message that spells a protected name (prose is command text) |
 
 A reference to a non-protected name stays allowed: `echo $HOME`,
 `process.env.NODE_ENV`, `os.environ["HOME"]`. A **search pattern** is not an
@@ -223,6 +223,11 @@ same command. **Relaxing:** each row has its own id for `[[override]]`
 workflow that inspects containers all day relaxes `env-dump-docker-inspect`
 alone, and one that really needs `docker compose config` relaxes
 `env-dump-docker`.
+
+The operator-side steps are in
+[Keep environment secrets away from agents](../how-to/keep-env-secrets-away-from-agents.md);
+the reasons for a net rather than a barrier are in
+[ADR-0007](../adr/0007-environment-secrets-baseline-net.md).
 
 
 ### Infrastructure mutation rows
