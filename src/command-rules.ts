@@ -1524,8 +1524,8 @@ function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boo
   return positionals > rule.max_positionals;
 }
 
-// A number as a short group (`-12`, `-12=x`): git's `-<n>` shorthand, not letters.
-const NUMERIC_SHORT_GROUP = /^-\d+(?:=|$)/;
+// A bare number as a short group (`-12`): git's `-<n>` shorthand, not letters.
+const NUMERIC_SHORT_GROUP = /^-\d+$/;
 
 // Whether `token` is one of an ask_flags entry's `flags`, read the way git
 // reads options. Token semantics: AskFlagsRule.flags in policy/schema.ts.

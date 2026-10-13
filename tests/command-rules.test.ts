@@ -1074,6 +1074,8 @@ describe('command-rules: ask_flags matching (generic, on an ungoverned subcomman
     'git gc go',
     // a digit is a letter like any other once the token is not a number
     'git gc -a1',
+    // only a bare number is shorthand: with a value, `1` and `2` are letters before the `=`
+    'git gc -12=x',
   ])('ruleId git-protected: %s asks', (command) => {
     expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
   });
