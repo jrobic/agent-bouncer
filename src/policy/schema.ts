@@ -103,6 +103,9 @@ export interface CommandGitPolicy {
   readonly safe_flags: readonly SafeFlagsRule[];
 }
 
+// The four declarative git-conditional tables of `CommandGitPolicy`, by name.
+export type GitConditionalTable = 'ask_flags' | 'safe_first_arg' | 'safe_grammar' | 'safe_flags';
+
 export interface CommandPolicy {
   readonly bash: readonly RegexRule[];
   readonly rm_rf: { readonly dangerous_targets: readonly string[]; };

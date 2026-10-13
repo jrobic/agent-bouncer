@@ -60,6 +60,7 @@ import {
 import type { LintIssue } from './lint.ts';
 import type {
   AskFlagsRule,
+  GitConditionalTable,
   HarnessDeclaration,
   HarnessOverlay,
   OverrideEntry,
@@ -683,7 +684,7 @@ function buildActiveRelaxations(
 ): ActiveRelaxation[] {
   const fromGitConditional = (
     list: readonly FileTagged<{ readonly sub: string; readonly reason?: string; }>[],
-    table: string,
+    table: GitConditionalTable,
   ): ActiveRelaxation[] =>
     list
       .filter((e) => governedSubs.has(e.raw.sub))

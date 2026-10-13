@@ -10,7 +10,7 @@
 import { FRAGMENT_PLACEHOLDER } from './fragments.ts';
 import type { EffectiveRule, FileTagged } from './load.ts';
 import { RELAXABLE_LISTS } from './schema.ts';
-import type { OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
+import type { GitConditionalTable, OverrideEntry, RawPolicyFile, RegexRule } from './schema.ts';
 
 export interface LintIssue {
   readonly message: string;
@@ -423,7 +423,7 @@ export function lintRelaxEntries(entries: readonly unknown[]): LintIssue[] {
 // a substitution, and stays reason-optional.
 export function lintGitConditionalRelaxation(
   entries: readonly FileTagged<{ readonly sub: string; readonly reason?: string; }>[],
-  table: 'ask_flags' | 'safe_first_arg' | 'safe_grammar' | 'safe_flags',
+  table: GitConditionalTable,
   governedSubs: ReadonlySet<string>,
 ): LintIssue[] {
   const issues: LintIssue[] = [];
