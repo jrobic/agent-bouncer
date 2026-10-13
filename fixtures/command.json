@@ -2420,6 +2420,14 @@
       "expected": []
     },
     {
+      "id": "git-switch-previous-branch-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch -"
+      },
+      "expected": []
+    },
+    {
       "id": "git-switch-create-short-flag-safe",
       "toolName": "Bash",
       "toolInput": {

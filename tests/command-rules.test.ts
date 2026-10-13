@@ -1063,32 +1063,31 @@ describe('command-rules: ask_flags matching (generic, on an ungoverned subcomman
     ...BASELINE.rules.command,
     git: {
       ...BASELINE.rules.command.git,
-      ask_flags: [{ sub: 'gc', flags: ['-ff', '-q', '--aggressive', 'go'] }],
+      ask_flags: [{ sub: 'gc', flags: ['-ff', '-1', '--aggressive', '--', 'go'] }],
     },
   });
 
   test.each([
+    // an entry that is not `-x` or `--name` matches its own spelling only
     'git gc -ff',
+    'git gc --',
     'git gc go',
-    'git gc -xq',
-    'git gc -qq',
-    'git gc -5q',
-    'git gc --aggr',
-    'git gc --aggr=1',
+    // a digit is a letter like any other once the token is not a number
+    'git gc -a1',
   ])('ruleId git-protected: %s asks', (command) => {
     expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
   });
 
   test.each([
-    // a multi-letter single-dash entry matches itself only, not its letters
+    // a multi-letter single-dash entry does not spread into its letters
     'git gc -f',
     'git gc -fx',
     // a bare word is exact only, never a prefix
     'git gc g',
-    // not options at all: stdin marker, end-of-options marker, a number
-    'git gc -',
-    'git gc --',
-    'git gc -5',
+    // a number is git's `-<n>` shorthand, not the listed `-1`
+    'git gc -12',
+    // a listed `--` is not the letter `-` of a short group
+    'git gc -a-b',
     // a longer option that merely starts with a listed one is not the listed one
     'git gc --aggressive-all',
   ])('%s stays allowed', (command) => {
