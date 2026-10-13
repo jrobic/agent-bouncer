@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `docs/how-to/keep-env-secrets-away-from-agents.md` shows an operator what
+  the 1.8.0 environment rows do, how to check and relax them, and how to
+  close the gap at the launcher. `docs/adr/0007-environment-secrets-baseline-net.md`
+  records why they are a net and not a barrier.
+
 ## [1.8.0] - 2026-10-13
 
 ### Added
