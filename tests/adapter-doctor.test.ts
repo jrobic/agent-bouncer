@@ -12,7 +12,7 @@ import { buildCanaryCommand } from '../src/adapter/canary.ts';
 import { buildSessionStartContext, formatDoctorChecklist, runDoctorChecks } from '../src/adapter/doctor.ts';
 import { BOUNCER_VERSION, type BuildInfo } from '../src/build-info.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
-import type { LoadResult } from '../src/policy/load.ts';
+import { loadPolicyFromOverlayText, type LoadResult } from '../src/policy/load.ts';
 import type { HarnessDeclaration } from '../src/policy/schema.ts';
 import {
   BOUNCER_COMMAND,
@@ -564,6 +564,17 @@ describe('runDoctorChecks: overrides/relaxations announcement', () => {
     expect(report.overrideCount).toBe(2); // 1 override + 1 relaxation
     expect(report.overrideLines).toContainEqual(expect.stringContaining('curl-file-upload'));
     expect(report.overrideLines).toContainEqual(expect.stringContaining('command.git.safe_subcommands'));
+  });
+
+  test('a safe_flags overlay entry replacing the governed init is announced as a relaxation with its reason', async () => {
+    const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
+    const loaded = loadPolicyFromOverlayText(
+      '[[rules.command.git.safe_flags]]\nsub = "init"\nflags = ["-q", "--bare"]\nvalue_flags = []\nmax_positionals = 1\n'
+        + 'reason = "bare scratch repositories are routine here"\n',
+    );
+    const report = await runDoctorChecks(settingsPath, loaded, CLAUDE_CODE_HARNESS);
+    expect(report.overrideCount).toBe(1);
+    expect(report.overrideLines).toEqual(['command.git.safe_flags:init (relax) — bare scratch repositories are routine here']);
   });
 });
 
