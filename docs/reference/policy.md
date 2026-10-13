@@ -1395,7 +1395,9 @@ is an entry as described in § `git-config-exec`: a name for any value, or
 names nothing: on `allowed_config` and `allowed_env` an empty name
 (`=true`) or a bare `*` (`*`, `*=true`), which would allow every key or
 variable; on `allowed_global_options` a value holding `=`, since the value of
-`--name=value` is not part of an entry and such an entry would never match.
+`--name=value` is not part of an entry and such an entry would never match,
+and `-c` or `--config-env`, which `allowed_config` judges before this list is
+read.
 
 A `safe_first_arg`/`ask_flags`/`safe_grammar`/`safe_flags` overlay entry
 whose `sub` is already governed by the baseline (`init` is, through

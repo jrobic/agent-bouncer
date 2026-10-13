@@ -386,7 +386,9 @@ const GIT_NAME_VALUE_LISTS: ReadonlySet<string> = new Set(['command.git.allowed_
 // non-empty: an MCP tool is one exact name; a `git-config-exec` name is never
 // empty and never a bare `*` (that would allow every key or variable, at every
 // value, for one line of TOML); a global option is a name, as the value of
-// `--name=value` is not part of the entry and an entry with one never matches.
+// `--name=value` is not part of the entry and an entry with one never matches,
+// and neither is `-c` or `--config-env`, which are judged by `allowed_config`
+// before this list is read.
 function relaxValueProblem(list: unknown, value: string): string | null {
   if (list === 'mcp_write.allowed_tools' && !EXACT_MCP_TOOL_NAME.test(value)) {
     return '"value" must be an exact mcp__SERVER__OP name without whitespace or glob syntax';
@@ -398,8 +400,13 @@ function relaxValueProblem(list: unknown, value: string): string | null {
       return '"value" must be a name (any value) or name=value (that one value); the name cannot be empty or a bare "*"';
     }
   }
-  if (list === 'command.git.allowed_global_options' && value.includes('=')) {
-    return '"value" must be an option name without "=": the value of --name=value is not part of the entry';
+  if (list === 'command.git.allowed_global_options') {
+    if (value.includes('=')) {
+      return '"value" must be an option name without "=": the value of --name=value is not part of the entry';
+    }
+    if (value === '-c' || value === '--config-env') {
+      return '"value" cannot be -c or --config-env: their settings are judged by command.git.allowed_config';
+    }
   }
   return null;
 }

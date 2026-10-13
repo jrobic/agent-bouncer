@@ -207,6 +207,8 @@ describe('loadPolicyFromOverlayText: [[relax]] on the git-config-exec allow-list
     ['command.git.allowed_config', '=cat'],
     ['command.git.allowed_global_options', '--namespace=x'],
     ['command.git.allowed_global_options', '-C=x'],
+    ['command.git.allowed_global_options', '-c'],
+    ['command.git.allowed_global_options', '--config-env'],
   ])('a [[relax]] on %s with the value %j is rejected with its list and value named', (list, value) => {
     const loaded = loadPolicyFromOverlayText(relax(list, value));
     expect(loaded.overlayApplied).toBe(false);
