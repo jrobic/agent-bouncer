@@ -5,13 +5,13 @@
 # optional `flags` (regex flags, e.g. "i"), `except` (a single negating
 # regex — a match here overrides a match on `regex`), and `special` (an
 # engine-recognized marker for logic no regex alone can express). See
-# docs/reference/policy.md for the full row shape and the three
+# docs/reference/policy.md for the full row shape and the four
 # declarative git-conditional forms below (ask_flags/safe_first_arg/
-# safe_grammar).
+# safe_grammar/safe_flags).
 #
 # Two git subcommands are outside this file entirely: `checkout` (pathspec
 # detection) and `restore` (index-only form — `--staged` plus one or more
-# pathspecs) need real parsing beyond any of the three declarative forms
+# pathspecs) need real parsing beyond any of the four declarative forms
 # below, and stay in src/command-rules.ts under their own named rule ids
 # (see checkGitCheckout/checkGitRestore).
 
@@ -488,6 +488,23 @@ sequences = [
     ["--check"],
     ["--check", "*"],
   ]
+
+# Throwaway repositories: `git init` in a scratch directory is routine and
+# harmless, but `--bare`, `--template`, `--separate-git-dir`, `--shared`,
+# `--object-format` and `--ref-format` are not on the allow-list (nor are
+# abbreviated, grouped or glued spellings, nor `--`), so they keep
+# `git-protected`.
+[[rules.command.git.safe_flags]]
+sub = "init"
+flags = [
+    "-q",
+    "--quiet",
+  ]
+value_flags = [
+    "-b",
+    "--initial-branch",
+  ]
+max_positionals = 1
 
 # Claude Code's configuration commands write harness state without naming a
 # filesystem path, so this command-family row closes that separate surface.

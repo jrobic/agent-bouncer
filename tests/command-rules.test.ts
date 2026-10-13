@@ -951,6 +951,172 @@ describe('command-rules: SHA safe grammar slots', () => {
   });
 });
 
+// `safe_flags` is the fourth declarative git-conditional form: a list of
+// ALLOWED options (the inverse of `ask_flags`), with value-taking options
+// and a positional cap. The full init matrix (every allowed and refused
+// form) lives in fixtures/command.json as the conformance contract; these
+// engine tests carry one case per mechanism class so the ruleId coverage
+// lock has a title to read, plus the generic semantics against a
+// subcommand the baseline does not govern.
+describe('command-rules: git init is governed by the baseline safe_flags entry', () => {
+  test('ruleId git-protected: git init --bare asks (a flag outside the allowed list)', () => {
+    expect(checkGit('git init --bare')).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test('ruleId git-protected: git init --separate=/tmp/gd asks (an abbreviated long option is an unknown token)', () => {
+    expect(checkGit('git init --separate=/tmp/gd')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -qb main asks (grouped short options are an unknown token)', () => {
+    expect(checkGit('git init -qb main')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -bmain asks (a glued short value is an unknown token)', () => {
+    expect(checkGit('git init -bmain')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -b asks (a value option with no value)', () => {
+    expect(checkGit('git init -b')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -b -q asks (a value that starts with a dash is not a value)', () => {
+    expect(checkGit('git init -b -q')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init --initial-branch= asks (an empty =value)', () => {
+    expect(checkGit('git init --initial-branch=')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -b=main asks (only a long option takes the =value form)', () => {
+    expect(checkGit('git init -b=main')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init --quiet=1 asks (a flag that takes no value)', () => {
+    expect(checkGit('git init --quiet=1')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init -- asks (the end-of-options marker is an unknown token)', () => {
+    expect(checkGit('git init --')?.ruleId).toBe('git-protected');
+  });
+
+  test('ruleId git-protected: git init a b asks (more positionals than max_positionals)', () => {
+    expect(checkGit('git init a b')?.ruleId).toBe('git-protected');
+  });
+
+  test('a value consumed by -b is not counted as a positional', () => {
+    expect(checkGit('git init -b main .')).toBeNull();
+    expect(checkGit('git init -b main . .')?.ruleId).toBe('git-protected');
+  });
+
+  test('an allowed init is classified observe with the git-conditional-init ruleId; a refused one is not', () => {
+    const checker = createCommandChecker(BASELINE.rules.command);
+    expect(checker.classifyGitAllow('git init -q /tmp/repo')).toMatchObject({
+      verdict: 'observe',
+      ruleId: 'git-conditional-init',
+    });
+    expect(checker.classifyGitAllow('git init --bare')).toBeNull();
+  });
+});
+
+describe('command-rules: safe_flags semantics (generic, on an ungoverned subcommand)', () => {
+  const gc = {
+    sub: 'gc',
+    flags: ['--quiet', '-q'],
+    value_flags: ['--prune', '-p'],
+    max_positionals: 0,
+  };
+  const checkerWith = (git: Partial<typeof BASELINE.rules.command.git>) =>
+    createCommandChecker({
+      ...BASELINE.rules.command,
+      git: { ...BASELINE.rules.command.git, ...git },
+    });
+  const checker = checkerWith({ safe_flags: [gc, ...BASELINE.rules.command.git.safe_flags] });
+
+  test.each([
+    'git gc',
+    'git gc --quiet',
+    'git gc -q --quiet',
+    'git gc --prune now',
+    'git gc --prune=now',
+    'git gc -p now',
+    'git gc --quiet --prune=now -p 1.day',
+  ])('%s is allowed', (command) => {
+    expect(checker.checkGit(command)).toBeNull();
+  });
+
+  test.each([
+    'git gc extra',
+    'git gc --aggressive',
+    'git gc --prune',
+    'git gc --prune --quiet',
+    'git gc --prune=',
+    'git gc -p=now',
+    'git gc --quiet=1',
+    'git gc -qp now',
+    'git gc --pru=now',
+    'git gc -',
+    'git gc --',
+    'git gc --quiet 2>&1 -x',
+  ])('%s asks', (command) => {
+    expect(checker.checkGit(command)).toMatchObject({ verdict: 'confirm', ruleId: 'git-protected' });
+  });
+
+  test('max_positionals = 0 refuses any positional; a larger cap allows exactly that many', () => {
+    const two = checkerWith({ safe_flags: [{ sub: 'gc', flags: [], value_flags: [], max_positionals: 2 }] });
+    expect(two.checkGit('git gc a b')).toBeNull();
+    expect(two.checkGit('git gc a b c')?.ruleId).toBe('git-protected');
+  });
+
+  test('a redirection is not a positional, and an ambiguous one still asks', () => {
+    expect(checker.checkGit('git gc --quiet 2>/dev/null')).toBeNull();
+    expect(checker.checkGit('git gc --quiet >')?.ruleId).toBe('git-protected');
+  });
+
+  test('safe_flags consults no repository state: the same text gives the same verdict anywhere', () => {
+    expect(checker.checkGit('git -C /nonexistent gc --quiet')).toBeNull();
+  });
+
+  // Evaluation order: ask_flags, safe_first_arg, safe_grammar, safe_flags,
+  // then the checkout/restore engine exceptions. A subcommand reaching an
+  // earlier form never reaches a later one.
+  test('ask_flags, safe_first_arg and safe_grammar decide before safe_flags does', () => {
+    const permissive = { sub: 'gc', flags: ['--force', 'go'], value_flags: [], max_positionals: 5 };
+
+    const withAskFlags = checkerWith({ ask_flags: [{ sub: 'gc', flags: ['--force'] }], safe_flags: [permissive] });
+    expect(withAskFlags.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withAskFlags.checkGit('git gc --unknown')).toBeNull();
+
+    const withFirstArg = checkerWith({
+      safe_first_arg: [{ sub: 'gc', values: ['list'], safe_when_absent: false }],
+      safe_flags: [permissive],
+    });
+    expect(withFirstArg.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withFirstArg.checkGit('git gc list --unknown')).toBeNull();
+
+    const withGrammar = checkerWith({
+      safe_grammar: [{ sub: 'gc', sequences: [['--check']] }],
+      safe_flags: [permissive],
+    });
+    expect(withGrammar.checkGit('git gc --force')?.ruleId).toBe('git-protected');
+    expect(withGrammar.checkGit('git gc --check')).toBeNull();
+  });
+
+  test('safe_flags decides before the checkout and restore engine exceptions', () => {
+    const checkout = checkerWith({ safe_flags: [{ sub: 'checkout', flags: ['-f'], value_flags: [], max_positionals: 0 }] });
+    expect(checkout.checkGit('git checkout -f')).toBeNull();
+    expect(checkout.checkGit('git checkout main')?.ruleId).toBe('git-protected');
+
+    const restore = checkerWith({ safe_flags: [{ sub: 'restore', flags: [], value_flags: [], max_positionals: 1 }] });
+    expect(restore.checkGit('git restore f.ts')).toBeNull();
+    expect(restore.checkGit('git restore --staged f.ts')?.ruleId).toBe('git-protected');
+  });
+
+  test('a subcommand in safe_subcommands stays unconditionally safe', () => {
+    const status = checkerWith({ safe_flags: [{ sub: 'status', flags: [], value_flags: [], max_positionals: 0 }] });
+    expect(status.checkGit('git status --anything goes here')).toBeNull();
+  });
+});
+
 describe('command-rules: shell line continuations are removed before tokenization', () => {
   test('a continued git executable remains one protected command', () => {
     expect(checkGit('g\\\nit push')?.ruleId).toBe('git-protected');

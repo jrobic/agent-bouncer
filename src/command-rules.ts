@@ -12,8 +12,8 @@
 // TOML: `checkout`'s pathspec detection and `restore`'s index-only form
 // (`--staged` plus one or more pathspecs) both need real structural parsing
 // (arbitrary positional counts, ref vs. pathspec shape) that none of the
-// three declarative forms — ask_flags, safe_first_arg, safe_grammar — can
-// express as data.
+// four declarative forms — ask_flags, safe_first_arg, safe_grammar,
+// safe_flags — can express as data.
 //
 // ─── Known limits (this is a defense, not a sandbox) ─────────────────
 // The Bash matcher operates on the literal command STRING. Anything that
@@ -43,6 +43,7 @@ import type {
   CommandGitPolicy,
   CommandPolicy,
   SafeFirstArgRule,
+  SafeFlagsRule,
   SafeGrammarRule,
   SafeGrammarToken,
 } from './policy/schema.ts';
@@ -1481,7 +1482,7 @@ function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
   return pathspecs.length === 0 || pathspecs.some((t) => t.startsWith('-'));
 }
 
-// The interpreter for the three declarative git-conditional forms (see
+// The interpreter for the four declarative git-conditional forms (see
 // policy/schema.ts). `checkout` and `restore` fall through to the two
 // named engine functions above; every other subcommand not in
 // `safe_subcommands` and not covered by any declarative entry is the
@@ -1491,6 +1492,38 @@ function checkGitRestoreNeedsConfirm(rest: readonly string[]): boolean {
 function safeGrammarTokenMatches(token: SafeGrammarToken, value: string): boolean {
   if (typeof token !== 'string') return GIT_SHA.test(value);
   return token === '*' ? !value.startsWith('-') : token === value;
+}
+
+// `safe_flags` is an allow-list over the tokens after the subcommand, read
+// lexically (ADR-0001: no git call, no filesystem read). Every token must
+// be one of: a `flags` option, verbatim; a `value_flags` option verbatim
+// followed by a value that does not start with `-`; `--name=value` for a
+// LONG `value_flags` option with a non-empty value; or a positional (no
+// leading `-`), within `max_positionals`. Abbreviated long options, grouped
+// short options, glued short values and `--` match none of these and so
+// ask — which is why this is an allow-list rather than a deny-list.
+function safeFlagsNeedConfirm(rule: SafeFlagsRule, rest: readonly string[]): boolean {
+  let positionals = 0;
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index]!;
+    if (!token.startsWith('-')) {
+      positionals++;
+      continue;
+    }
+    if (rule.flags.includes(token)) continue;
+    if (rule.value_flags.includes(token)) {
+      const value = rest[index + 1];
+      if (value === undefined || value.startsWith('-')) return true;
+      index++;
+      continue;
+    }
+    const equals = token.indexOf('=');
+    if (token.startsWith('--') && equals > 2 && equals < token.length - 1 && rule.value_flags.includes(token.slice(0, equals))) {
+      continue;
+    }
+    return true;
+  }
+  return positionals > rule.max_positionals;
 }
 
 function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: CommandGitPolicy): boolean {
@@ -1521,6 +1554,9 @@ function gitSubcommandNeedsConfirm(sub: string, rest: readonly string[], git: Co
     });
     return !matches;
   }
+
+  const safeFlags = git.safe_flags.find((e: SafeFlagsRule) => e.sub === sub);
+  if (safeFlags) return safeFlagsNeedConfirm(safeFlags, rest);
 
   if (sub === 'checkout') return checkGitCheckoutNeedsConfirm(rest);
   if (sub === 'restore') return checkGitRestoreNeedsConfirm(rest);

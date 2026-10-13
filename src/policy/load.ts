@@ -441,6 +441,7 @@ function mergeGitPolicy(
     ask_flags: overlayTakesPrecedence(entries.askFlags.map((t) => t.raw), baseline.ask_flags),
     safe_first_arg: overlayTakesPrecedence(entries.safeFirstArg.map((t) => t.raw), baseline.safe_first_arg),
     safe_grammar: overlayTakesPrecedence(entries.safeGrammar.map((t) => t.raw), baseline.safe_grammar),
+    safe_flags: baseline.safe_flags,
   };
 }
 
@@ -655,10 +656,10 @@ function baselineOnlyResult(warnings: readonly string[] = []): Omit<LoadResult, 
 }
 
 // Every subcommand the baseline already has an opinion on: unconditionally
-// safe, or governed by one of the three declarative tables, or one of the
+// safe, or governed by one of the four declarative tables, or one of the
 // two engine-escape names (checkout/restore). An overlay's own
-// ask_flags/safe_first_arg/safe_grammar entry for a `sub` in this set is a
-// SUBSTITUTION of vetted behavior, not a fresh addition — see
+// ask_flags/safe_first_arg/safe_grammar/safe_flags entry for a `sub` in
+// this set is a SUBSTITUTION of vetted behavior, not a fresh addition — see
 // lint.ts's lintGitConditionalRelaxation.
 function baselineGovernedSubs(git: RulesPolicy['command']['git']): ReadonlySet<string> {
   return new Set<string>([
@@ -666,6 +667,7 @@ function baselineGovernedSubs(git: RulesPolicy['command']['git']): ReadonlySet<s
     ...git.ask_flags.map((r) => r.sub),
     ...git.safe_first_arg.map((r) => r.sub),
     ...git.safe_grammar.map((r) => r.sub),
+    ...git.safe_flags.map((r) => r.sub),
     'checkout',
     'restore',
   ]);

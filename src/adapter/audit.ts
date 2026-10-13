@@ -326,6 +326,7 @@ export function conditionalRuleIdsOf(git: RulesPolicy['command']['git']): string
     ...git.ask_flags.map((r) => r.sub),
     ...git.safe_first_arg.map((r) => r.sub),
     ...git.safe_grammar.map((r) => r.sub),
+    ...git.safe_flags.map((r) => r.sub),
     'checkout',
     'restore',
   ]);
