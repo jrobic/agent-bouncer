@@ -690,7 +690,7 @@ system.
 | `-c <key>=<value>` | `allowed_config`: key and value |
 | `--config-env=<key>=<VAR>`, or `--config-env <key>=<VAR>` | `allowed_config`: key only, because git reads the value from `VAR` when it runs, so only an entry without a value allows it |
 | any other global option before the subcommand (`--exec-path`, `--namespace`, `-C <dir>`, `--no-pager`…) | `allowed_global_options`: by name; for `--name=value` the name is looked up and the value is not |
-| `VAR=<value> git …`, `env VAR=<value> git …`, and through `rtk`, `rtk proxy`, `command`, `exec`, `nice`, `time`, `builtin` | `allowed_env`: name and value |
+| `VAR=<value> git …`, `VAR+=<value> git …`, `env VAR=<value> git …`, and through `rtk`, `rtk proxy`, `command`, `exec`, `nice`, `time`, `builtin` | `allowed_env`: name and value; the name of `VAR+=<value>` keeps its `+`, so it matches no entry and asks |
 
 **Entry grammar** (`allowed_config` and `allowed_env`). An entry is either a
 name, which allows it at any value (`user.name`; a trailing `*` makes it a
@@ -1385,7 +1385,11 @@ reason = "..."   # mandatory, non-empty — this can only relax security
 
 For `allowed_global_options`, `allowed_config` and `allowed_env`, `value`
 is an entry as described in § `git-config-exec`: a name for any value, or
-`name=value` for one value.
+`name=value` for one value. `rules lint` rejects the layer for a value that
+names nothing: on `allowed_config` and `allowed_env` an empty name
+(`=true`) or a bare `*` (`*`, `*=true`), which would allow every key or
+variable; on `allowed_global_options` a value holding `=`, since the value of
+`--name=value` is not part of an entry and such an entry would never match.
 
 A `safe_first_arg`/`ask_flags`/`safe_grammar`/`safe_flags` overlay entry
 whose `sub` is already governed by the baseline (`init` is, through
