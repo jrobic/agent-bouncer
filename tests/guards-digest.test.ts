@@ -19,12 +19,13 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeFlagsRule, SafeGrammarRule } f
 //     `uniqueIndexOf`) — a TOML array has no "is this predicate function
 //     the live one" ambiguity a `test: (p) => …` closure had. It is
 //     digested exactly like the four regex tables below.
-//   • The git conditional chain (16 subcommands, formerly 15
-//     `if (sub === …)` blocks scraped out of command-rules.ts) is now DATA
-//     for 15 of them — ask_flags/safe_first_arg/safe_grammar/safe_flags,
-//     digested directly — plus the two named engine escapes (checkout,
-//     restore), whose behaviour is asserted the same way it always was
-//     (the GIT_CONDITIONAL_MATRIX below).
+//   • The git conditional chain (formerly 15 `if (sub === …)` blocks
+//     scraped out of command-rules.ts, covering 16 subcommands; 15 today —
+//     ticket 13 removed pull/merge, ticket 61 added init) is now DATA for
+//     13 of them — ask_flags (4), safe_first_arg (7), safe_grammar (1),
+//     safe_flags (1), digested directly — plus the two named engine
+//     escapes (checkout, restore), whose behaviour is asserted the same
+//     way it always was (the GIT_CONDITIONAL_MATRIX below).
 // ─────────────────────────────────────────────────────────────────────────
 
 function ruleDigest(
