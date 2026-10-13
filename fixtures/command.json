@@ -2655,17 +2655,12 @@
       "expected": []
     },
     {
-      "id": "git-global-option-ignored-for-a-conditional-subcommand-asks",
+      "id": "git-global-option-ignored-for-a-conditional-subcommand-allowed",
       "toolName": "Bash",
       "toolInput": {
-        "command": "git --no-pager branch -D x"
+        "command": "git --no-pager branch new-branch"
       },
-      "expected": [
-        {
-          "verdict": "confirm",
-          "ruleId": "git-protected"
-        }
-      ]
+      "expected": []
     },
     {
       "id": "fd-exec-destructive-short",
