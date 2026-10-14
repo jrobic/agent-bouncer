@@ -10,16 +10,16 @@
 import type { HarnessAction, HarnessOutputTable } from '../policy/schema.ts';
 import { isPreToolKind, type VerdictKind } from '../types.ts';
 
-// `flag` is UserPromptSubmit-only and `redact` post-tool-only (ADR-0008) —
-// src/adapter/dispatch.ts's strictestOf already throws on either, through the
-// same `isPreToolKind` test; this is defense in depth against the same
-// misrouting bug reaching this table through some OTHER path, exactly as the
-// pre-15a degradation table did.
+// `flag` is event-driven (UserPromptSubmit or PostToolUseFailure) and `redact`
+// is PostToolUse-only (ADR-0008). `strictestOf` already throws on either,
+// through the same `isPreToolKind` test; this is defense in depth against the
+// same misrouting bug reaching this table through some OTHER path, exactly as
+// the pre-15a degradation table did.
 export function degradePreToolUseVerdict(kind: VerdictKind, output: HarnessOutputTable): HarnessAction {
   if (!isPreToolKind(kind)) {
     throw new Error(
       `degradePreToolUseVerdict: a "${kind}" verdict reached the PreToolUse degradation table `
-        + `— not a pre-tool verdict (flag belongs to UserPromptSubmit, redact to the post-tool event)`,
+        + `— not a pre-tool verdict (flag belongs to event-driven prompt/failure paths, redact to PostToolUse)`,
     );
   }
   return output[kind];

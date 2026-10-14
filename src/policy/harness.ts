@@ -159,12 +159,9 @@ function requireNonEmptyString(raw: object, key: string, label: string, issues: 
 
 // Review round 2 R2-1: absence is legal here (unlike requireNonEmptyString
 // above) — only a PRESENT-but-invalid value is an issue. Used for the
-// keys that are genuinely optional on a harness's own protocol
-// (`input.prompt`, `events.prompt`, `events.session_start`, and
-// ADR-0008's `input.response`/`events.post_tool`) — a harness that never
-// judges prompts, has no doctor-facing SessionStart surface, or cannot
-// replace a tool result declares none rather than lying about a field it
-// has no envelope shape for.
+// optional prompt, session-start, post-tool, and post-tool-failure selectors
+// and events; each optional event surface is linted against its input and
+// template so no half-declared path silently does nothing.
 function optionalNonEmptyString(raw: object, key: string, label: string, issues: string[]): string | undefined {
   const value = field(raw, key);
   if (value === undefined) return undefined;
@@ -186,6 +183,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
   const cwd = requireNonEmptyString(raw, 'cwd', `${label}.input`, issues);
   const permission = optionalNonEmptyString(raw, 'permission', `${label}.input`, issues);
   const response = optionalNonEmptyString(raw, 'response', `${label}.input`, issues);
+  const error = optionalNonEmptyString(raw, 'error', `${label}.input`, issues);
   if (issues.length > 0) return { issues };
   return {
     value: {
@@ -197,6 +195,7 @@ function parseProtocolInput(raw: unknown, label: string): HarnessParseResult<Har
       cwd: cwd!,
       ...(permission !== undefined ? { permission } : {}),
       ...(response !== undefined ? { response } : {}),
+      ...(error !== undefined ? { error } : {}),
     },
     issues,
   };
@@ -209,6 +208,7 @@ function parseProtocolEvents(raw: unknown, label: string): HarnessParseResult<Ha
   const prompt = optionalNonEmptyString(raw, 'prompt', `${label}.events`, issues);
   const sessionStart = optionalNonEmptyString(raw, 'session_start', `${label}.events`, issues);
   const postTool = optionalNonEmptyString(raw, 'post_tool', `${label}.events`, issues);
+  const postToolFailure = optionalNonEmptyString(raw, 'post_tool_failure', `${label}.events`, issues);
   if (issues.length > 0) return { issues };
   return {
     value: {
@@ -216,6 +216,7 @@ function parseProtocolEvents(raw: unknown, label: string): HarnessParseResult<Ha
       ...(prompt !== undefined ? { prompt } : {}),
       ...(sessionStart !== undefined ? { session_start: sessionStart } : {}),
       ...(postTool !== undefined ? { post_tool: postTool } : {}),
+      ...(postToolFailure !== undefined ? { post_tool_failure: postToolFailure } : {}),
     },
     issues,
   };
@@ -359,22 +360,17 @@ const PROBE_VALUE = '"\\\n}';
 
 // Belt 3 (review round 2 C-1) — src/adapter/render.ts fills EXACTLY these
 // placeholder names, never more: `deny`/`ask` templates get `reason`,
-// `rule` (the bare ruleId), and `verdict` (the abstract verdict,
-// `runPreToolUse`); `context`/`session_start` templates get `context`
-// only (`runUserPromptSubmit`/`runSessionStart`); the `redact` template
-// gets `response` only (ADR-0008, `runPostTool`). Belt 2 above proves a
-// template's JSON SHAPE survives substitution; it says nothing about
-// whether the renderer can actually FILL a given name — a template
-// naming `${rule}` in a `context` template (or any name outside this
-// list) lints green under belt 2 alone but renders as a literal,
-// unsubstituted `${rule}` string forever, since nothing in `run.ts` ever
-// supplies it there.
+// `rule` (the bare ruleId), and `verdict`; `context`, `session_start`, and
+// `failure_context` get `context`; `redact` gets `response`. Belt 2 above
+// proves a template's JSON SHAPE survives substitution; this map proves
+// that the renderer can actually FILL each named placeholder.
 const TEMPLATE_ALLOWED_PLACEHOLDERS: Readonly<Record<HarnessTemplateKey, ReadonlySet<string>>> = {
   deny: new Set(['reason', 'rule', 'verdict']),
   ask: new Set(['reason', 'rule', 'verdict']),
   context: new Set(['context']),
   session_start: new Set(['context']),
   redact: new Set(['response']),
+  failure_context: new Set(['context']),
 };
 
 // ADR-0008 § 3: the post-tool answer IS the rewritten response. A `redact`
@@ -389,6 +385,16 @@ function redactTemplateIssues(template: HarnessTemplate, label: string): string[
   }
   if (template.exit !== undefined) {
     issues.push(`${label}.output.redact.exit must not be set — the post-tool answer is stdout, never a process status`);
+  }
+  return issues;
+}
+function failureContextTemplateIssues(template: HarnessTemplate, label: string): string[] {
+  const issues: string[] = [];
+  if (template.stdout === undefined || !template.stdout.includes('${context}')) {
+    issues.push(`${label}.output.failure_context.stdout must carry \${context} — the name-only alert is the whole answer`);
+  }
+  if (template.exit !== undefined) {
+    issues.push(`${label}.output.failure_context.exit must not be set — the alert is stdout, never a process status`);
   }
   return issues;
 }
@@ -452,13 +458,21 @@ function parseTemplate(raw: unknown, key: HarnessTemplateKey, label: string): Ha
 // required exactly when `events.session_start` is declared (review round
 // 2 R2-1 — this was unconditional before, forcing every harness to carry
 // a SessionStart doctor announcement even one with no such surface). A
-// raw table present for an action the output table does NOT route to it
-// — an `ask` table when `confirm` isn't `"ask"`, a `context` table when
+// raw table present for an action the output table does NOT route to it —
+// an `ask` table when `confirm` isn't `"ask"`, a `context` table when
 // `flag` isn't `"context"`, a `session_start` table with no matching
-// event — is a dead template: nothing in `run.ts` will ever render it,
-// so it is rejected rather than silently ignored (the author almost
-// certainly meant something else to read it, or forgot to wire the
-// event/output field that would make it live).
+// event — is a dead template. The event-specific `redact` and
+// `failure_context` templates follow the same event-to-template rule below.
+const EVENT_TEMPLATE_RULES: readonly {
+  event: 'session_start' | 'post_tool' | 'post_tool_failure';
+  template: HarnessTemplateKey;
+  validate?: (template: HarnessTemplate, label: string) => string[];
+}[] = [
+  { event: 'session_start', template: 'session_start' },
+  { event: 'post_tool', template: 'redact', validate: redactTemplateIssues },
+  { event: 'post_tool_failure', template: 'failure_context', validate: failureContextTemplateIssues },
+];
+
 function parseTemplates(
   outputRaw: object,
   output: HarnessOutputTable,
@@ -470,6 +484,7 @@ function parseTemplates(
 
   const neededActions = new Set<HarnessAction>([output.block, output.confirm, output.observe, output.flag]);
   neededActions.delete('silent');
+  if (events.prompt === undefined) neededActions.delete('context');
   for (const action of neededActions) {
     const parsed = parseTemplate(field(outputRaw, action), action as HarnessTemplateKey, label);
     issues.push(...parsed.issues);
@@ -479,40 +494,32 @@ function parseTemplates(
     issues.push(`${label}.output.ask is present but confirm is not "ask" — a dead template`);
   }
   if (!neededActions.has('context') && field(outputRaw, 'context') !== undefined) {
-    issues.push(`${label}.output.context is present but flag is not "context" — a dead template`);
+    issues.push(`${label}.output.context is present but flag is not "context" or events.prompt is not declared — a dead template`);
   }
 
-  if (events.session_start !== undefined) {
-    const sessionStartParsed = parseTemplate(field(outputRaw, 'session_start'), 'session_start', label);
-    issues.push(...sessionStartParsed.issues);
-    if (sessionStartParsed.value !== undefined) templates.session_start = sessionStartParsed.value;
-  } else if (field(outputRaw, 'session_start') !== undefined) {
-    issues.push(`${label}.output.session_start is present but events.session_start is not declared — a dead template`);
-  }
-
-  // ADR-0008 § 3: the post-tool answer has its own template, required
-  // exactly when `events.post_tool` is declared and a dead template
-  // otherwise — the same rule `session_start` follows above.
-  if (events.post_tool !== undefined) {
-    const redactParsed = parseTemplate(field(outputRaw, 'redact'), 'redact', label);
-    issues.push(...redactParsed.issues);
-    if (redactParsed.value !== undefined) {
-      issues.push(...redactTemplateIssues(redactParsed.value, label));
-      templates.redact = redactParsed.value;
+  // The event selects its own template; `output.flag` selects only the action.
+  for (const { event, template, validate } of EVENT_TEMPLATE_RULES) {
+    const rawTemplate = field(outputRaw, template);
+    if (events[event] === undefined) {
+      if (rawTemplate !== undefined) {
+        issues.push(`${label}.output.${template} is present but events.${event} is not declared — a dead template`);
+      }
+      continue;
     }
-  } else if (field(outputRaw, 'redact') !== undefined) {
-    issues.push(`${label}.output.redact is present but events.post_tool is not declared — a dead template`);
+    const parsed = parseTemplate(rawTemplate, template, label);
+    issues.push(...parsed.issues);
+    if (parsed.value !== undefined) {
+      if (validate !== undefined) issues.push(...validate(parsed.value, label));
+      templates[template] = parsed.value;
+    }
   }
 
   if (issues.length > 0) return { issues };
   return { value: templates, issues };
 }
 
-// Review round 2 R2-1: `input.prompt`/`events.prompt` and
-// `output.flag`/`events.prompt` are pairs that must agree — needs
-// input+events+output all parsed together (unlike every check above,
-// which is local to one sub-table), so this runs from
-// parseHarnessProtocol once all three succeed.
+// Event selectors and output actions are cross-table rules, so these checks
+// run from parseHarnessProtocol after all three tables have parsed.
 function protocolCoherenceIssues(
   input: HarnessProtocolInput,
   events: HarnessProtocolEvents,
@@ -523,26 +530,36 @@ function protocolCoherenceIssues(
   if (events.prompt !== undefined && input.prompt === undefined) {
     issues.push(`${label}.input.prompt is required when events.prompt is declared`);
   }
-  if (events.prompt === undefined && output.flag !== 'silent') {
+  if (events.prompt === undefined && events.post_tool_failure === undefined && output.flag !== 'silent') {
     issues.push(
-      `${label}.output.flag must be "silent" when events.prompt is not declared — this harness never judges a prompt`,
+      `${label}.output.flag must be "silent" when neither events.prompt nor events.post_tool_failure is declared`,
     );
   }
-  // ADR-0008 § 3: `input.response` and `events.post_tool` are a lockstep
-  // pair (a post-tool event with no response to rewrite, or a selector no
-  // event ever reads), and the post-tool event must not share a name with
-  // another event — run() routes post_tool before pre_tool, so a shared
-  // name would send every tool call to the post-tool branch, unjudged.
+  // ADR-0008 § 3: the response selector and post-tool event are a lockstep
+  // pair; the same rule applies to the error selector and failure event
+  // described in ADR-0008 § 9. Event names must be unique across all kinds.
   if (events.post_tool !== undefined && input.response === undefined) {
     issues.push(`${label}.input.response is required when events.post_tool is declared`);
   }
   if (events.post_tool === undefined && input.response !== undefined) {
     issues.push(`${label}.input.response is declared but events.post_tool is not — a dead selector`);
   }
-  if (events.post_tool !== undefined) {
-    const others = [events.pre_tool, events.prompt, events.session_start];
-    if (others.includes(events.post_tool)) {
-      issues.push(`${label}.events.post_tool must differ from every other declared event name`);
+  if (events.post_tool_failure !== undefined && input.error === undefined) {
+    issues.push(`${label}.input.error is required when events.post_tool_failure is declared`);
+  }
+  if (events.post_tool_failure === undefined && input.error !== undefined) {
+    issues.push(`${label}.input.error is declared but events.post_tool_failure is not — a dead selector`);
+  }
+  const declaredEvents = Object.entries(events).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string',
+  );
+  const eventNames = new Map<string, string>();
+  for (const [kind, name] of declaredEvents) {
+    const previous = eventNames.get(name);
+    if (previous !== undefined) {
+      issues.push(`${label}.events.${previous} and ${kind} must have different event names`);
+    } else {
+      eventNames.set(name, kind);
     }
   }
   return issues;

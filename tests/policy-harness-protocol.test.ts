@@ -386,11 +386,13 @@ describe('review round 2 R2-1: minimal declaration (no prompt/session_start surf
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
 
-  test('events.prompt absent with flag != "silent" rejects the block as a unit', () => {
+  test('flag = "context" requires a prompt or failure event', () => {
     const protocol = replaceOne(minimalProtocol(), 'flag = "silent"', 'flag = "context"');
     const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
     expect(
-      result.warnings.some((w) => w.includes('output.flag must be "silent" when events.prompt is not declared')),
+      result.warnings.some((w) =>
+        w.includes('output.flag must be "silent" when neither events.prompt nor events.post_tool_failure is declared')
+      ),
     ).toBe(true);
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
@@ -498,11 +500,118 @@ describe('ADR-0008: the post-tool event (events.post_tool, input.response, outpu
     [
       'post_tool sharing the pre_tool event name',
       (p: string) => replaceOne(p, 'post_tool = "PostToolUse"', 'post_tool = "PreToolUse"'),
-      'events.post_tool must differ from every other declared event name',
+      'events.pre_tool and post_tool must have different event names',
     ],
   ])('%s rejects the block as a unit', (_label, transform, message) => {
     const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', transform(postToolProtocol()))]);
     expect(result.warnings.some((w) => w.includes(message))).toBe(true);
+    expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
+  });
+
+  test('post_tool_failure colliding with post_tool is rejected by event-name uniqueness', () => {
+    const bothPostToolEvents = postToolProtocol()
+      .replace('response = "tool_response"', 'response = "tool_response"\nerror = "error"')
+      .replace('post_tool = "PostToolUse"', 'post_tool = "PostToolUse"\npost_tool_failure = "PostToolUse"');
+    const protocol = `${bothPostToolEvents}\n[harness.protocol.output.failure_context]\n`
+      + `stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":\${context}}}'\n`;
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
+    expect(result.warnings.some((warning) => warning.includes('events.post_tool and post_tool_failure must have different event names')))
+      .toBe(true);
+    expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
+  });
+});
+
+describe('PostToolUseFailure event (events.post_tool_failure, input.error, output.failure_context)', () => {
+  function postToolFailureProtocol(): string {
+    return `${
+      replaceOne(
+        replaceOne(minimalProtocol(), 'cwd = "cwd"', 'cwd = "cwd"\nerror = "error"'),
+        'pre_tool = "PreToolUse"',
+        'pre_tool = "PreToolUse"\npost_tool_failure = "PostToolUseFailure"',
+      )
+    }\n[harness.protocol.output.failure_context]\nstdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":\${context}}}'\n`;
+  }
+
+  test('a complete declaration loads the failure event, selector and event-specific template', () => {
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', postToolFailureProtocol())]);
+    expect(result.warnings).toEqual([]);
+    const protocol = result.policy.harness.find((h) => h.id === 'acme')?.protocol;
+    expect(protocol?.events.post_tool_failure).toBe('PostToolUseFailure');
+    expect(protocol?.input.error).toBe('error');
+    expect(protocol?.templates.failure_context).toEqual({
+      stdout: '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":${context}}}',
+    });
+  });
+
+  test('flag = "context" on a failure-only harness uses failure_context without a prompt template', () => {
+    const protocol = replaceOne(postToolFailureProtocol(), 'flag = "silent"', 'flag = "context"');
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', protocol)]);
+    expect(result.warnings).toEqual([]);
+    const parsed = result.policy.harness.find((h) => h.id === 'acme')?.protocol;
+    expect(parsed?.events.prompt).toBeUndefined();
+    expect(parsed?.output.flag).toBe('context');
+    expect(parsed?.templates.failure_context).toBeDefined();
+  });
+
+  test.each([
+    [
+      'event without input.error',
+      (p: string) => replaceOne(p, '\nerror = "error"', ''),
+      'input.error is required when events.post_tool_failure is declared',
+    ],
+    [
+      'input.error without event',
+      (p: string) => replaceOne(p, '\npost_tool_failure = "PostToolUseFailure"', ''),
+      'input.error is declared but events.post_tool_failure is not',
+    ],
+    [
+      'event without failure_context template',
+      (p: string) =>
+        replaceOne(
+          p,
+          `\n[harness.protocol.output.failure_context]\nstdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":\${context}}}'\n`,
+          '',
+        ),
+      'output.failure_context must be a table',
+    ],
+    [
+      'failure_context template without event or selector',
+      (p: string) =>
+        replaceOne(
+          replaceOne(p, '\npost_tool_failure = "PostToolUseFailure"', ''),
+          '\nerror = "error"',
+          '',
+        ),
+      'output.failure_context is present but events.post_tool_failure is not declared',
+    ],
+    [
+      'failure_context template without context',
+      (p: string) =>
+        replaceOne(
+          p,
+          `"additionalContext":\${context}`,
+          `"additionalContext":"fixed"`,
+        ),
+      'output.failure_context.stdout must carry ${context}',
+    ],
+    [
+      'failure_context template with an exit code',
+      (p: string) => `${p}exit = 2\n`,
+      'output.failure_context.exit must not be set',
+    ],
+    [
+      'failure event sharing the pre_tool name',
+      (p: string) =>
+        replaceOne(
+          p,
+          'post_tool_failure = "PostToolUseFailure"',
+          'post_tool_failure = "PreToolUse"',
+        ),
+      'events.pre_tool and post_tool_failure must have different event names',
+    ],
+  ])('%s rejects the declaration as a unit', (_label, transform, message) => {
+    const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', transform(postToolFailureProtocol()))]);
+    expect(result.warnings.some((warning) => warning.includes(message))).toBe(true);
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
 });

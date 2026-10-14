@@ -3,7 +3,8 @@
 // Code settings.json reader — reads the JSON file named by this codec's
 // own convention (`<configDir>/settings.json`, Claude Code's own shape)
 // under the TARGET harness's account directory, checks that each of its
-// declared events (`protocol.events.pre_tool`/`prompt`/`session_start`)
+// declared events (`protocol.events.pre_tool`/`prompt`/`session_start`/
+// `post_tool`/`post_tool_failure`)
 // names a command whose executable basename is `bouncer`, whose args
 // contain `run` and — for any harness other than `claude-code` — also
 // `--harness <id>` (a bare `bouncer run` under a non-default harness would
@@ -242,13 +243,56 @@ function evaluateMatcherCoverage(entries: readonly RawHookEntry[], expectedTools
   return allCovered ? { kind: 'covers' } : { kind: 'gap' };
 }
 
-export type WiringEventKind = 'pre_tool' | 'prompt' | 'session_start' | 'post_tool';
+export const WIRING_EVENT_KINDS = ['pre_tool', 'prompt', 'session_start', 'post_tool', 'post_tool_failure'] as const;
+export type WiringEventKind = (typeof WIRING_EVENT_KINDS)[number];
 
-// ADR-0008 § 7 (decision F6, all tools): a PostToolUse matcher must cover
-// ANY tool, not only the declared ones — an MCP tool or a tool added by a
-// later release must be redacted too. This name is in no tools map; only a
-// matcher meant for every tool (absent, `*`, `.*`) covers it.
+// ADR-0008 § 7: no allow-list; a future or MCP tool can also
+// return a protected value. Only a matcher intended for every tool (no
+// matcher, `*`, or `.*`) is a sound wiring; tool-name enumerations are not.
 const ANY_TOOL_PROBE = 'bouncer__any_tool__probe';
+
+type WiringEventRule =
+  | {
+    readonly matcherCoverage: 'guarded-tools';
+    readonly missingConsequence: string;
+    readonly missingEntry: false;
+    readonly coverageGap: (harnessId: string) => string;
+  }
+  | {
+    readonly matcherCoverage: 'all-tools';
+    readonly missingConsequence: string;
+    readonly missingEntry: true;
+    readonly coverageGap: string;
+  }
+  | {
+    readonly matcherCoverage?: undefined;
+    readonly missingConsequence: string;
+    readonly missingEntry: false;
+  };
+
+const WIRING_EVENT_RULES: Readonly<Record<WiringEventKind, WiringEventRule>> = {
+  pre_tool: {
+    matcherCoverage: 'guarded-tools',
+    missingConsequence: 'this event runs unguarded',
+    missingEntry: false,
+    coverageGap: (harnessId: string) =>
+      `does not cover every guarded tool declared by ${harnessId}'s protocol — some tool calls run unguarded`,
+  },
+  prompt: { missingConsequence: 'this event runs unguarded', missingEntry: false },
+  session_start: { missingConsequence: 'this event runs unguarded', missingEntry: false },
+  post_tool: {
+    matcherCoverage: 'all-tools',
+    missingConsequence: 'tool output reaches the model unredacted',
+    missingEntry: true,
+    coverageGap: 'does not cover every tool — some tool output reaches the model unredacted (wire it with no matcher)',
+  },
+  post_tool_failure: {
+    matcherCoverage: 'all-tools',
+    missingConsequence: 'failed tool output reaches the model without a name-only alert',
+    missingEntry: true,
+    coverageGap: 'does not cover every tool — some failed tool outputs miss the name-only alert (wire it with no matcher)',
+  },
+};
 
 // The entry a missing PostToolUse wiring needs (ADR-0008 § 7): no matcher,
 // the same bouncer binary the PreToolUse entry already runs when there is
@@ -277,6 +321,7 @@ export function checkWiring(
   label = 'settings.json',
 ): DoctorCheck {
   const eventName = protocol.events[eventKind];
+  const rule = WIRING_EVENT_RULES[eventKind];
   // Review round 2 R2-1: `prompt`/`session_start` are optional on a
   // harness's own declaration now — the caller (doctor.ts's
   // runDoctorChecks) skips this event entirely when the harness doesn't
@@ -296,19 +341,14 @@ export function checkWiring(
   const wired = entriesPointingAtBouncer(entriesFor(settings, eventName));
 
   if (wired.length === 0) {
-    if (eventKind === 'post_tool') {
-      return {
-        id,
-        ok: false,
-        message: `${eventName} hook is missing or does not point at ${HOOK_NAME} — tool output reaches the model `
-          + `unredacted; add this entry to hooks.${eventName} in ${label} (no matcher: every tool): `
-          + postToolEntryFor(settings, protocol, harnessId),
-      };
-    }
+    const entry = rule.missingEntry
+      ? `; add this entry to hooks.${eventName} in ${label} (no matcher: every tool): `
+        + postToolEntryFor(settings, protocol, harnessId)
+      : '';
     return {
       id,
       ok: false,
-      message: `${eventName} hook is missing or does not point at ${HOOK_NAME} — this event runs unguarded`,
+      message: `${eventName} hook is missing or does not point at ${HOOK_NAME} — ${rule.missingConsequence}${entry}`,
     };
   }
 
@@ -332,8 +372,8 @@ export function checkWiring(
     };
   }
 
-  if (eventKind === 'pre_tool' || eventKind === 'post_tool') {
-    const expected = eventKind === 'pre_tool'
+  if (rule.matcherCoverage !== undefined) {
+    const expected = rule.matcherCoverage === 'guarded-tools'
       ? representativeToolNames(protocol.tools)
       : [...representativeToolNames(protocol.tools), ANY_TOOL_PROBE];
     const coverage = evaluateMatcherCoverage(wired, expected);
@@ -346,18 +386,16 @@ export function checkWiring(
       };
     }
     if (coverage.kind === 'gap') {
+      const gap = rule.matcherCoverage === 'guarded-tools'
+        ? rule.coverageGap(harnessId)
+        : rule.coverageGap;
       return {
         id,
         ok: false,
-        message: eventKind === 'pre_tool'
-          ? `${eventName} hook is wired but its matcher does not cover every guarded tool declared by `
-            + `${harnessId}'s protocol — some tool calls run unguarded`
-          : `${eventName} hook is wired but its matcher does not cover every tool — some tool output reaches `
-            + `the model unredacted (wire it with no matcher)`,
+        message: `${eventName} hook is wired but its matcher ${gap}`,
       };
     }
   }
-
   const shadowSuffix = wiredInShadowMode(wired) ? ' (shadow mode)' : '';
   return { id, ok: true, message: `${eventName} is correctly wired${shadowSuffix}` };
 }

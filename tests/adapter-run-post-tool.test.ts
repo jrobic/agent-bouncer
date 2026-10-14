@@ -47,6 +47,19 @@ async function readLog(dir = '.claude'): Promise<string> {
 async function logEntries(dir = '.claude'): Promise<Record<string, unknown>[]> {
   return (await readLog(dir)).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
+const ENV_VALUE_AUDIT_FIELDS = [
+  'build',
+  'env_vars',
+  'family',
+  'harness',
+  'policy',
+  'rule_id',
+  'session_id',
+  'target',
+  'timestamp',
+  'tool_name',
+  'verdict',
+];
 
 function postToolUse(toolName: string, toolResponse: unknown): string {
   return JSON.stringify({
@@ -56,6 +69,65 @@ function postToolUse(toolName: string, toolResponse: unknown): string {
     tool_input: {},
     tool_response: toolResponse,
   });
+}
+
+function postToolFailure(toolName: string, error: string): string {
+  return JSON.stringify({
+    hook_event_name: 'PostToolUseFailure',
+    session_id: 'session-1',
+    tool_name: toolName,
+    tool_input: { command: 'fake command' },
+    error,
+  });
+}
+
+async function installSilentFlagHarness(): Promise<void> {
+  const dir = join(accountDir, '.agents', 'bouncer', 'harness.d');
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'failed-tool-alert-silent.toml'),
+    `
+[[harness]]
+id = "failed-tool-alert-silent"
+dir = ["~/.claude"]
+witness = "~/.claude"
+env = ["CLAUDE_CONFIG_DIR"]
+reason = "failed-tool alert test harness"
+
+[harness.protocol]
+transport = "stdin-json"
+wiring = "hook-file"
+
+[harness.protocol.input]
+event = "hook_event_name"
+tool = "tool_name"
+input = "tool_input"
+session = "session_id"
+cwd = "cwd"
+error = "error"
+
+[harness.protocol.events]
+pre_tool = "PreToolUse"
+post_tool_failure = "PostToolUseFailure"
+
+[harness.protocol.tools]
+Bash = { role = "command", command = "command" }
+
+[harness.protocol.output]
+block = "deny"
+confirm = "deny"
+observe = "silent"
+flag = "silent"
+on_malformed = "allow"
+
+[harness.protocol.output.deny]
+stdout = '{"decision":"deny","reason":\${reason}}'
+
+[harness.protocol.output.failure_context]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":\${context}}}'
+`,
+    'utf-8',
+  );
 }
 
 function toolResult(toolName: string, content: unknown, isError = false): string {
@@ -90,7 +162,86 @@ const RESPONSES: Readonly<Record<string, (text: string) => unknown>> = {
   mcp__probe__leak: (text) => [{ type: 'text', text: `mcp says: ${text}` }],
 };
 
-describe('post-tool redaction: Claude Code PostToolUse', () => {
+describe('post-tool redaction and failed-output alerts: Claude Code', () => {
+  test.each(SPELLINGS)('a failed tool output carrying %s gives the model a name-only alert', async (spelling) => {
+    const { stdout } = await run(postToolFailure('Bash', `Exit code 1\n${spelling}`), { env: ENV });
+    expect(JSON.parse(stdout!).hookSpecificOutput).toEqual({
+      hookEventName: 'PostToolUseFailure',
+      additionalContext:
+        'bouncer: the failed tool output above contains the value of FAKE_API_TOKEN, a protected environment variable. Do not repeat, store or send it; reference the variable by name.',
+    });
+    expect(stdout).not.toContain(VALUE);
+  });
+
+  test('clean failed output is silent and does not create an audit entry', async () => {
+    const { stdout } = await run(postToolFailure('Bash', 'Exit code 1\nordinary failure'), { env: ENV });
+    expect(stdout).toBeNull();
+    expect(await readLog()).toBe('');
+  });
+
+  test.each([
+    ['absent', JSON.stringify({ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: {} })],
+    ['non-string', JSON.stringify({ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: {}, error: 42 })],
+  ])('an %s failed-output error is silent and unlogged', async (_label, envelope) => {
+    const { stdout } = await run(envelope, { env: ENV });
+    expect(stdout).toBeNull();
+    expect(await readLog()).toBe('');
+  });
+
+  test('flag = "silent" logs a hit without rendering failure context', async () => {
+    await installSilentFlagHarness();
+    const result = await run(postToolFailure('Bash', VALUE), { harness: 'failed-tool-alert-silent', env: ENV });
+    expect(result.exit).toBeUndefined();
+    expect(result.stdout).toBeNull();
+    const entry = (await logEntries()).at(-1)!;
+    expect(entry).toMatchObject({
+      family: 'write-secret',
+      verdict: 'flag',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    expect(Object.keys(entry).toSorted()).toEqual(ENV_VALUE_AUDIT_FIELDS);
+  });
+
+  test('a hit logs tool and names only with the existing env-value fields', async () => {
+    await run(postToolFailure('Bash', `Exit code 1\n${VALUE} ${b64(VALUE)} ${hex(VALUE)}`), { env: ENV });
+    const log = await readLog();
+    const entry = (await logEntries()).at(-1)!;
+    expect(entry).toMatchObject({
+      family: 'write-secret',
+      verdict: 'flag',
+      rule_id: 'env-value',
+      target: '(failed tool output)',
+      tool_name: 'Bash',
+      env_vars: ['FAKE_API_TOKEN'],
+    });
+    expect(Object.keys(entry).toSorted()).toEqual(ENV_VALUE_AUDIT_FIELDS);
+    for (const spelling of SPELLINGS) expect(log).not.toContain(spelling);
+  });
+
+  test('multiple protected variables are all named in the alert and log', async () => {
+    const env = { ALPHA_TOKEN: 'alpha-value-0042', BETA_SECRET: 'beta-value-0042' };
+    const { stdout } = await run(
+      postToolFailure('Read', `Exit code 1\n${env.ALPHA_TOKEN} and ${env.BETA_SECRET}`),
+      { env },
+    );
+    expect(JSON.parse(stdout!).hookSpecificOutput.additionalContext).toBe(
+      'bouncer: the failed tool output above contains the values of ALPHA_TOKEN, BETA_SECRET, protected environment variables. Do not repeat, store or send them; reference the variables by name.',
+    );
+    expect((await logEntries()).at(-1)).toMatchObject({ tool_name: 'Read', env_vars: ['ALPHA_TOKEN', 'BETA_SECRET'] });
+    expect(stdout).not.toContain(env.ALPHA_TOKEN);
+    expect(stdout).not.toContain(env.BETA_SECRET);
+  });
+
+  test('--shadow logs a hit without sending the alert', async () => {
+    const { stdout } = await run(postToolFailure('Bash', `Exit code 1\n${VALUE}`), { env: ENV, shadow: true });
+    expect(stdout).toBeNull();
+    expect((await logEntries()).at(-1)).toMatchObject({
+      verdict: 'flag',
+      env_vars: ['FAKE_API_TOKEN'],
+      mode: 'shadow',
+    });
+  });
+
   for (const [toolName, response] of Object.entries(RESPONSES)) {
     test.each(SPELLINGS)(`${toolName}: %s is replaced in the response's own shape`, async (spelling) => {
       const { stdout, exit } = await run(postToolUse(toolName, response(spelling)), { env: ENV });
@@ -309,6 +460,49 @@ describe('post-tool redaction: a failure never falls through to silence (decisio
     expectNoValueAnywhere(log, stdout);
   });
 
+  test('failure-event scanner errors stay silent and log only fixed policy warnings', async () => {
+    const { stdout, exit } = await run(postToolFailure('Bash', `Exit code 1\n${VALUE}`), { env: unreadableEnv() });
+    const log = await readLog();
+    const warnings = (await logEntries()).filter((entry) => entry.kind === 'policy-warning').map((entry) => entry.message);
+    expect({ stdout, exit }).toEqual({ stdout: null, exit: undefined });
+    expect(warnings).toEqual([
+      'post-tool failure alert check failed, retrying with the embedded baseline',
+      'post-tool failure alert check failed',
+    ]);
+    expectNoValueAnywhere(log, stdout);
+  });
+
+  test('a transient environment read failure retries against the baseline and logs the finding', async () => {
+    let reads = 0;
+    const flaky: Record<string, string> = {};
+    Object.defineProperty(flaky, 'FAKE_API_TOKEN', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        if (reads === 1) throw new Error('first environment read failed');
+        return VALUE;
+      },
+    });
+    const { stdout } = await run(postToolFailure('Bash', `Exit code 1\n${VALUE}`), { env: flaky });
+    expect(JSON.parse(stdout!).hookSpecificOutput.additionalContext).toContain('FAKE_API_TOKEN');
+    expect((await logEntries()).at(-1)).toMatchObject({ verdict: 'flag', env_vars: ['FAKE_API_TOKEN'] });
+    expect(await readLog()).not.toContain('first environment read failed');
+  });
+
+  test('a failed alert render logs only the fixed warning, never exception text', async () => {
+    spies.push(
+      spyOn(render, 'renderFailureContext').mockImplementationOnce(() => {
+        throw new Error('renderer rejected a harmless context');
+      }),
+    );
+    const { stdout, exit } = await run(postToolFailure('Bash', VALUE), { env: ENV });
+    expect({ stdout, exit }).toEqual({ stdout: null, exit: undefined });
+    const entries = await logEntries();
+    const warnings = entries.filter((entry) => entry.kind === 'policy-warning').map((entry) => entry.message);
+    expect(warnings).toEqual(['post-tool failure alert render failed']);
+    expect(await readLog()).not.toContain('renderer rejected a harmless context');
+  });
+
   test('--shadow: a failure prints nothing either', async () => {
     expect((await run(postToolUse('Bash', RESPONSES.Bash!(VALUE)), { env: unreadableEnv(), shadow: true })).stdout).toBeNull();
   });
@@ -332,8 +526,10 @@ describe('post-tool redaction: a failure never falls through to silence (decisio
     const response = RESPONSES.Bash!(`${VALUE} ${b64(VALUE)} ${hex(VALUE)}`);
     const { stdout } = await run(postToolUse('Bash', response), { env: ENV });
     const log = await readLog();
+    const entry = (await logEntries()).at(-1)!;
     expect(log).toContain('"env_vars":["FAKE_API_TOKEN"]');
     expect(log).toContain('"tool_name":"Bash"');
+    expect(Object.keys(entry).toSorted()).toEqual(ENV_VALUE_AUDIT_FIELDS);
     expectNoValueAnywhere(log, stdout);
   });
 });
@@ -345,21 +541,33 @@ describe('post-tool redaction: one switch, the env-value row (decisions H3, H6)'
     await writeFile(join(dir, 'policy.toml'), toml, 'utf-8');
   }
   const envelope = postToolUse('Bash', RESPONSES.Bash!(VALUE));
+  const failureEnvelope = postToolFailure('Bash', `Exit code 1\n${VALUE}`);
 
-  test('[[override]] disable: redaction is off', async () => {
+  test('[[override]] disable: redaction and failed-output alert are off', async () => {
     await overlay('[[override]]\nrule = "env-value"\naction = "disable"\nreason = "fixtures share the dev password"\n');
     expect((await run(envelope, { env: ENV })).stdout).toBeNull();
+    expect((await run(failureEnvelope, { env: ENV })).stdout).toBeNull();
+    expect(await readLog()).toBe('');
   });
 
-  test('[[override]] relax: redaction is off too', async () => {
+  test('[[override]] relax: redaction and failed-output alert are off too', async () => {
     await overlay('[[override]]\nrule = "env-value"\naction = "relax"\nverdict = "confirm"\nreason = "review each write"\n');
     expect((await run(envelope, { env: ENV })).stdout).toBeNull();
+    expect((await run(failureEnvelope, { env: ENV })).stdout).toBeNull();
+    expect(await readLog()).toBe('');
   });
 
   test('[[override]] replace governs writes only: an output its regex does not match is still redacted (H6)', async () => {
     await overlay('[[override]]\nrule = "env-value"\naction = "replace"\nregex = "^only-this$"\nreason = "only one text"\n');
     const { stdout } = await run(envelope, { env: ENV });
     expect(updatedToolOutput(stdout)).toEqual(RESPONSES.Bash!(MARKER));
+  });
+
+  test('[[override]] replace controls writes only: a non-matching failed output still alerts', async () => {
+    await overlay('[[override]]\nrule = "env-value"\naction = "replace"\nregex = "^only-this$"\nreason = "only one text"\n');
+    const { stdout } = await run(failureEnvelope, { env: ENV });
+    expect(JSON.parse(stdout!).hookSpecificOutput.hookEventName).toBe('PostToolUseFailure');
+    expect(stdout).toContain('FAKE_API_TOKEN');
   });
 });
 
