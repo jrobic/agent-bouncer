@@ -1963,7 +1963,7 @@
         }
       ],
       "knownLimit": true,
-      "knownLimitReason": "ask_flags cannot tell that -mfix is a glued message value, so the f in the value matches the newly listed -f; separating the value as -m fix avoids this over-confirmation"
+      "knownLimitReason": "ask_flags cannot identify -mfix as a glued message value, so its f matches -f; writing -m fix keeps the value separate and avoids this over-confirmation"
     },
     {
       "id": "git-checkout-grouped-force-quiet-asks",
@@ -2005,10 +2005,23 @@
       ]
     },
     {
-      "id": "git-checkout-grouped-ours-asks",
+      "id": "git-checkout-long-ours-prefix-asks",
       "toolName": "Bash",
       "toolInput": {
         "command": "git checkout --our f"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-ours-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --ours f"
       },
       "expected": [
         {
@@ -2145,6 +2158,30 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "git checkout -t origin/x"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-abbreviated-detach-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --det"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-conflict-equals-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --conflict=merge main"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-abbreviated-track-branch-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --tr=direct -b x origin/x"
       },
       "expected": []
     },

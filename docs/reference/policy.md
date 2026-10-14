@@ -539,12 +539,12 @@ rewritten.
 **Known limit.** The options that take a value are unknown to `ask_flags`
 (no field names them), so a value can be read as options. A value glued to
 a short option reads as more letters (`git switch -cfix`,
-`git tag -mfix v1`): the `f` in the tag message value matches the newly
-listed `-f`; the existing `git tag -mdone` limit comes from `-d`. So does
-a value in the next token that starts with `-`
-(`git branch --sort -committerdate`): a letter of the value can coincide
-with a listed option and the command asks once too often. The error is on
-the safe side. A separated value that does not start with `-`
+`git tag -mfix v1`): the `f` in the tag message matches listed `-f`;
+`git tag -mdone` asks because its message contains listed `-d`.
+A value in the next token that starts with `-`
+(`git branch --sort -committerdate`) can also contain a listed option and
+cause one unnecessary confirmation. The error is on the safe side.
+A separated value that does not start with `-`
 (`git switch -c fix`) does not ask; for one that does, write
 `--opt=value` (`git branch --sort=-committerdate` does not ask).
 `fixtures/command.json` pins the glued and separated limits
@@ -557,9 +557,9 @@ the safe side. A separated value that does not start with `-`
 options, `--name=value` and strict long-option prefixes (including a prefix
 with `=value`) ask. That covers `-f`, `-B`, `--ours`, `--theirs`, `-p` and
 `--patch`, including grouped or abbreviated spellings. `--`, pathspecs and
-the two-positional `checkout <ref> <path>` form keep their existing
-confirmation behavior; ordinary branch switches and branch creation remain
-safe. As with every `ask_flags` row, a value glued to a short option can be
+the two-positional `checkout <ref> <path>` form also asks for confirmation;
+ordinary branch switches and branch creation remain safe.
+As with every `ask_flags` row, a value glued to a short option can be
 read as flags: `git checkout -bfix` asks because its `f` matches `-f`;
 `git checkout -b fix` remains safe. The known limit is pinned by
 `known-limit-git-checkout-glued-value-letter`.

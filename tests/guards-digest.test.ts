@@ -557,8 +557,10 @@ describe('guards-digest: tamper lock — the git-config-exec allow-lists', () =>
 // form left to pair into this matrix's {reading, mutating} shape — see
 // tests/command-rules.test.ts's dedicated "always ask in the trunk
 // baseline" block instead — and ticket 61 adding `init` (14 → 15), the
-// first subcommand governed by `safe_flags`. It is a pure BEHAVIOURAL
-// lock (calls checkGit with real commands), so it does not care whether
+// first subcommand governed by `safe_flags`. Ticket 64 changes checkout's
+// mutating case from `git checkout -f main` to `git checkout --our f` to cover
+// long-option-prefix matching. It is a pure BEHAVIOURAL lock (calls checkGit
+// with real commands), so it does not care whether
 // the decision underneath comes from a TS if-chain or from TOML data — it
 // keeps testing the OBSERVABLE property regardless of mechanism, which is
 // exactly why it survives the repointing untouched.

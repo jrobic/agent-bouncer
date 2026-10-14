@@ -14,13 +14,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
-- Git's destructive-option checks now confirm forced branch copies
-  (`branch -C`), forced tag moves (`tag -f` / `--force`), and grouped,
-  abbreviated or `=value` spellings of `checkout`'s destructive options.
-  `checkout` pathspec and `--` handling, safe branch-switch/create forms,
-  and `switch --orphan` are unchanged. Because the shared matcher cannot
-  distinguish a glued value, `git checkout -bfix` and `git tag -mfix v1`
-  can over-confirm; write `git checkout -b fix` or `git tag -m fix v1`.
+- **Git destructive-option checks now confirm branch force-copies, forced tag
+  moves, and destructive checkout option spellings.** Baseline `branch -C`
+  and tag `-f` / `--force` ask, as do grouped, abbreviated, and `=value`
+  spellings of checkout's destructive options. `checkout` pathspec and `--`
+  handling, safe branch-switch/create forms, and `switch --orphan` are
+  unchanged. Glued values can over-confirm: `git checkout -bfix` and
+  `git tag -mfix v1`; write `git checkout -b fix` or `git tag -m fix v1`.
+  Corpus replay: six command strings changed from allow to confirm under the
+  baseline and four under the effective personal policy; all were probes.
+  Details: [`rules.command.git`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms)
 
 ## [1.10.0] - 2026-10-14
 
