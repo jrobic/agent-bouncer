@@ -732,7 +732,7 @@ system.
 | `-c <key>=<value>` | `allowed_config`: key and value |
 | `--config-env=<key>=<VAR>`, or `--config-env <key>=<VAR>` | `allowed_config`: key only, because git reads the value from `VAR` when it runs, so only an entry without a value allows it |
 | any other global option before the subcommand (`--exec-path`, `--namespace`, `-C <dir>`, `--no-pager`…) | `allowed_global_options`: by name; for `--name=value` the name is looked up and the value is not |
-| `VAR=<value> git …`, `VAR+=<value> git …`, `env VAR=<value> git …`, and through `rtk`, `rtk proxy`, `command`, `exec`, `nice`, `time`, `builtin` | `allowed_env`: name and value; the name of `VAR+=<value>` keeps its `+`, so it matches no entry and asks |
+| `VAR=<value> git …`, `VAR+=<value> git …`, `env VAR=<value> git …`, and through the prefixes and wrappers of § [What counts as the start of a command](#what-counts-as-the-start-of-a-command) (`rtk`, `command`, `timeout`, `xargs`…: `LC_ALL=C timeout 5 git …`) | `allowed_env`: name and value; the name of `VAR+=<value>` keeps its `+`, so it matches no entry and asks |
 
 **Entry grammar** (`allowed_config` and `allowed_env`). An entry is either a
 name, which allows it at any value (`user.name`; a trailing `*` makes it a
@@ -831,6 +831,94 @@ algorithm, not by a row of the six regex tables).
   not seen.
 - A binary named `git` started by a path (`/tmp/x/git status`) is judged as
   git, whatever it is. A `PATH=… git …` prefix asks, as `PATH` is not listed.
+
+## What counts as the start of a command
+
+`git-protected`, `git-config-exec`, `sudo` (privilege escalation) and
+`rm-rf-dangerous` judge a command by its name, so they first find where each
+command of a line starts. This list is the one definition they share.
+`tests/command-start-forms.ts` writes it once as forms around a command `X`
+and replays them on `git push`, `sudo ls`, `rm -rf /` and `git status`; the
+result is the `command-start-*` cases of `fixtures/command.json`. The env rows
+of `rules.secret.bash` find a command with their own pattern, the
+command-position lead-in described with them above.
+
+A command starts:
+
+1. **After a separator**: at the start of the line, after `;`, `&&`, `||`,
+   `|`, `&` or a newline.
+2. **Inside a grouping**: after `(` or `{`, including a `(` glued to the first
+   word (`(git push)`). A `)` or `}` that ends the last word, glued or separate,
+   is taken off, with any redirection after it. The body of a function
+   definition counts: `f() { git push; }`, `function f { git push; }`.
+3. **After a shell keyword**: `!`, `if`, `then`, `elif`, `else`, `while`,
+   `until`, `do`.
+4. **Inside a substitution**: `$( … )`, backticks, `<( … )` and `>( … )`. An
+   assignment `X=$( … )` is not a variable written in front of the command
+   inside the substitution: `STRAY=$(rtk git status --short | wc -l)` passes.
+5. **In the argument of a shell that reads a command line**: `bash`, `sh`,
+   `zsh` and `dash`, also started by a path (`/bin/bash`), with `-c`, also in
+   a group (`-lc`, `-ec`, `-euc`), and `eval`. The argument is read again as a
+   command line with these same rules, only when the shell itself starts a
+   command (after items 1 to 4, the prefixes and the wrappers). An argument
+   holding `$var`, `$( … )` or backticks is read too; those are opaque words
+   in it.
+6. **After a prefix**: an assignment `VAR=x` or `VAR+=x`, `rtk` (and
+   `rtk proxy`), `command`, `exec`, `nice` (`-n N`), `time` (`-p`) and
+   `builtin`.
+7. **After a wrapper**, read with the shape of its arguments:
+
+| Wrapper | Options passed before the command |
+|---|---|
+| `timeout` | `-k`/`--kill-after` D, `-s`/`--signal` S, `--foreground`, `--preserve-status`, then the duration |
+| `xargs` | `-0`/`--null`, `-r`/`--no-run-if-empty`, `-t`/`--verbose`, `-n`/`--max-args` N, `-I` R, `-P`/`--max-procs` N, `-L` N, `-d`/`--delimiter` C, `-E` S, `-s`/`--max-chars` N, `--replace[=R]`, `--max-lines[=N]`, `--eof[=S]` |
+| `env` | `-i`, `-u` NAME, `VAR=x`, and `-S` STRING, whose words are read as the start of a command line |
+| `nohup` | none |
+| `watch` | `-n`/`--interval` S, `-d`/`--differences[=permanent]`, `-t`/`--no-title`, `-x`/`--exec`, `-c`/`--color`, `-g`/`--chgexit`, `-e`/`--errexit`, `-p`/`--precise`; without `-x`, watch runs its words with `sh -c`, so they are read as a command line (item 5) |
+
+Options are read the way getopt reads them: grouped (`-0r`), with a glued
+value (`-n1`, `-I{}`, `-sKILL`) or as `--name=value`; `--` ends them. An option
+that is not listed for a prefix or a wrapper makes the start uncertain: each
+rule then looks for its command name among the words that follow
+(`timeout --verbose 5 git push` asks).
+
+**Depth.** A command line read again (item 5, `env -S`, `watch`) and the body
+of a backtick or a process substitution are read down to three levels below
+the line: `bash -c "eval 'eval git push'"` asks; a fourth level is not read.
+`$( … )` is read at any depth.
+
+**The reading before this list stays.** Each rule first reads every segment
+of the line the way it did before, from its first word past the prefixes of
+item 6, then every command this list finds. A command that asked before
+therefore asks with the same rule and reason, and no verdict loosens:
+`(cd /tmp && git status)` still asks, as that reading takes `status)` for the
+subcommand. `rm-rf-dangerous` also still reads every `rm` word of the line
+wherever it stands (`echo rm -rf /` is blocked). The path scans
+(protected-write targets, the secret path scan, `docker-destructive`) keep
+their own reading.
+
+**Not the start of a command** (known limits):
+
+- the command after a `case` pattern (`case x in a) git push;; esac`);
+- a function called by name: its body is judged where it is defined;
+- the argument of `bash -c "$cmd"`: the command a variable names is known
+  only when the shell runs;
+- the words `xargs` reads on its standard input: `echo -D | xargs git branch x`
+  is judged as `git branch x`;
+- a command run on another machine, in a virtual machine or in a container:
+  `ssh host '…'`, `limactl shell vm -- bash -c '…'`, `docker exec c sh -c '…'`;
+- `parallel`, `script -c`, and the wrappers not listed (`stdbuf`, `flock`,
+  `caffeinate`…);
+- a variable exported earlier (`export GIT_EXTERNAL_DIFF=…`, see
+  § [`git-config-exec`](#git-config-exec-what-may-stand-before-git)), and an
+  assignment written before a shell, `eval` or `watch`
+  (`GIT_SSH_COMMAND=x bash -c 'git fetch'`): like an export, it is not carried
+  into the command line read again;
+- a heredoc body, which is the input of a command, not a command line: its
+  lines keep the reading before this list (their first word only), and a
+  backtick bash runs in an unquoted heredoc (`cat <<EOF` … `` `git push` ``)
+  is not read;
+- a command line nested more than three levels down.
 
 ## The two algorithm-driven tables
 

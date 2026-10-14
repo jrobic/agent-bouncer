@@ -26,6 +26,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   under the baseline and four under the effective personal policy; all were
   probes.
   Details: [`rules.command.git`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms)
+- **Git, privilege escalation and `rm -rf` are judged wherever a command
+  starts, not only at the start of a segment.** A command in a subshell or a
+  brace group (`(git push)`, `{ sudo ls; }`), after a shell keyword (`if`,
+  `then`, `do`, `!`…), in a function body, a backtick or a process
+  substitution, in the argument of `bash`/`sh`/`zsh`/`dash -c` or `eval`
+  (three levels down at most), or behind `timeout`, `xargs`, `nohup`, `watch`
+  or `env -i`/`-u`/`-S` passed unjudged; it now gets the verdict it has on its
+  own. Each segment is still read as before first, so no verdict loosens.
+  A command sent to another machine, virtual machine or container (`ssh`,
+  `limactl shell`, `docker exec`), a `case` pattern, `bash -c "$cmd"` and the
+  words `xargs` reads on its input stay unjudged. The check was replayed on
+  127,838 distinct commands from real agent sessions: 32 command strings
+  changed under the baseline (31 from allow to confirm, one from confirm to
+  block) and 24 under the effective personal policy, none towards allow.
+  Under the baseline, 21 are real workflows (`for … do git worktree add …`,
+  `xargs git branch -D < list`, `eval '… git worktree add …'`), 10 are probes
+  and one is prose stored as a command.
+  Details: [What counts as the start of a command](docs/reference/policy.md#what-counts-as-the-start-of-a-command)
 
 ## [1.10.0] - 2026-10-14
 
