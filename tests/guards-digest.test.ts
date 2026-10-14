@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { checkBash as checkCommandBash, checkGit, GIT_BENIGN_PREFIXES, WRAPPER_OPTION_POLICIES } from '../src/command-rules.ts';
+import {
+  checkBash as checkCommandBash,
+  checkGit,
+  COMMAND_START_WRAPPERS,
+  type CommandStartWrapper,
+  GIT_BENIGN_PREFIXES,
+  WRAPPER_OPTION_POLICIES,
+} from '../src/command-rules.ts';
 import { BASELINE } from '../src/policy/baseline.ts';
 import type { AskFlagsRule, SafeFirstArgRule, SafeFlagsRule, SafeGrammarRule } from '../src/policy/schema.ts';
 
@@ -134,6 +141,45 @@ describe('guards-digest: every wrapper policy is effective and unknown options f
   }
 
   for (const wrapper of Object.keys(WRAPPER_OPTION_POLICIES)) {
+    test(`${wrapper} unknown option fails closed`, () => {
+      expect(checkCommandBash(`${wrapper} --unknown sudo apt`)?.ruleId).toBe('sudo');
+    });
+  }
+});
+
+function commandStartWrapperDigest(wrappers: Readonly<Record<string, CommandStartWrapper>>): string[] {
+  const list = (values: ReadonlySet<string> | undefined): string => `[${[...(values ?? [])].join(',')}]`;
+  return Object.entries(wrappers).map(([name, wrapper], index) =>
+    `${index} ${name} flags=${list(wrapper.flags)} args=${list(wrapper.optionsWithArg)} `
+    + `optional=${list(wrapper.optionalArg)} operands=${wrapper.operands ?? 0} `
+    + `assignments=${wrapper.acceptsAssignments === true} line=${list(wrapper.commandLineOptions)} `
+    + `shell-unless=${list(wrapper.shellOperandsUnless)}`
+  );
+}
+
+const EXPECTED_COMMAND_START_WRAPPER_DIGEST: readonly string[] = [
+  '0 rtk flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '1 command flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '2 exec flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '3 env flags=[-i] args=[-u,-S] optional=[] operands=0 assignments=true line=[-S] shell-unless=[]',
+  '4 nice flags=[] args=[-n] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '5 time flags=[-p] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '6 builtin flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '7 timeout flags=[--foreground,--preserve-status] args=[-k,--kill-after,-s,--signal] optional=[] operands=1 assignments=false line=[] shell-unless=[]',
+  '8 xargs flags=[-0,--null,-r,--no-run-if-empty,-t,--verbose] args=[-n,--max-args,-I,-P,--max-procs,-L,-d,--delimiter,-E,-s,--max-chars] optional=[--replace,--max-lines,--eof] operands=0 assignments=false line=[] shell-unless=[]',
+  '9 nohup flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '10 watch flags=[-d,-t,--no-title,-x,--exec,-c,--color,-g,--chgexit,-e,--errexit,-p,--precise] args=[-n,--interval] optional=[--differences] operands=0 assignments=false line=[] shell-unless=[-x,--exec]',
+];
+
+describe('guards-digest: the wrappers of the shared start of a command', () => {
+  test('names, options, arities, and order are frozen', () => {
+    // Tokenizer grammar like WRAPPER_OPTION_POLICIES, read by git, privilege
+    // escalation and rm -rf (docs/reference/policy.md § What counts as the
+    // start of a command). An added option widens what a wrapper hides.
+    expect(commandStartWrapperDigest(COMMAND_START_WRAPPERS)).toEqual([...EXPECTED_COMMAND_START_WRAPPER_DIGEST]);
+  });
+
+  for (const wrapper of Object.keys(COMMAND_START_WRAPPERS)) {
     test(`${wrapper} unknown option fails closed`, () => {
       expect(checkCommandBash(`${wrapper} --unknown sudo apt`)?.ruleId).toBe('sudo');
     });

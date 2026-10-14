@@ -1420,3 +1420,43 @@ describe('command-rules: flag-repetition rows stay linear under adversarial padd
     expect(elapsed).toBeLessThan(100);
   });
 });
+
+// The shared start of a command (tests/command-start-forms.ts holds the
+// forms) reads a shell, eval, watch or env -S argument again, and the body of
+// a backtick or process substitution, three levels below the line at most.
+// Malformed input gets a verdict, and nesting far past the bound stays fast.
+describe('command-rules: the start of a command under malformed and deeply nested input', () => {
+  test.each([
+    ['bash -c "git push', 'git-protected'],
+    ['bash -c', null],
+    ['bash -c \'\'', null],
+    ['eval', null],
+    ['env -S', null],
+    ['timeout', null],
+    ['xargs -n', null],
+    ['watch', null],
+    ['(', null],
+    ['{ }', null],
+    ['echo `', null],
+    ['echo `git push', 'git-protected'],
+    ['cat <(', null],
+    ['eval eval eval git push', 'git-protected'],
+    ['eval eval eval eval git push', null],
+  ])('%s answers %s', (cmd, ruleId) => {
+    expect(checkBash(cmd)?.ruleId ?? null).toBe(ruleId);
+  });
+
+  test.each([
+    ['20000 nested subshells', `${'('.repeat(20000)}git push${')'.repeat(20000)}`, 'git-protected'],
+    ['20000 keywords', `${'if '.repeat(20000)}git push`, 'git-protected'],
+    ['5000 wrappers', `${'timeout 5 '.repeat(5000)}git push`, 'git-protected'],
+    ['5000 nested process substitutions', `${'<('.repeat(5000)}git push${')'.repeat(5000)}`, null],
+    ['5000 nested watch', `${'watch '.repeat(5000)}git push`, null],
+  ])('%s answers %s in under 100ms', (_name, cmd, ruleId) => {
+    const t0 = performance.now();
+    const verdict = checkBash(cmd);
+    const elapsed = performance.now() - t0;
+    expect(verdict?.ruleId ?? null).toBe(ruleId);
+    expect(elapsed).toBeLessThan(100);
+  });
+});

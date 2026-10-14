@@ -7040,6 +7040,3340 @@
         "command": "claude plugin list"
       },
       "expected": []
+    },
+    {
+      "id": "command-start-git-push-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\ngit push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(git push)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( git push )"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && git push )"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (git push) )"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ git push; }"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { git push; }"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if git push; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then git push; fi"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif git push; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else git push; fi"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do git push; done"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until git push; do true; done"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do git push; done"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(git push)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `git push`"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(git push)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(git push)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(git push | wc -l)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"git push\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"git push\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"git push\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"git push\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'git push'\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "xargs-destructive"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (git push); fi"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(git push)\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'git push')"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"git push\"; done"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `git push`'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ git push; }'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 git push; }"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval git push'\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-ssh",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ssh h 'git push'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command sent to another machine is not judged: only the command on this one is"
+    },
+    {
+      "id": "command-start-git-push-limactl-shell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "limactl shell vm -- bash -c 'git push'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a virtual machine is not judged: bash is an argument of limactl, not the start of a command"
+    },
+    {
+      "id": "command-start-git-push-docker-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker exec c sh -c 'git push'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a container is not judged: sh is an argument of docker, not the start of a command"
+    },
+    {
+      "id": "command-start-git-push-case-pattern",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "case x in a) git push;; esac"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a case pattern is not read as a command start: the command after `a)` is not judged"
+    },
+    {
+      "id": "command-start-git-push-fourth-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"eval git push\\\"'\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command line is read again three levels deep at most: the fourth eval argument is not read"
+    },
+    {
+      "id": "command-start-sudo-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\nsudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(sudo ls)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( sudo ls )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && sudo ls )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (sudo ls) )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ sudo ls; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { sudo ls; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if sudo ls; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then sudo ls; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif sudo ls; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else sudo ls; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do sudo ls; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until sudo ls; do true; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do sudo ls; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(sudo ls)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `sudo ls`"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(sudo ls)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(sudo ls)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(sudo ls | wc -l)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"sudo ls\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"sudo ls\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"sudo ls\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"sudo ls\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'sudo ls'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (sudo ls); fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(sudo ls)\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'sudo ls')"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"sudo ls\"; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `sudo ls`'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ sudo ls; }'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 sudo ls; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval sudo ls'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-ssh",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ssh h 'sudo ls'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command sent to another machine is not judged: only the command on this one is"
+    },
+    {
+      "id": "command-start-sudo-limactl-shell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "limactl shell vm -- bash -c 'sudo ls'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a virtual machine is not judged: bash is an argument of limactl, not the start of a command"
+    },
+    {
+      "id": "command-start-sudo-docker-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker exec c sh -c 'sudo ls'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a container is not judged: sh is an argument of docker, not the start of a command"
+    },
+    {
+      "id": "command-start-sudo-case-pattern",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "case x in a) sudo ls;; esac"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a case pattern is not read as a command start: the command after `a)` is not judged"
+    },
+    {
+      "id": "command-start-sudo-fourth-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"eval sudo ls\\\"'\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command line is read again three levels deep at most: the fourth eval argument is not read"
+    },
+    {
+      "id": "command-start-rm-rf-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\nrm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(rm -rf /)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( rm -rf / )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && rm -rf / )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (rm -rf /) )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ rm -rf /; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { rm -rf /; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if rm -rf /; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then rm -rf /; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif rm -rf /; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else rm -rf /; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do rm -rf /; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until rm -rf /; do true; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do rm -rf /; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(rm -rf /)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `rm -rf /`"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(rm -rf /)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(rm -rf /)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(rm -rf / | wc -l)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"rm -rf /\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"rm -rf /\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"rm -rf /\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"rm -rf /\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'rm -rf /'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (rm -rf /); fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(rm -rf /)\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'rm -rf /')"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"rm -rf /\"; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `rm -rf /`'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ rm -rf /; }'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 rm -rf /; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval rm -rf /'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-ssh",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ssh h 'rm -rf /'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command sent to another machine is not judged: only the command on this one is"
+    },
+    {
+      "id": "command-start-rm-rf-limactl-shell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "limactl shell vm -- bash -c 'rm -rf /'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a virtual machine is not judged: bash is an argument of limactl, not the start of a command"
+    },
+    {
+      "id": "command-start-rm-rf-docker-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker exec c sh -c 'rm -rf /'"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command run in a container is not judged: sh is an argument of docker, not the start of a command"
+    },
+    {
+      "id": "command-start-rm-rf-case-pattern",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "case x in a) rm -rf /;; esac"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-fourth-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"eval rm -rf /\\\"'\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command line is read again three levels deep at most: the fourth eval argument is not read"
+    },
+    {
+      "id": "command-start-git-status-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\ngit status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(git status)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( git status )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && git status )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (git status) )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ git status; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { git status; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if git status; then true; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then git status; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif git status; then true; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else git status; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do git status; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until git status; do true; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do git status; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(git status)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `git status`"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(git status)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(git status)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(git status | wc -l)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"git status\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"git status\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"git status\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"git status\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'git status'\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-status-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 git status"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-status-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 git status"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (git status); fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(git status)\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'git status')"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"git status\"; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `git status`'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ git status; }'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 git status; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval git status'\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-assignment-of-substitution-is-not-a-prefix",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "STRAY=$(rtk git status --short | wc -l)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-for-body-reads-a-safe-subcommand",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for f in a b; do git log -1 \"$f\"; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-dynamic-shell-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cmd=\"git push\"; bash -c \"$cmd\""
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "the argument of bash -c is a variable: the command it names is only known when the shell runs"
+    },
+    {
+      "id": "command-start-literal-xargs-stdin-arguments",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo -D | xargs git branch x"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "xargs adds the words it reads on standard input: `git branch x` is judged without the -D"
+    },
+    {
+      "id": "command-start-literal-glued-closer-keeps-the-segment-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(cd /tmp && git status)"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "the segment reading, kept so that no verdict loosens, reads `status)` as an unknown git subcommand"
+    },
+    {
+      "id": "command-start-literal-quoted-heredoc-body-is-data",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<'EOF'\nRun `sudo ls`, then (git push)\nif git push fails\nEOF"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-unquoted-heredoc-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<EOF\n`git push`\nEOF"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "bash runs a backtick in an unquoted heredoc body; heredoc bodies keep the segment reading, which does not read substitutions"
     }
   ]
 }
