@@ -31,6 +31,7 @@ import {
   readSettingsFile,
   settingsPathFor,
   type SettingsReadResult,
+  WIRING_EVENT_KINDS,
 } from './hook-file.ts';
 import { checkProfileShims, checkShim, checkShimBinary, readShimFile, shimPathFor } from './shim-file.ts';
 
@@ -64,11 +65,11 @@ export interface WiringCodec {
 // Shared by hook-file and codex-hooks (S-5 discipline: one assembly, not
 // two copies drifting apart) — both produce a real `SettingsReadResult`,
 // the same `{hooks: {...}}` shape `checkWiring`/`checkCanary` have always
-// read, merged or not. Skips an event this harness's own declaration
-// doesn't carry (review round 2 R2-1: `prompt`/`session_start` are
-// optional; ADR-0008's `post_tool` too), and only checks the canary
-// alongside `pre_tool` — there is exactly one PreToolUse-shaped canary per
-// harness, never one per event.
+// read, merged or not. Skips events absent from this harness's declaration:
+// `prompt`/`session_start` are optional; `post_tool` is declared by both
+// Claude Code and pi-agent, while `post_tool_failure` is currently Claude-only.
+// The canary is checked only alongside `pre_tool`: one PreToolUse-shaped
+// canary per harness, never one per event.
 function settingsShapedChecks(
   settingsResult: SettingsReadResult,
   protocol: HarnessProtocol,
@@ -76,7 +77,7 @@ function settingsShapedChecks(
   label: string,
 ): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
-  for (const eventKind of ['pre_tool', 'prompt', 'session_start', 'post_tool'] as const) {
+  for (const eventKind of WIRING_EVENT_KINDS) {
     if (protocol.events[eventKind] === undefined) continue;
     checks.push(checkWiring(settingsResult, protocol, harnessId, eventKind, label));
     if (eventKind === 'pre_tool') checks.push(checkCanary(settingsResult, protocol, label));

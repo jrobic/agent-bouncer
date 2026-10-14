@@ -210,15 +210,14 @@ export interface HarnessOutputTable {
   readonly ask_probe?: string;
 }
 
-// Keyed by the ACTION name (not the abstract verdict) — "silent" carries
-// no template, so this table only ever has up to four action entries —
-// plus `redact`, ADR-0008's post-tool answer: rendered when a tool's
-// response is rewritten, never reached through the output table.
-export type HarnessTemplateKey = 'deny' | 'ask' | 'context' | 'session_start' | 'redact';
+// Keyed by the action name (not the abstract verdict) — "silent" carries no
+// template. Event-specific answers use `redact` and `failure_context`, outside
+// the output table.
+export type HarnessTemplateKey = 'deny' | 'ask' | 'context' | 'session_start' | 'redact' | 'failure_context';
 
 // A template may render `stdout`, set the process `exit` code, or both —
-// Claude Code's four templates only ever set `stdout` (exit stays the
-// process default), a future shim-based harness may need `exit` instead.
+// Claude Code's templates only ever set `stdout` (exit stays the process
+// default), a future shim-based harness may need `exit` instead.
 export interface HarnessTemplate {
   readonly stdout?: string;
   readonly exit?: number;
@@ -248,6 +247,9 @@ export interface HarnessProtocolInput {
   // envelope (`tool_response` for Claude Code, the shim's `content` for
   // pi-agent). Kept in lockstep with `events.post_tool` by lint.
   readonly response?: string;
+  // The selector of a failed tool's error text, kept in lockstep with
+  // `events.post_tool_failure` by protocol lint (ADR-0008 § 9).
+  readonly error?: string;
 }
 
 export interface HarnessProtocolEvents {
@@ -258,6 +260,9 @@ export interface HarnessProtocolEvents {
   // rewrites to redact protected environment values. Optional: a harness
   // that cannot replace a tool result declares none and is never reached.
   readonly post_tool?: string;
+  // This failure event adds a name-only alert but cannot replace output
+  // already visible to the model (ADR-0008 § 9).
+  readonly post_tool_failure?: string;
 }
 
 // ADR-0006 § 3/6: the full declaration a harness's `run()` pipeline reads

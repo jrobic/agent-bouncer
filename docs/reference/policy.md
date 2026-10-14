@@ -290,22 +290,25 @@ barrier, like the rows above.
   when it ends the stream; a neighbour from the base64 alphabet (`/`, `_`,
   `-`, a letter) stays. The audit log records a `redact`
   verdict with the names ([Audit log reference](audit-log.md#verdict-entry)).
-  Limits of its own (a failed tool under Claude Code, on-disk copies of the
-  output): see the [Claude Code](../how-to/wire-into-claude-code.md#tool-output-redaction)
-  and [pi-agent](../how-to/wire-into-pi-agent.md) how-tos.
+  A failed Claude Code tool (ADR-0008 § 9) uses `PostToolUseFailure`: the same
+  scanner reads the complete `error` and adds a name-only `flag` notice; it
+  does not remove the output already in the model's context. Only Claude Code
+  declares this event. See the [Claude Code how-to](../how-to/wire-into-claude-code.md#tool-output-redaction)
+  for setup and failure limits, and the [pi-agent how-to](../how-to/wire-into-pi-agent.md)
+  for its artifact limits.
 - **Opting out.** The row is a regular baseline row, listed by `rules list`
   and reachable by `[[override]]` ([Override a baseline rule](../how-to/override-a-baseline-rule.md)):
   `disable` switches the guard off; `relax` softens it to `confirm` or
-  `observe` (the variable is still named); `replace` swaps the row's regex,
-  which here only decides **which written texts** the guard looks at (the
-  baseline's `[\s\S]` accepts every non-empty text) — it sees the text, never
-  the path, so it cannot exempt a file. **One switch for both uses** (ADR-0008
-  § 5): `disable` or `relax` turns the tool-output redaction off as well.
-  `replace` does not: it governs writes only, and the redaction ignores the
-  row's `regex` and `except` and always scans the whole output, so an override
-  written for the write guard never narrows what is hidden from the model
-  (decision H6). The recognition itself (`special = "env_value"`) is the
-  engine's and is not replaceable.
+  `observe` for writes (the variable is still named); `replace` swaps the row's
+  regex, which here only decides **which written texts** the guard looks at
+  (the baseline's `[\s\S]` accepts every non-empty text) — it sees the text,
+  never the path, so it cannot exempt a file. **One switch for all uses**
+  (writes, post-tool redaction and the failure alert; ADR-0008 §§ 5, 9):
+  `disable` or `relax` turns them all off. `replace` governs writes only;
+  redaction ignores the row's `regex` and `except` and scans the whole output,
+  while the failed-output alert scans the complete `error`. Neither scan can
+  be narrowed by an override written for the write guard. The recognition
+  itself (`special = "env_value"`) is the engine's and is not replaceable.
 
 **Limits.** The guard sees only what its own environment holds, and only these
 spellings:
@@ -1004,9 +1007,10 @@ written regularly and are not session-start persistence. pi-agent's
 ### `[harness.protocol]`: the pipeline a generic adapter reads (ADR-0006)
 
 Since ticket 15a, `src/adapter/` names no harness, tool, or field —
-`policy/harness/claude-code.toml` is the first (and, in this ticket, only)
-declaration carrying one, and it reproduces the pre-15a hardcoded Claude
-Code adapter byte for byte (`fixtures/protocol/claude-code.json`,
+`policy/harness/claude-code.toml` is the first declaration carrying one,
+and supports successful-output redaction and a failed-tool alert. It reproduces
+the original hardcoded Claude Code adapter byte for byte where that contract
+is captured (`fixtures/protocol/claude-code.json`,
 `tests/fixtures-protocol.test.ts`). A harness declared WITHOUT a
 `protocol` behaves exactly as before ADR-0006 (its `[[harness]]` block
 still protects its directory); `--harness <id>` naming it fails closed
@@ -1025,12 +1029,14 @@ session = "session_id"
 prompt = "prompt"
 cwd = "cwd"
 response = "tool_response"
+error = "error"
 
 [harness.protocol.events]
 pre_tool = "PreToolUse"
 prompt = "UserPromptSubmit"
 session_start = "SessionStart"
 post_tool = "PostToolUse"
+post_tool_failure = "PostToolUseFailure"
 
 [harness.protocol.tools]
 Bash = { role = "command", command = "command" }
@@ -1050,6 +1056,9 @@ stdout = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecisio
 
 [harness.protocol.output.redact]
 stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":${response}}}'
+
+[harness.protocol.output.failure_context]
+stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":${context}}}'
 ```
 
 **`transport`** — the codec that reads the envelope. `"stdin-json"` (the
@@ -1057,16 +1066,16 @@ only one this ticket declares): one JSON object on stdin, no framing.
 
 **`wiring`** — the codec `doctor` uses to prove the hook is actually
 installed. `"hook-file"` (generic): reads `<configDir>/settings.json`,
-checks each of `events.pre_tool`/`prompt`/`session_start`/`post_tool` names a command
-whose executable basename is `bouncer`, whose args contain `run` and —
-for any harness other than `claude-code` — also `--harness <id>` (a bare
-`bouncer run` under a non-default harness would silently judge against
-claude-code's table instead). `"codex-hooks"` (ticket 15b): the same
-checks, applied to Codex's own two additive sources plus a hash-trust
-ledger. `"shim-file"` (ticket 15c, ADR-0006 § 7): an IN-PROCESS harness
-(pi-agent, omp) has no settings file and no per-event matcher at all —
-checks that `<configDir>/extensions/bouncer.ts` exists and is
-byte-identical to what `bouncer harness shim <id>` prints today
+checks each declared event (`pre_tool`, `prompt`, `session_start`,
+`post_tool`, `post_tool_failure`) names a command whose executable basename
+is `bouncer`, whose args contain `run` and — for any harness other than
+`claude-code` — also `--harness <id>` (a bare `bouncer run` under a
+non-default harness would silently judge against claude-code's table
+instead). `post_tool` and `post_tool_failure` must be wired without a
+matcher (ADR-0008 § 9). `"codex-hooks"`: the same checks, applied to
+Codex's own two additive sources plus a hash-trust ledger. `"shim-file"`
+(ADR-0006 § 7): an IN-PROCESS harness checks that `<configDir>/extensions/bouncer.ts`
+exists and is byte-identical to what `bouncer harness shim <id>` prints today
 (`wiring:shim`) and that the shim's own baked `BOUNCER` path resolves to
 an executable that is not a versioned Homebrew Cellar path
 (`<prefix>/Cellar/<formula>/<version>/bin/<exe>`, which `brew upgrade`
@@ -1097,7 +1106,9 @@ in this codebase — codex.toml declares `permission = "permission_mode"`,
 claude-code.toml declares none), `response` (ADR-0008 — OPTIONAL, required
 iff `events.post_tool` is declared: the tool's own result in a post-tool
 envelope, walked and rewritten in its own shape — `tool_response` for
-Claude Code, the shim's `content` for pi-agent).
+Claude Code, the shim's `content` for pi-agent), `error` (ADR-0008 § 9 —
+OPTIONAL, required iff `events.post_tool_failure` is declared: the full
+failed-tool error string, scanned for a name-only alert).
 
 **`[harness.protocol.events]`** — the literal event-name strings `event`
 takes for each event this pipeline understands. `pre_tool` is always
@@ -1105,12 +1116,15 @@ required. `prompt` and `session_start` are OPTIONAL (review round 2
 R2-1) — a harness that never judges a submitted prompt (or has no
 doctor-facing SessionStart surface, ADR-0006 § 7's pi-agent by design)
 declares neither, rather than being forced to name an event field it has
-no real envelope shape for. `post_tool` (ADR-0008) is OPTIONAL too: the
-event fired after a tool ran, whose response bouncer rewrites to redact
-protected environment values ([the env-value row](#the-env-value-row));
-a harness that cannot replace a tool result (Codex today) declares none and
-is never reached. See "Optional surfaces" below for the coherence rules
-gating each.
+no real envelope shape for. `post_tool` (ADR-0008) is OPTIONAL: the event
+fired after a successful tool run, whose response bouncer rewrites to redact
+protected environment values ([the env-value row](#the-env-value-row)); a
+harness that cannot replace a tool result (Codex today) declares none and
+is never reached. `post_tool_failure` (ADR-0008 § 9) is OPTIONAL too: it
+too: it names the event fired after a tool fails, whose error selector is
+scanned for protected values and whose event-specific template adds a
+name-only notice. It never replaces the error. Only Claude Code declares it
+today. See "Optional surfaces" below for the coherence rules gating each.
 
 **`[harness.protocol.tools]`** — name → `{role, ...selectors}`. A name is
 an exact tool name or a trailing-`*` glob (`"mcp__*"`); exact rows win
@@ -1240,13 +1254,14 @@ UNIT on any of:
 
 8. `events.prompt` declared without `input.prompt` — nothing would ever
    read the prompt text.
-9. `events.prompt` NOT declared while `output.flag` is anything but
-   `"silent"` — this harness never judges a prompt, so `flag` cannot
-   degrade to a `"context"` it can never build.
+9. Neither `events.prompt` nor `events.post_tool_failure` is declared while
+   `output.flag` is anything but `"silent"` — no declared event could reach
+   the `flag` action.
 10. `output.ask` present in the raw table while `confirm` is not
     `"ask"` — a dead template, never rendered.
-11. `output.context` present while `flag` is not `"context"` — a dead
-    template, never rendered.
+11. `output.context` is present while `flag` is not `"context"` or
+    `events.prompt` is not declared — the template is dead without the
+    `UserPromptSubmit` event, even when a failure event uses `flag`.
 12. `events.session_start` declared without a matching
     `[harness.protocol.output.session_start]` table.
 13. `output.session_start` present while `events.session_start` is NOT
@@ -1270,18 +1285,36 @@ the block rejected AS A UNIT on any of:
 16. A `redact` template whose `stdout` does not carry `${response}`, or
     that sets `exit` — an answer that drops the rewritten response, or exits
     instead of answering, would show the original output.
-17. `events.post_tool` equal to another declared event name — `run` routes
-    the post-tool event first, so a shared name would never be judged as a
-    tool call.
+17. `events.post_tool` has the same name as any other declared event. Event
+    names are globally unique; lint rejects every duplicate pair, regardless
+    of event kind.
+
+**Optional surface: `post_tool_failure` (ADR-0008 § 9)** —
+fail-closed by lint, the protocol block rejected AS A UNIT on any of:
+
+18. `events.post_tool_failure` declared without `input.error`, or
+    `input.error` declared without `events.post_tool_failure` (a dead selector).
+19. `events.post_tool_failure` declared without a
+    `[harness.protocol.output.failure_context]` table, or that table present
+    without `events.post_tool_failure` (a dead template).
+20. A `failure_context` template whose `stdout` does not carry `${context}`,
+    or that sets `exit`.
+21. `events.post_tool_failure` has the same name as any other declared event.
+    This is the same global uniqueness rule and applies to every event pair.
+
+`output.flag = "silent"` logs a matching finding but suppresses the alert;
+`"context"` renders `failure_context`. The event chooses that template,
+while the verdict chooses the action.
 
 **`[harness.protocol.output.<action>]`** — one template table per action
-the output table actually maps a verdict to (never `silent`, which
-renders nothing), plus `session_start` when `events.session_start` is
-declared (SessionStart's own doctor announcement, rendered through this
-same mechanism but never reached via the verdict table) and `redact` when
-`events.post_tool` is declared (the rewritten tool response, ADR-0008). Each sets
-`stdout` (a string), `exit` (an integer process exit code), or both —
-Claude Code's five templates only ever set `stdout`. Placeholders are
+the output table actually maps a verdict to (never `silent`, which renders
+nothing), plus `session_start` when `events.session_start` is declared
+(SessionStart's own doctor announcement), `redact` when `events.post_tool`
+is declared (the rewritten tool response, ADR-0008), and the event-specific
+`failure_context` when `events.post_tool_failure` is declared. The latter is
+chosen by the event, never by mapping `output.flag` to `output.context`.
+Each sets `stdout` (a string), `exit` (an integer process exit code), or both
+— Claude Code's six templates only ever set `stdout`. Placeholders are
 JSON-encoded ON SUBSTITUTION (so an arbitrary reason/context string with
 quotes or newlines never breaks the surrounding JSON literal) — write
 them BARE, `${reason}` never `"${reason}"`: the value already carries
@@ -1291,7 +1324,7 @@ placeholder doubles up and produces invalid JSON. `rules lint` rejects a
 renders every template once with a worst-case probe value and requires
 the result to still parse as JSON when `stdout` looks like a JSON object
 or array literal — both belts reject the containing action's block as a
-unit, the same as any other rule 1–17 failure.
+unit, the same as any other rule 1–21 failure.
 
 **Placeholders — a fixed, PER-TEMPLATE set (review round 2 C-1)**: `run.ts`
 fills exactly these names and no others, so lint rejects any placeholder
@@ -1307,6 +1340,7 @@ forever, silently invalid JSON:
 | `context` | `${context}` only (the assembled UserPromptSubmit hit-list prose) |
 | `session_start` | `${context}` only (the assembled doctor announcement text) |
 | `redact` | `${response}` only — the rewritten tool response, JSON-encoded as the VALUE it is (an object, an array), not as a string: one rule for every placeholder, `JSON.stringify(value)` (ADR-0008 § 2) |
+| `failure_context` | `${context}` only (the name-only notice for `PostToolUseFailure`) |
 
 ### Codecs: the code a declaration names by string
 

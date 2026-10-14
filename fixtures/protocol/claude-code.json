@@ -240,6 +240,44 @@
       }
     },
     {
+      "id": "posttoolusefailure-alert",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PostToolUseFailure\",\"session_id\":\"capture-session\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"fake command\"},\"error\":\"Exit code 3\\nZq7-made-up-0042\"}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUseFailure\",\"additionalContext\":\"bouncer: the failed tool output above contains the value of FAKE_API_TOKEN, a protected environment variable. Do not repeat, store or send it; reference the variable by name.\"}}",
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttoolusefailure-clean-silent",
+      "argv": [],
+      "stdin": "{\"hook_event_name\":\"PostToolUseFailure\",\"session_id\":\"capture-session\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"fake command\"},\"error\":\"Exit code 1\\nordinary failure\"}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
+      "id": "posttoolusefailure-shadow-silent",
+      "argv": [
+        "--shadow"
+      ],
+      "stdin": "{\"hook_event_name\":\"PostToolUseFailure\",\"session_id\":\"capture-session\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"fake command\"},\"error\":\"Exit code 3\\nZq7-made-up-0042\"}",
+      "env": {
+        "FAKE_API_TOKEN": "Zq7-made-up-0042"
+      },
+      "expected": {
+        "stdout": null,
+        "exit": 0
+      }
+    },
+    {
       "id": "missing-hook-event-name-silent",
       "argv": [],
       "stdin": "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf /\"}}",

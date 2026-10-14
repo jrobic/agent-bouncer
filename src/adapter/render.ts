@@ -1,10 +1,10 @@
-// Renders a harness action's declared template (ADR-0006 § 3) — the one
-// place that knows the `${reason}`/`${context}`/`${rule}`/`${verdict}`
-// placeholder grammar, and ADR-0008's structured `${response}`. Every other
-// module in this adapter deals in the
-// abstract HarnessAction/Verdict vocabulary; a template string is TOML
-// data, never a second Claude-Code-shaped stdout builder (the pre-15a
-// src/adapter/envelopes.ts).
+// Renders a harness's declared template (ADR-0006 § 3) — the one place
+// that knows the `${reason}`/`${context}`/`${rule}`/`${verdict}` grammar
+// and ADR-0008's structured `${response}`. Event-specific answers use
+// the same renderer for failed-output context. Every other module in this
+// adapter deals in abstract HarnessAction/Verdict vocabulary; a template
+// string is TOML data, never a second Claude-Code-shaped stdout builder
+// (the pre-15a src/adapter/envelopes.ts).
 
 import type { HarnessAction, HarnessProtocol, HarnessTemplate } from '../policy/schema.ts';
 import type { Verdict } from '../types.ts';
@@ -85,6 +85,13 @@ export function renderSessionStart(protocol: HarnessProtocol, context: string | 
   if (context === null) return SILENT;
   const template = protocol.templates.session_start;
   return template === undefined ? SILENT : renderTemplate(template, { context });
+}
+
+/** Renders the event-specific, name-only alert for a failed tool result. */
+export function renderFailureContext(protocol: HarnessProtocol, context: string): RenderResult {
+  const template = protocol.templates.failure_context;
+  if (template === undefined) throw new Error('renderFailureContext: the harness declares no failure_context template');
+  return renderTemplate(template, { context });
 }
 
 /**

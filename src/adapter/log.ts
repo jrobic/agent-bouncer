@@ -125,11 +125,11 @@ export interface VerdictLogContext {
 }
 
 // Every verdict this adapter reaches gets logged — block/confirm/observe
-// from PreToolUse, flag from UserPromptSubmit — including `observe` entries
-// produced only for audit (never surfaced to the model). `context` carries
-// the session_id/tool_name/permission the raw envelope's input map named,
-// kept for context in the log line. `harness` is the TARGET harness this
-// verdict was judged under — resolves the log path and stamps every entry.
+// from PreToolUse, flag from UserPromptSubmit or PostToolUseFailure — including
+// `observe` entries produced only for audit (never surfaced to the model).
+// `context` carries session_id/tool_name/permission from the raw envelope.
+// `harness` is the TARGET harness this verdict was judged under — it resolves
+// the log path and stamps every entry.
 // `loaded`, when given, is the policy load this verdict came from — passed
 // through so a fresh/rotated file gets its Story 19 audit header. `mode`,
 // when given, is ticket 08's shadow tag — `run()` passes it on EVERY log
@@ -137,7 +137,7 @@ export interface VerdictLogContext {
 export async function logVerdict(
   family: Family,
   context: VerdictLogContext,
-  verdict: Verdict,
+  verdict: Pick<Verdict, 'verdict' | 'ruleId' | 'target' | 'envVars'>,
   harness: HarnessDeclaration,
   loaded?: LoadResult,
   mode?: LogMode,

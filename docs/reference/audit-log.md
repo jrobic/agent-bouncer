@@ -19,12 +19,12 @@ all present as strings; the other two carry a `kind` field instead).
 ## Verdict entry
 
 Written for every `block`/`confirm`/`observe` verdict from `PreToolUse`,
-every `flag` from `UserPromptSubmit`, and every `redact` from the post-tool
-event (ADR-0008) — including `observe`, which never reaches the model and
-never appears on stdout (see `docs/reference/cli.md`'s `run` section). A
-clean, unremarkable tool call produces no line at all; neither does a tool
-output with no protected value in it.
-
+every `flag` from `UserPromptSubmit` or a `PostToolUseFailure` name-only
+alert, and every `redact` from the successful post-tool event (ADR-0008) —
+including `observe`, which never reaches the model and never appears on
+stdout (see `docs/reference/cli.md`'s `run` section). A clean, unremarkable
+tool call produces no line at all; neither does a tool output with no
+protected value in it.
 ```json
 {"timestamp":"2026-08-17T08:56:56.332Z","harness":"claude-code","session_id":null,"tool_name":"Bash","family":"command","verdict":"block","rule_id":"rm-rf-dangerous","target":"rm -rf /","build":"56b1e5a","policy":"0123456789ab"}
 ```
@@ -41,10 +41,20 @@ verbatim, whenever the envelope actually sent one:
 A post-tool redaction (ADR-0008): the tool's output carried the value of a
 protected environment variable and reached the model with it replaced by
 `[redacted: NAME]`. The output itself is never logged — `target` is the fixed
-`(tool output)`, and `env_vars` names the variables:
+`(tool output)`, and `env_vars` names the variables. This keeps the 1.10.0
+verdict-entry shape; no `reason` field is written:
 
 ```json
 {"timestamp":"2026-10-13T16:24:59.069Z","harness":"claude-code","session_id":"01a...","tool_name":"Bash","family":"write-secret","verdict":"redact","rule_id":"env-value","target":"(tool output)","build":"56b1e5a","policy":"0123456789ab","env_vars":["FAKE_API_TOKEN"]}
+```
+
+A failed-tool alert (ADR-0008 § 9) may add context but cannot replace the
+original failure output. It writes `verdict: "flag"` and fixed
+`target: "(failed tool output)"`; `env_vars` carries names only. The alert
+uses the existing verdict-entry fields and adds no alert-specific field:
+
+```json
+{"timestamp":"2026-10-14T09:00:00.000Z","harness":"claude-code","session_id":"01a...","tool_name":"Bash","family":"write-secret","verdict":"flag","rule_id":"env-value","target":"(failed tool output)","build":"source","policy":"0123456789ab","env_vars":["FAKE_API_TOKEN"]}
 ```
 
 | Field | Type | Notes |
@@ -55,11 +65,11 @@ protected environment variable and reached the model with it replaced by
 | `tool_name` | string \| null | From the hook envelope; `null` when absent. |
 | `permission` | string | OPTIONAL — only present when the harness declares `input.permission` AND the envelope sent a value for it. Logged verbatim, never read for a decision anywhere in this codebase. |
 | `family` | string | `"command"` \| `"secret"` \| `"mcp-write"` \| `"write-secret"` \| `"protected-write"` \| `"prompt"`. |
-| `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"` \| `"redact"` (post-tool only: the tool ran, its output was rewritten). |
+| `verdict` | string | `"block"` \| `"confirm"` \| `"observe"` \| `"flag"` \| `"redact"` (`flag` is advisory, not a rewrite; a PostToolUseFailure `flag` may add context or be logged only). |
 | `rule_id` | string | The id of the rule (or engine algorithm name, e.g. `rm-rf-dangerous`) that fired. |
-| `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). On a `redact` entry, always `(tool output)`. |
+| `target` | string | The command/path/URL/prompt text the rule matched against, capped at 4,096 characters (`...` appended when cut). A `redact` entry always uses `(tool output)`; a PostToolUseFailure `flag` always uses `(failed tool output)`. |
 | `target_truncated` | boolean | OPTIONAL — `true` only when `target` was cut. Entries before 1.4.0 carry no marker; their legacy cut shape is a 200-character target ending in `...`. |
-| `env_vars` | array of string | OPTIONAL — only on a `write-secret` entry the env-value row produced (`rule_id` `env-value`): the **names** of the protected environment variables whose value the written text carries, in the environment's order — or, on a `redact` entry, whose value the tool's output carried, in the order first found. On an `env-value` entry the value, in clear, base64 or hex, appears in no field — a `target` path that itself carries one is logged as `(path withheld: …)`. That promise stops at this verdict: every other rule logs its `target` verbatim, so a blocked Bash command that carries a literal value is logged in clear. See `docs/reference/policy.md`'s env-value row. |
+| `env_vars` | array of string | OPTIONAL — on an env-value `write-secret` entry, the protected variable names whose value the written text carries, in environment order; on a `redact` entry, names whose values the successful tool output carried, in first-found order; on a PostToolUseFailure `flag`, names whose values the complete error carried, in first-found order. These verdicts never store those values in another field. An env-value `target` path that carries a value is `(path withheld: …)`. Other rules still log `target` verbatim, so a blocked Bash command carrying a literal value is logged in clear. See `docs/reference/policy.md`'s env-value row. |
 | `build` | string | `"source"` for source execution; otherwise the short SHA with `-dirty` when the build tree was dirty. |
 | `policy` | string | First 12 hexadecimal characters of the SHA-256 digest of the effective policy that produced this verdict. |
 
@@ -74,6 +84,8 @@ like any other verdict line — the unknown field is ignored — and replay leav
 it `(as logged)` as a `write-secret` entry: the written text was never logged,
 so it cannot be re-judged. A `redact` entry is the same: `audit` counts it as no
 friction, `audit --diff` as a silent verdict, replay leaves it `(as logged)`.
+A PostToolUseFailure `flag` records a fixed target and variable names only;
+the original error is not retained in the log, so replay cannot re-judge it.
 
 ## Audit-header entry
 
@@ -106,11 +118,19 @@ Written once per warning: one entry per REJECTED LAYER (ADR-0001
 their own entry, naming their own layer and file), one for the migration
 guard (see `docs/reference/policy.md`'s fail-closed behavior), one when a
 dispatch throw forced a retry against the embedded baseline, one when a
-post-tool check failed and the output was withheld (ADR-0008), one when the
-`SessionStart` doctor check itself failed and fell back to silence, or
-one when `run` was invoked with an unknown or protocol-less `--harness
-<id>` (ADR-0006 § 6 — logged only when a log path can be resolved for it,
-which an UNDECLARED id cannot be).
+post-tool check failed and the output was withheld (ADR-0008), one when a
+failed-output alert check failed and the notice was omitted (ADR-0008 § 9),
+one when the `SessionStart` doctor check itself failed and fell back to
+silence, or one when `run` was invoked with an unknown or protocol-less
+`--harness <id>` (ADR-0006 § 6 — logged only when a log path can be resolved
+for it, which an UNDECLARED id cannot).
+
+Failed-output alert warnings use only these fixed messages; they never contain
+an exception message:
+
+- `post-tool failure alert check failed, retrying with the embedded baseline`
+- `post-tool failure alert check failed`
+- `post-tool failure alert render failed`
 
 ```json
 {"timestamp":"2026-08-17T08:57:04.656Z","harness":"claude-code","kind":"policy-warning","message":"profile layer rejected — policy.d/20-broken.toml: Failed to parse toml"}
@@ -121,7 +141,7 @@ which an UNDECLARED id cannot be).
 | `timestamp` | string | ISO 8601. |
 | `harness` | string | The target harness's own declaration id. |
 | `kind` | string | Always `"policy-warning"`. |
-| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, a post-tool check failure (`post-tool check failed, output withheld: …`, ADR-0008), or the unknown/protocol-less-harness message. A dispatch-retry or post-tool failure message whose error text carries the value of a protected environment variable (in clear, base64 or hex) is replaced by a fixed notice that names the variable(s) — `dispatch failed, retrying with the embedded baseline (error message withheld: it contains the value of a protected environment variable: NAME)` — and one logged when the environment itself could not be scanned says `(error message withheld: the environment could not be scanned)`. |
+| `message` | string | Free-form — the same rejection reason `bouncer rules lint` prints, a dispatch-retry message, a doctor-check-failure message, a post-tool check failure (`post-tool check failed, output withheld: …`, ADR-0008), a failed-output alert check/retry/render failure (the fixed messages above, ADR-0008 § 9), or the unknown/protocol-less-harness message. General dispatch-retry and post-tool warning messages are scrubbed when their exception text carries a protected value. Failed-output alert warnings never use exception text, so neither the error text nor its values enter this field. |
 
 ## Rotation
 

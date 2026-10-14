@@ -55,12 +55,12 @@ export interface Dispatcher {
 // VERDICT_SEVERITY lives in src/types.ts so every engine family ranks the
 // shared VerdictKind vocabulary identically.
 // `flag` and `redact` are not part of this ordering at all — a PreToolUse
-// family that emits either is a routing bug (flag belongs to
-// UserPromptSubmit, redact to the post-tool event; see degrade.ts's own
-// guard, the same `isPreToolKind` test). Giving them severity 0 and letting
-// the max-reduce silently swallow them whenever a block/confirm co-occurs
-// would hide exactly that bug. Every hit is checked BEFORE ranking,
-// independent of whether anything stricter also fired.
+// family that emits either is a routing bug (`flag` belongs to the
+// UserPromptSubmit or PostToolUseFailure event; `redact` to PostToolUse; see
+// degrade.ts's own guard, the same `isPreToolKind` test). Giving them
+// severity 0 and letting the max-reduce silently swallow them whenever a
+// block/confirm co-occurs would hide exactly that bug. Every hit is checked
+// BEFORE ranking, independent of whether anything stricter also fired.
 // Exported for its own unit test (tests/adapter-dispatch.test.ts): no
 // current PreToolUse family actually emits either, so the misrouting guard
 // below can only be exercised directly, with a hand-built FamilyVerdict —
@@ -70,7 +70,7 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
   if (misrouted) {
     throw new Error(
       `inspectPreToolUse: family "${misrouted.family}" emitted a "${misrouted.verdict.verdict}" verdict `
-        + `(ruleId ${misrouted.verdict.ruleId}) — not a pre-tool verdict (flag belongs to UserPromptSubmit, redact to the post-tool event)`,
+        + `(ruleId ${misrouted.verdict.ruleId}) — not a pre-tool verdict (flag belongs to event-driven prompt/failure paths, redact to PostToolUse)`,
     );
   }
   if (hits.length === 0) return null;

@@ -68,6 +68,27 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
     expect(stdout).not.toBeNull();
     expect(JSON.parse(stdout!).hookSpecificOutput.additionalContext).toContain('wiring:canary');
   });
+
+  test('matcher values are omitted from SessionStart context', async () => {
+    await accountWithSettings({
+      ...HEALTHY_HOOKS,
+      PostToolUse: [{
+        matcher: 'MATCHER-DO-NOT-LEAK-66',
+        hooks: [{ type: 'command', command: BOUNCER_COMMAND }],
+      }],
+      PostToolUseFailure: [{
+        matcher: 'FAILURE-MATCHER-DO-NOT-LEAK-66',
+        hooks: [{ type: 'command', command: BOUNCER_COMMAND }],
+      }],
+    });
+    const { stdout } = await run(SESSION_START_ENVELOPE, { build: CLEAN_BUILD });
+    expect(stdout).not.toBeNull();
+    const context = JSON.parse(stdout!).hookSpecificOutput.additionalContext;
+    expect(context).toContain('PostToolUse');
+    expect(context).not.toContain('MATCHER-DO-NOT-LEAK-66');
+    expect(context).not.toContain('FAILURE-MATCHER-DO-NOT-LEAK-66');
+  });
+
   test('removing a hook entry from settings.json makes the next SessionStart scream', async () => {
     const { PreToolUse: _omit, ...withoutPreToolUse } = HEALTHY_HOOKS;
     await accountWithSettings(withoutPreToolUse);
@@ -132,6 +153,16 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
     const context: string = JSON.parse(stdout!).hookSpecificOutput.additionalContext;
     expect(context).toContain('WIRING/POLICY PROBLEM');
     expect(context).toContain('wiring:PostToolUse');
+    expect(context).toContain(JSON.stringify({ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }));
+  });
+
+  test('a missing PostToolUseFailure entry reaches the SessionStart notice', async () => {
+    const { PostToolUseFailure: _omit, ...withoutFailureHook } = HEALTHY_HOOKS;
+    await accountWithSettings(withoutFailureHook);
+    const { stdout } = await run(SESSION_START_ENVELOPE, { build: CLEAN_BUILD });
+    expect(stdout).not.toBeNull();
+    const context: string = JSON.parse(stdout!).hookSpecificOutput.additionalContext;
+    expect(context).toContain('wiring:PostToolUseFailure');
     expect(context).toContain(JSON.stringify({ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }));
   });
 });
