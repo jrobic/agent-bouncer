@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-14
+
 ### Added
 
 - **Tool output is redacted before the model sees it** (ADR-0008). After
@@ -488,7 +490,8 @@ First public release.
 - Added the policy digest and build identity to the audit log.
 - Added the `binary` doctor check, `dist/bouncer.sha256`, and the first release tag.
 
-[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/jrobic/agent-bouncer/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/jrobic/agent-bouncer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/jrobic/agent-bouncer/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jrobic/agent-bouncer/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jrobic/agent-bouncer/compare/v1.6.0...v1.7.0
