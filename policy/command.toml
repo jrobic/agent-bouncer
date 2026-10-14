@@ -473,6 +473,7 @@ flags = [
     "--delete",
     "-m",
     "-M",
+    "-C",
     "--move",
     "-f",
     "--force",
@@ -483,6 +484,8 @@ sub = "tag"
 flags = [
     "-d",
     "--delete",
+    "-f",
+    "--force",
   ]
 
 [[rules.command.git.ask_flags]]

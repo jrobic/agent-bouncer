@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgrade:** a personal `ask_flags` overlay that replaces the baseline
+  `branch` entry must add `-C` to keep force-copy protected. An overlay that
+  omits it would allow `git branch -C` to overwrite an existing branch.
+
+### Security
+
+- Git's destructive-option checks now confirm forced branch copies
+  (`branch -C`), forced tag moves (`tag -f` / `--force`), and grouped,
+  abbreviated or `=value` spellings of `checkout`'s destructive options.
+  `checkout` pathspec and `--` handling, safe branch-switch/create forms,
+  and `switch --orphan` are unchanged. Because the shared matcher cannot
+  distinguish a glued value, `git checkout -bfix` and `git tag -mfix v1`
+  can over-confirm; write `git checkout -b fix` or `git tag -m fix v1`.
+
 ## [1.10.0] - 2026-10-14
 
 ### Added

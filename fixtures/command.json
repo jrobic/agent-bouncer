@@ -1820,6 +1820,40 @@
       ]
     },
     {
+      "id": "git-branch-force-copy-short-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -C main copy"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-force-copy-grouped-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -qC main copy"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-branch-copy-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git branch -c main copy"
+      },
+      "expected": []
+    },
+    {
       "id": "git-tag-reading-safe",
       "toolName": "Bash",
       "toolInput": {
@@ -1839,6 +1873,303 @@
           "ruleId": "git-protected"
         }
       ]
+    },
+    {
+      "id": "git-tag-force-short-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -f v1 HEAD~1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-force-long-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag --force v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-force-annotated-grouped-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -fa v1 -m x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-force-long-prefix-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag --forc v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-tag-annotated-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -a v1 -m x"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-tag-format-equals-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag --format=%(refname)"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-tag-message-separated-value-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -m fix v1"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-git-tag-glued-force-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git tag -mfix v1"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "ask_flags cannot tell that -mfix is a glued message value, so the f in the value matches the newly listed -f; separating the value as -m fix avoids this over-confirmation"
+    },
+    {
+      "id": "git-checkout-grouped-force-quiet-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -qf main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-grouped-force-order-reversed-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -fq main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-grouped-force-branch-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -qB x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-grouped-ours-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --our f"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-grouped-patch-quiet-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -qp"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-long-force-prefix-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --forc main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-short-group-before-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -qf=main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-long-prefix-before-equals-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --forc=main"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-force-branch-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -B x"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-theirs-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --theirs f"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-patch-long-flag-asks",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --patch"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "git-checkout-quiet-branch-switch-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -q main"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-branch-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -b feat"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-grouped-quiet-branch-create-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -qb feat"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-detach-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout --detach"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-checkout-track-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -t origin/x"
+      },
+      "expected": []
+    },
+    {
+      "id": "git-switch-orphan-safe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git switch --orphan x"
+      },
+      "expected": []
+    },
+    {
+      "id": "known-limit-git-checkout-glued-value-letter",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git checkout -bfix"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ],
+      "knownLimit": true,
+      "knownLimitReason": "checkout's option flags use ask_flags matching, which cannot distinguish an option from a value glued to it; the f in -bfix matches -f, so it asks conservatively"
     },
     {
       "id": "git-stash-reading-safe",
