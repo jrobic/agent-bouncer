@@ -10366,6 +10366,30 @@
       "expected": []
     },
     {
+      "id": "command-start-literal-heredoc-in-substitution-is-data",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "git commit -m \"$(cat <<'EOF'\nfix: it's `sudo ls`, then `git push`\nEOF\n)\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-unclosed-heredoc-body-is-data",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<'EOF'\nsee `sudo ls`"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-glued-closer-after-redirection",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(git ls-files | xargs git grep -l x 2>/dev/null)"
+      },
+      "expected": []
+    },
+    {
       "id": "command-start-literal-unquoted-heredoc-substitution",
       "toolName": "Bash",
       "toolInput": {

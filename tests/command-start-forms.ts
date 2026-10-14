@@ -207,6 +207,16 @@ const LITERAL_CASES: readonly FixtureCase[] = [
   },
   // A heredoc body is the input of a command, not a command line.
   bashCase('literal-quoted-heredoc-body-is-data', 'cat <<\'EOF\'\nRun `sudo ls`, then (git push)\nif git push fails\nEOF', []),
+  // The apostrophe hides the end of the substitution from the tokenizer.
+  bashCase(
+    'literal-heredoc-in-substitution-is-data',
+    'git commit -m "$(cat <<\'EOF\'\nfix: it\'s `sudo ls`, then `git push`\nEOF\n)"',
+    [],
+  ),
+  // bash reads an unclosed heredoc body to the end of its input.
+  bashCase('literal-unclosed-heredoc-body-is-data', 'cat <<\'EOF\'\nsee `sudo ls`', []),
+  // A redirection with the subshell's closer glued to it still names its file.
+  bashCase('literal-glued-closer-after-redirection', '(git ls-files | xargs git grep -l x 2>/dev/null)', []),
   {
     ...bashCase('literal-unquoted-heredoc-substitution', 'cat <<EOF\n`git push`\nEOF', []),
     knownLimit: true,

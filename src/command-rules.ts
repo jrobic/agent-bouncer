@@ -34,6 +34,10 @@
 //   • Exported variable: `export GIT_EXTERNAL_DIFF=x && git diff` — the
 //     `git-config-exec` rule reads only the assignments written in front of
 //     the git command itself
+//   • A command whose start the shared list does not know: a `case`
+//     pattern, `bash -c "$cmd"`, `ssh`/`limactl shell`/`docker exec`,
+//     `parallel` — docs/reference/policy.md § What counts as the start of a
+//     command lists them all
 //
 // Treat this as protection against accidental destruction and the most
 // obvious exfiltration patterns — not against an adversarial caller.
@@ -1642,6 +1646,26 @@ function unopenedClosers(token: ShellToken, source: string): number {
   return closers;
 }
 
+// `token` cut to the source range [start, end): the characters cut are
+// unquoted parentheses or braces, so its value is cut the same way, and its
+// redirections are read again from what is left (`2>/dev/null)` names
+// `/dev/null` once the `)` is cut).
+function cutToken(token: ShellToken, source: string, start: number, end: number): ShellToken {
+  const value = token.value.slice(start - token.start, token.value.length - (token.end - end));
+  const redirections = /[<>]/.test(value) ? shellRedirections(source.slice(start, end), start, token.commandSubstitutions) : null;
+  return {
+    value,
+    kind: token.kind,
+    start,
+    end,
+    hasLiteralizingSyntax: token.hasLiteralizingSyntax,
+    hasQuotedWhitespace: token.hasQuotedWhitespace,
+    hasUnterminatedQuote: token.hasUnterminatedQuote,
+    ...(token.commandSubstitutions === undefined ? {} : { commandSubstitutions: token.commandSubstitutions }),
+    ...(redirections === null ? {} : { redirections }),
+  };
+}
+
 // The words of a segment from its first command word on (points 2 and 3 of
 // the list): the keywords, groupings and function heads before it are taken
 // off, with a `(` glued to it, and so are the closers that end a grouping and
@@ -1663,7 +1687,7 @@ function commandWords(segment: readonly ShellToken[], source: string): ShellToke
     let opened = 0;
     while (opened < token.value.length && token.value[opened] === '(' && source[token.start + opened] === '(') opened++;
     if (opened === token.value.length) first++;
-    else head = opened === 0 ? token : { ...token, value: token.value.slice(opened), start: token.start + opened };
+    else head = opened === 0 ? token : cutToken(token, source, token.start + opened, token.end);
   }
   if (head === null) return [];
 
@@ -1672,38 +1696,67 @@ function commandWords(segment: readonly ShellToken[], source: string): ShellToke
     const token = words[index]!;
     const closers = unopenedClosers(token, source);
     if (closers === 0) continue;
-    const value = token.value.slice(0, -closers);
-    return value === '' ? words.slice(0, index) : [...words.slice(0, index), { ...token, value, end: token.end - closers }];
+    if (closers === token.end - token.start) return words.slice(0, index);
+    return [...words.slice(0, index), cutToken(token, source, token.start, token.end - closers)];
   }
   return words;
 }
 
-// What each backtick and process substitution (`<( … )`, `>( … )`) of a line
-// runs (point 4 of the list), outside single quotes, comments and heredoc
-// bodies. `$( … )` is not listed: the tokenizer reads its words as segments
-// of the line already, and only its quotes are followed here.
-function substitutionBodies(source: string, heredocBodies: readonly SourceRange[]): string[] {
+// The delimiter of a heredoc whose `<<` ends at `start`, and where its word
+// ends; null when no word follows that could be one.
+function heredocAt(source: string, start: number): Readonly<{ delimiter: HeredocDelimiter; end: number; }> | null {
+  let i = start;
+  const stripTabs = source[i] === '-';
+  if (stripTabs) i++;
+  while (source[i] === ' ' || source[i] === '\t') i++;
+  // A delimiter is a word: `1 << 2` in an arithmetic expression is a shift.
+  if (!/^[\w'"\\]/.test(source[i] ?? '') || /\d/.test(source[i]!)) return null;
+  let value = '';
+  let quote: string | null = null;
+  for (; i < source.length; i++) {
+    const character = source[i]!;
+    if (quote !== null) {
+      if (character === quote) quote = null;
+      else value += character;
+    } else if (character === '"' || character === '\'') {
+      quote = character;
+    } else if (character === '\\') {
+      value += source[i + 1] ?? '';
+      i++;
+    } else if (/[\s;&|<>()]/.test(character)) {
+      break;
+    } else {
+      value += character;
+    }
+  }
+  return value === '' ? null : { delimiter: { value, stripTabs }, end: i };
+}
+
+type SubstitutionScan = Readonly<{
+  // What each backtick and process substitution runs.
+  bodies: readonly string[];
+  // The heredoc bodies, closed or running to the end of the line.
+  heredocs: readonly SourceRange[];
+}>;
+
+// The backtick and process substitutions (`<( … )`, `>( … )`) of a line
+// (point 4 of the list), outside single quotes, comments and heredoc bodies.
+// `$( … )` is not listed: the tokenizer reads its words as segments of the
+// line already; it is followed here for its quotes and its heredocs, whose
+// body may hold a quote that hides its end from the tokenizer
+// (`git commit -m "$(cat <<'EOF' … EOF )"`).
+function scanSubstitutions(source: string): SubstitutionScan {
   const bodies: string[] = [];
-  const heredocs = heredocBodies.toSorted((a, b) => a.start - b.start);
-  let heredoc = 0;
-  // The quote each enclosing `$( … )` was opened in, and where it ends.
-  const enclosing: { quote: '"' | null; end: number; }[] = [];
+  const heredocs: SourceRange[] = [];
+  // Each enclosing `$( … )`: the quote it was opened in, and the parentheses
+  // open around it.
+  const enclosing: { quote: '"' | null; parens: number; }[] = [];
   let quote: '"' | '\'' | null = null;
+  let parens = 0;
+  // The heredocs announced on the current line: their bodies start after it.
+  let announced: HeredocDelimiter[] = [];
 
   for (let i = 0; i < source.length; i++) {
-    let closed = false;
-    while (enclosing.length > 0 && i >= enclosing[enclosing.length - 1]!.end) {
-      const substitution = enclosing.pop()!;
-      closed ||= i === substitution.end;
-      quote = substitution.quote;
-    }
-    if (closed) continue;
-    while (heredoc < heredocs.length && heredocs[heredoc]!.end <= i) heredoc++;
-    if (heredoc < heredocs.length && heredocs[heredoc]!.start <= i) {
-      i = heredocs[heredoc]!.end - 1;
-      continue;
-    }
-
     const character = source[i]!;
     if (quote === '\'') {
       if (character === '\'') quote = null;
@@ -1722,13 +1775,11 @@ function substitutionBodies(source: string, heredocBodies: readonly SourceRange[
       continue;
     }
     if (character === '$' && source[i + 1] === '(' && source[i + 2] !== '(') {
-      const end = commandSubstitutionEnd(source, i + 2);
-      if (end !== null) {
-        enclosing.push({ quote, end });
-        quote = null;
-        i++;
-        continue;
-      }
+      enclosing.push({ quote, parens });
+      quote = null;
+      parens = 0;
+      i++;
+      continue;
     }
     if (quote === '"') {
       if (character === '"') quote = null;
@@ -1736,23 +1787,37 @@ function substitutionBodies(source: string, heredocBodies: readonly SourceRange[
     }
     if (character === '"' || character === '\'') {
       quote = character;
-      continue;
-    }
-    if (character === '#' && (i === 0 || /[\s;&|]/.test(source[i - 1]!))) {
+    } else if (character === '\n' && announced.length > 0) {
+      const read = consumeHeredocBodies(source, i + 1, announced);
+      announced = [];
+      if (read === null) {
+        heredocs.push({ start: i + 1, end: source.length });
+        break;
+      }
+      heredocs.push(...read);
+      i = read[read.length - 1]!.end - 1;
+    } else if (character === '#' && (i === 0 || /[\s;&|]/.test(source[i - 1]!))) {
       const newline = source.indexOf('\n', i);
       if (newline === -1) break;
       i = newline - 1;
-      continue;
-    }
-    if ((character === '<' || character === '>') && source[i + 1] === '(') {
+    } else if (character === '<' && source[i + 1] === '<') {
+      const heredoc = source[i + 2] === '<' ? null : heredocAt(source, i + 2);
+      if (heredoc !== null) announced.push(heredoc.delimiter);
+      i = heredoc === null ? i + 1 : heredoc.end - 1;
+    } else if ((character === '<' || character === '>') && source[i + 1] === '(') {
       const end = commandSubstitutionEnd(source, i + 2);
       if (end !== null) {
         bodies.push(source.slice(i + 2, end));
         i = end;
       }
+    } else if (character === '(') {
+      parens++;
+    } else if (character === ')') {
+      if (parens > 0) parens--;
+      else if (enclosing.length > 0) ({ quote, parens } = enclosing.pop()!);
     }
   }
-  return bodies;
+  return { bodies, heredocs };
 }
 
 // One command of a line, as the families judge it.
@@ -1782,22 +1847,45 @@ function readCommandLine(cmd: string): CommandLine {
   return { segments: tokenized.segments, commands };
 }
 
-// A heredoc body is data: its lines keep only the segment reading.
+// Whether a position falls in one of `ranges`, found by bisection over the
+// ranges sorted by start and the furthest end reached up to each of them: a
+// long line checks each of its segments against each of its heredoc bodies.
+function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => boolean {
+  const sorted = ranges.toSorted((a, b) => a.start - b.start);
+  const reach: number[] = [];
+  for (const range of sorted) reach.push(Math.max(range.end, reach[reach.length - 1] ?? 0));
+  return (position) => {
+    let low = 0;
+    let high = sorted.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (sorted[middle]!.start <= position) low = middle + 1;
+      else high = middle;
+    }
+    return low > 0 && reach[low - 1]! > position;
+  };
+}
+
 function collectCommands(source: string, tokenized: TokenizedShell, depth: number, commands: CommandWords[]): void {
+  const scan = scanSubstitutions(source);
+  // A heredoc body is data: its lines keep only the segment reading. The scan
+  // also finds the bodies the tokenizer misses (inside a `$( … )` it could not
+  // close, or never closed).
+  const insideHeredoc = insideAnyRange([...tokenized.heredocBodies, ...scan.heredocs]);
   const nested: string[] = [];
   for (const segment of tokenized.segments) {
-    if (isInsideHeredocBody(segment[0]!.start, tokenized.heredocBodies)) continue;
+    if (insideHeredoc(segment[0]!.start)) continue;
     const filtered = withoutShellRedirections(commandWords(segment, source));
     if (filtered.tokens.length === 0) continue;
-    const start = consumeCommandStart(filtered.tokens, source);
-    if (start.commandLine === undefined) {
-      commands.push({ tokens: filtered.tokens, start, unclearRedirection: filtered.forceConfirm, source });
+    const commandStart = consumeCommandStart(filtered.tokens, source);
+    if (commandStart.commandLine === undefined) {
+      commands.push({ tokens: filtered.tokens, start: commandStart, unclearRedirection: filtered.forceConfirm, source });
     } else {
-      nested.push(start.commandLine);
+      nested.push(commandStart.commandLine);
     }
   }
   if (depth === MAX_NESTED_READS) return;
-  nested.push(...substitutionBodies(source, tokenized.heredocBodies));
+  nested.push(...scan.bodies);
   for (const line of nested) collectCommands(line, tokenizeShellSegments(line), depth + 1, commands);
 }
 
