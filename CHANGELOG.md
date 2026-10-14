@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Upgrade:** a personal `ask_flags` overlay that replaces the baseline
+  `branch` entry must add `-C` to keep force-copy protected. An overlay that
+  omits it would allow `git branch -C` to overwrite an existing branch.
+
+### Security
+
+- **Git destructive-option checks now confirm branch force-copies, forced tag
+  moves, and destructive checkout option spellings.** Baseline `branch -C`
+  and tag `-f` / `--force` ask, as do grouped, abbreviated, and `=value`
+  spellings of checkout's destructive options. `checkout` pathspec and `--`
+  handling, safe branch-switch/create forms, and `switch --orphan` are
+  unchanged. Glued values can over-confirm: `git checkout -bfix` and
+  `git tag -mfix v1`; write `git checkout -b fix` or `git tag -m fix v1`.
+  The policy check was replayed on 23,501 distinct commands from real agent
+  sessions that mention git: six command strings changed from allow to confirm
+  under the baseline and four under the effective personal policy; all were
+  probes.
+  Details: [`rules.command.git`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms)
+
 ## [1.10.0] - 2026-10-14
 
 ### Added

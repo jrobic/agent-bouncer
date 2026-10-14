@@ -557,8 +557,10 @@ describe('guards-digest: tamper lock — the git-config-exec allow-lists', () =>
 // form left to pair into this matrix's {reading, mutating} shape — see
 // tests/command-rules.test.ts's dedicated "always ask in the trunk
 // baseline" block instead — and ticket 61 adding `init` (14 → 15), the
-// first subcommand governed by `safe_flags`. It is a pure BEHAVIOURAL
-// lock (calls checkGit with real commands), so it does not care whether
+// first subcommand governed by `safe_flags`. Ticket 64 changes checkout's
+// mutating case from `git checkout -f` to `git checkout --our f` to cover
+// long-option-prefix matching. It is a pure BEHAVIOURAL lock (calls checkGit
+// with real commands), so it does not care whether
 // the decision underneath comes from a TS if-chain or from TOML data — it
 // keeps testing the OBSERVABLE property regardless of mechanism, which is
 // exactly why it survives the repointing untouched.
@@ -584,7 +586,7 @@ const GIT_CONDITIONAL_MATRIX: readonly GitConditionalCase[] = [
   { sub: 'config', reading: 'git config --get user.name', mutating: 'git config user.name x' },
   { sub: 'bundle', reading: 'git bundle verify b.pack', mutating: 'git bundle create b.pack HEAD' },
   { sub: 'symbolic-ref', reading: 'git symbolic-ref HEAD', mutating: 'git symbolic-ref -d HEAD' },
-  { sub: 'checkout', reading: 'git checkout main', mutating: 'git checkout -f' },
+  { sub: 'checkout', reading: 'git checkout main', mutating: 'git checkout --our f' },
   { sub: 'switch', reading: 'git switch feat', mutating: 'git switch --discard-changes' },
   { sub: 'worktree', reading: 'git worktree list', mutating: 'git worktree remove w' },
   { sub: 'apply', reading: 'git apply --check p.diff', mutating: 'git apply p.diff' },
@@ -666,8 +668,8 @@ function safeFlagsDigest(rules: readonly SafeFlagsRule[]): string[] {
 // DERIVED by running the four projections above against
 // policy/command.toml and printing the output.
 const EXPECTED_ASK_FLAGS_DIGEST: readonly string[] = [
-  '0 branch flags=[-d,-D,--delete,-m,-M,--move,-f,--force] max_positionals=none',
-  '1 tag flags=[-d,--delete] max_positionals=none',
+  '0 branch flags=[-d,-D,--delete,-m,-M,-C,--move,-f,--force] max_positionals=none',
+  '1 tag flags=[-d,--delete,-f,--force] max_positionals=none',
   '2 switch flags=[-C,--force-create,-f,--force,--discard-changes] max_positionals=none',
   '3 symbolic-ref flags=[-d,--delete] max_positionals=1',
 ];

@@ -1484,14 +1484,22 @@ function positionalArgs(rest: readonly string[]): string[] {
   return rest.filter((t) => !t.startsWith('-') && !/[<>]/.test(t));
 }
 
-// The two subcommands the declarative vocabulary cannot express — see the
-// module header. Both keep exactly the original engine logic; only the
-// name changed (they were inline branches of gitSubcommandNeedsConfirm).
+const CHECKOUT_DESTRUCTIVE_FLAGS: readonly string[] = [
+  '-f',
+  '--force',
+  '-B',
+  '--ours',
+  '--theirs',
+  '-p',
+  '--patch',
+];
+
+// Checkout and restore remain documented engine exceptions; see the module header.
 
 function checkGitCheckoutNeedsConfirm(rest: readonly string[]): boolean {
   // Branch switching and branch creation are safe (git refuses to clobber
   // a dirty tree); the PATHSPEC form overwrites local edits and asks.
-  if (rest.some((t) => t === '--' || /^(-f|--force|-B|--ours|--theirs|-p|--patch)$/.test(t))) {
+  if (rest.some((t) => t === '--' || askFlagMatches(CHECKOUT_DESTRUCTIVE_FLAGS, t))) {
     return true;
   }
   const positionals = positionalArgs(rest);
