@@ -21,8 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   handling, safe branch-switch/create forms, and `switch --orphan` are
   unchanged. Glued values can over-confirm: `git checkout -bfix` and
   `git tag -mfix v1`; write `git checkout -b fix` or `git tag -m fix v1`.
-  Corpus replay: six command strings changed from allow to confirm under the
-  baseline and four under the effective personal policy; all were probes.
+  The policy check was replayed on 23,501 distinct commands from real agent
+  sessions that mention git: six command strings changed from allow to confirm
+  under the baseline and four under the effective personal policy; all were
+  probes.
   Details: [`rules.command.git`](docs/reference/policy.md#rulescommandgit-the-four-declarative-conditional-forms)
 
 ## [1.10.0] - 2026-10-14

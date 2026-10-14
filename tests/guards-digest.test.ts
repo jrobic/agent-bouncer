@@ -558,7 +558,7 @@ describe('guards-digest: tamper lock — the git-config-exec allow-lists', () =>
 // tests/command-rules.test.ts's dedicated "always ask in the trunk
 // baseline" block instead — and ticket 61 adding `init` (14 → 15), the
 // first subcommand governed by `safe_flags`. Ticket 64 changes checkout's
-// mutating case from `git checkout -f main` to `git checkout --our f` to cover
+// mutating case from `git checkout -f` to `git checkout --our f` to cover
 // long-option-prefix matching. It is a pure BEHAVIOURAL lock (calls checkGit
 // with real commands), so it does not care whether
 // the decision underneath comes from a TS if-chain or from TOML data — it
