@@ -1389,9 +1389,10 @@ export function consumeCommandPrefixes(
 // path scans (protected-write, secret masking, docker) read with
 // consumeCommandPrefixes alone.
 
-// A shell, `eval`, `watch` or `env -S` argument is read again as a command
-// line, and so is the body of a backtick or process substitution: down to
-// this many levels below the line.
+// The argument of a shell's `-c`, of `eval`, of `env -S`, and the words
+// `watch` runs with `sh -c` are read again as a command line: down to this
+// many levels below the line. A substitution body is read at the depth of
+// its line, as the tokenizer reads `$( … )`.
 const MAX_NESTED_READS = 3;
 
 // Words that come before a command without being one: shell keywords and
@@ -1743,23 +1744,53 @@ type SubstitutionScan = Readonly<{
   heredocs: readonly SourceRange[];
 }>;
 
+// The body of an open process substitution: where it starts, how far its
+// text is taken, and the text taken so far.
+type ProcessBody = { start: number; cursor: number; pieces: string[]; };
+
+// A `$( … )` or a process substitution the scan is inside: the quote and the
+// parentheses open around it, and for a process substitution its body.
+type ScanFrame = Readonly<{ quote: '"' | null; parens: number; body: ProcessBody | null; }>;
+
 // The backtick and process substitutions (`<( … )`, `>( … )`) of a line
-// (point 4 of the list), outside single quotes, comments and heredoc bodies.
-// `$( … )` is not listed: the tokenizer reads its words as segments of the
-// line already; it is followed here for its quotes and its heredocs, whose
-// body may hold a quote that hides its end from the tokenizer
-// (`git commit -m "$(cat <<'EOF' … EOF )"`). A heredoc body the tokenizer
-// recorded (`recorded`, by start) is skipped without being read again.
+// (point 4 of the list), outside single quotes, comments and heredoc bodies,
+// in one pass however deep they nest: the body of a process substitution is
+// cut of the substitutions nested in it (`cat <(x <(y))` gives `x <()` and
+// `y`), which are bodies of their own. `$( … )` is not listed: the tokenizer
+// reads its words as segments of the line already; it is followed here for
+// its quotes and its heredocs, whose body may hold a quote that hides its end
+// from the tokenizer (`git commit -m "$(cat <<'EOF' … EOF )"`). A heredoc body
+// the tokenizer recorded (`recorded`, by start) is skipped without being read
+// again.
 function scanSubstitutions(source: string, recorded: ReadonlyMap<number, number>): SubstitutionScan {
   const bodies: string[] = [];
   const heredocs: SourceRange[] = [];
-  // Each enclosing `$( … )`: the quote it was opened in, and the parentheses
-  // open around it.
-  const enclosing: { quote: '"' | null; parens: number; }[] = [];
+  const frames: ScanFrame[] = [];
+  // The bodies of the open process substitutions, innermost last.
+  const processes: ProcessBody[] = [];
   let quote: '"' | '\'' | null = null;
   let parens = 0;
   // The heredocs announced on the current line: their bodies start after it.
   let announced: HeredocDelimiter[] = [];
+
+  // Takes [start, end) out of the innermost open process substitution body.
+  const cut = (start: number, end: number): void => {
+    const body = processes[processes.length - 1];
+    if (body === undefined) return;
+    body.pieces.push(source.slice(body.cursor, start));
+    body.cursor = end;
+  };
+  // Leaves the innermost frame at `end`, its closing parenthesis.
+  const close = (end: number): void => {
+    const frame = frames.pop()!;
+    quote = frame.quote;
+    parens = frame.parens;
+    if (frame.body === null) return;
+    processes.pop();
+    frame.body.pieces.push(source.slice(frame.body.cursor, end));
+    bodies.push(frame.body.pieces.join(''));
+    cut(frame.body.start, end);
+  };
 
   for (let i = 0; i < source.length; i++) {
     const character = source[i]!;
@@ -1772,15 +1803,15 @@ function scanSubstitutions(source: string, recorded: ReadonlyMap<number, number>
       continue;
     }
     if (character === '`') {
-      const end = backtickSubstitutionEnd(source, i + 1);
       // An unclosed backtick runs to the end of the line.
-      bodies.push(source.slice(i + 1, end ?? source.length).replace(/\\([$`\\])/g, '$1'));
-      if (end === null) break;
+      const end = backtickSubstitutionEnd(source, i + 1) ?? source.length;
+      bodies.push(source.slice(i + 1, end).replace(/\\([$`\\])/g, '$1'));
+      cut(i + 1, end);
       i = end;
       continue;
     }
     if (character === '$' && source[i + 1] === '(' && source[i + 2] !== '(') {
-      enclosing.push({ quote, parens });
+      frames.push({ quote, parens, body: null });
       quote = null;
       parens = 0;
       i++;
@@ -1811,18 +1842,21 @@ function scanSubstitutions(source: string, recorded: ReadonlyMap<number, number>
       if (heredoc !== null) announced.push(heredoc.delimiter);
       i = heredoc === null ? i + 1 : heredoc.end - 1;
     } else if ((character === '<' || character === '>') && source[i + 1] === '(') {
-      const end = commandSubstitutionEnd(source, i + 2);
-      if (end !== null) {
-        bodies.push(source.slice(i + 2, end));
-        i = end;
-      }
+      const body: ProcessBody = { start: i + 2, cursor: i + 2, pieces: [] };
+      frames.push({ quote, parens, body });
+      processes.push(body);
+      quote = null;
+      parens = 0;
+      i++;
     } else if (character === '(') {
       parens++;
     } else if (character === ')') {
       if (parens > 0) parens--;
-      else if (enclosing.length > 0) ({ quote, parens } = enclosing.pop()!);
+      else if (frames.length > 0) close(i);
     }
   }
+  // An unclosed process substitution runs to the end of the line.
+  while (frames.length > 0) close(source.length);
   return { bodies, heredocs };
 }
 
@@ -1882,7 +1916,8 @@ function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => b
 // The commands of a line read `depth` levels below the outer one, which
 // inherit the assignments `inherited`; the substitutions of the line inherit
 // them too, while those written before one of its commands reach that
-// command only.
+// command only. A substitution body is read at the depth of its line; only
+// a command line handed to a shell goes one level down.
 function collectCommands(
   source: string,
   tokenized: TokenizedShell,
@@ -1905,8 +1940,10 @@ function collectCommands(
       commands.push({ tokens: filtered.tokens, start, forceConfirm: filtered.forceConfirm, source, inherited });
     }
   }
+  // The scan has cut each body of the substitutions nested in it, so reading
+  // the bodies goes no deeper than the backticks a body still holds.
+  for (const body of scan.bodies) collectCommands(body, tokenizeShellSegments(body), depth, inherited, commands);
   if (depth === MAX_NESTED_READS) return;
-  for (const body of scan.bodies) nested.push({ line: body, inherited });
   for (const { line, inherited: lineInherited } of nested) {
     collectCommands(line, tokenizeShellSegments(line), depth + 1, lineInherited, commands);
   }

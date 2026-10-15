@@ -7926,6 +7926,32 @@
       ]
     },
     {
+      "id": "command-start-git-push-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(git push))))"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(git push)\\\"'\""
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "command-start-git-push-ssh",
       "toolName": "Bash",
       "toolInput": {
@@ -8851,6 +8877,32 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "bash -c \"eval 'eval sudo ls'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(sudo ls))))"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(sudo ls)\\\"'\""
       },
       "expected": [
         {
@@ -9794,6 +9846,32 @@
       ]
     },
     {
+      "id": "command-start-rm-rf-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(rm -rf /))))"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(rm -rf /)\\\"'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
       "id": "command-start-rm-rf-ssh",
       "toolName": "Bash",
       "toolInput": {
@@ -10397,6 +10475,22 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "bash -c \"eval 'eval git status'\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(git status))))"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(git status)\\\"'\""
       },
       "expected": []
     },

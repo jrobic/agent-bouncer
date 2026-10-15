@@ -1450,7 +1450,8 @@ describe('command-rules: the start of a command under malformed and deeply neste
     ['20000 nested subshells', `${'('.repeat(20000)}git push${')'.repeat(20000)}`, 'git-protected'],
     ['20000 keywords', `${'if '.repeat(20000)}git push`, 'git-protected'],
     ['5000 wrappers', `${'timeout 5 '.repeat(5000)}git push`, 'git-protected'],
-    ['5000 nested process substitutions', `${'<('.repeat(5000)}git push${')'.repeat(5000)}`, null],
+    ['5000 nested process substitutions', `${'<('.repeat(5000)}git push${')'.repeat(5000)}`, 'git-protected'],
+    ['5000 nested process substitutions after cat', `${'cat <('.repeat(5000)}sudo ls${')'.repeat(5000)}`, 'sudo'],
     ['5000 nested watch', `${'watch '.repeat(5000)}git push`, null],
   ])('%s answers %s in under 100ms', (_name, cmd, ruleId) => {
     const t0 = performance.now();

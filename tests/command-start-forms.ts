@@ -99,6 +99,9 @@ export const COMMAND_START_FORMS: readonly CommandStartForm[] = [
   { id: 'brace-group-in-eval', point: 0, wrap: (x) => `eval '{ ${x}; }'` },
   { id: 'wrapper-in-brace-group', point: 0, wrap: (x) => `{ timeout 5 ${x}; }` },
   { id: 'third-nested-reading', point: 0, wrap: (x) => `bash -c "eval 'eval ${x}'"` },
+  // A substitution body is read at the depth of its line, like `$( … )`.
+  { id: 'fourth-nested-process-substitution', point: 0, wrap: (x) => `cat <(cat <(cat <(cat <(${x}))))` },
+  { id: 'substitution-in-third-nested-reading', point: 0, wrap: (x) => `bash -c "eval 'eval \\"cat <(${x})\\"'"` },
 ];
 
 export type CommandStartLimit = CommandStartForm & Readonly<{ reason: string; }>;

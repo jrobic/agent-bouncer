@@ -888,10 +888,11 @@ that is not listed for a prefix or a wrapper makes the start uncertain: each
 rule then looks for its command name among the words that follow
 (`timeout --verbose 5 git push` asks).
 
-**Depth.** A command line read again (item 5, `env -S`, `watch`) and the body
-of a backtick or a process substitution are read down to three levels below
-the line: `bash -c "eval 'eval git push'"` asks; a fourth level is not read.
-`$( … )` is read at any depth.
+**Depth.** A command line read again (item 5, `env -S`, `watch`) is read down
+to three levels below the line: `bash -c "eval 'eval git push'"` asks; a
+fourth level is not read. A substitution (item 4) is read at the depth of
+its line, however deep it nests, like `$( … )`:
+`cat <(cat <(cat <(cat <(sudo ls))))` is blocked.
 
 **The reading before this list stays.** Each rule first reads every segment
 of the line the way it did before, from its first word past the prefixes of
