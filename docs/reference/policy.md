@@ -130,24 +130,33 @@ are an incomplete guard (see [Known limits](#known-limits)).
 
 | Row | Refuses |
 |---|---|
-| `env-dump` | at command position (also after `&&`, `;`, `\|` or a newline, inside `$(…)`, backticks and `sh -c`): `env` with nothing to run (`env`, `env -i`, `env -u NAME`, `env -0`, `env --`, `env FOO=1`); `printenv` with no name; `export` and `export -p`; `declare` / `typeset` with only `-x` / `-p` flags, or none; `set` alone; `compgen -e` and `compgen -A export`; `${!PREFIX@}` and `${!PREFIX*}` (the names of the matching variables) |
+| `env-dump` | At command position (also after shell separators and groupings, inside substitutions, behind the listed wrappers, and inside the argument of a shell `-c` wherever the shell stands): `env` with no command (`env`, `env -i`, `env -u NAME`, `env -0`, `env --`, `env FOO=1`); `printenv` with no name; `export` and `export -p`; `declare` / `typeset` with only `-x` / `-p` flags, or none; `set` alone; `compgen -e` and `compgen -A export`; `${!PREFIX@}` and `${!PREFIX*}` (the names of the matching variables). `env -S` reads its command string; an assignment followed by a real command, such as `env FOO=1 make test`, is allowed. A closing quote ends the command only when it closes the argument of a shell `-c`, `eval`, `env -S` or `watch`: `bash -c 'env'` and `watch 'env'` are dumps, `echo "a&env"` and `wget "https://x?a=1&env"` are not |
 | `env-dump-ps` | `ps` at command position with the BSD `e` as its first operand (`ps e`, `ps eww`, `ps auxe`) or macOS `-E`; `docker compose ps postgres` and prose that says "ps output" are not `ps` |
 | `env-dump-launchctl` | `launchctl getenv` (at command position) |
 | `env-dump-jq` | jq's `env` and `$ENV` builtins (jq at command position) |
 | `env-dump-docker` | `docker exec … env` or `printenv` with nothing after it; `docker compose config` as the compose subcommand — not with `-q` / `--quiet`, `--services`, `--volumes`, `--profiles`, `--images` or `--hash`, which print no environment (a positive list of printing flags: the dialect has no lookaround). `docker` at command position |
 | `proc-environ` (`rules.secret.path`) | `/proc/<pid>/environ` — `self`, `thread-self`, a pid, `task/<tid>/environ`. The Read tool is covered, and Bash through the path scan (`bash-proc-environ`) |
 
-"Command position" is one lead-in shared by `env-dump`, `env-dump-ps`,
-`env-dump-launchctl`, `env-dump-jq` and `env-dump-docker`
+`env-dump`, `env-dump-ps`, `env-dump-launchctl`, `env-dump-jq` and
+`env-dump-docker` share one command-position lead-in
 (`{{command-position}}`, `src/policy/fragments.ts`): the start of the text;
-after `;`, `&`, a newline, `{`, a backtick, `$(`, `<(` or `>(`; after a pipe
-preceded by whitespace (`curl … | jq -n env` is a dump, `a|env|b` in a search
-pattern is not a pipeline); after `then`, `do` and the like; inside `sh -c`;
-behind the wrappers `VAR=value`, `rtk`, `command`, `exec`, `nice`, `time`,
-`builtin`, `proxy` and `eval`. `ps`, `jq`, `docker` and `launchctl` may carry
-a path (`/usr/bin/jq`). A search or a sentence that merely spells the command
-— `grep 'launchctl getenv' docs`, a commit message that says `jq -n env`, a
-trailing `# see docker exec c env` — is not the command.
+after `;`, `&`, `&&`, a newline, `{`, a backtick, `$(`, `<(` or `>(`; after a
+pipe preceded by whitespace (`curl … | jq -n env` is a dump, `a|env|b` in a
+search pattern is not a pipeline); after `then`, `do`, `!` and the like;
+after up to eight `(`; inside the argument of a `sh`, `bash`, `zsh`, `dash`
+or `ksh` `-c`, wherever the shell stands (`find . -exec sh -c 'env' \;` and
+`docker exec c sh -c 'env'` are dumps); behind the prefixes `VAR=value`,
+`rtk`, `command`, `exec`, `nice`, `time`, `builtin`, `proxy` and `eval`, and
+behind the wrappers `nohup`, `timeout`, `xargs`, `env` and `watch` read
+with the shape of their arguments (the table in [What counts as the start of
+a command](#what-counts-as-the-start-of-a-command)). Prefixes and wrappers may
+be started by a path (`/usr/bin/env`, `/usr/bin/timeout`), and `ps`, `jq`,
+`docker` and `launchctl` may carry one (`/usr/bin/jq`). `env -S` and `watch`
+read their command arguments as command lines. A search or a sentence that
+merely spells the command — `grep 'launchctl getenv' docs`, a commit message
+that says `jq -n env`, a trailing `# see docker exec c env` — is not the
+command. A line handed whole to another machine is not read (see
+[Environment rows: exceptions](#environment-rows-exceptions)).
 
 Not matched: an `env` that runs a command (`env FOO=1 make test`),
 `set -euo pipefail`, `set -x`, `export FOO=bar`, `declare -x FOO=bar`,
@@ -156,6 +165,25 @@ Not matched: an `env` that runs a command (`env FOO=1 make test`),
 `{env: …}` object key and `env.NAME`. `docker inspect`
 (`env-dump-docker-inspect`) is a **`confirm`**: it prints `Config.Env`, but
 inspecting a container is everyday work.
+
+The lead-in reads at most eight prefixes and wrappers in front of a command,
+at most eight options of `env`, `timeout`, `xargs`, `watch` or a shell
+before its `-c`, and values (an assignment, an option value, a timeout
+duration) of at most 256 characters. Past that bound the rows cannot tell
+what runs, so `env-dump-unjudged` (`{{unjudged-command}}`) is a
+**`confirm`**: a ninth prefix or wrapper at a command position (`nice` nine
+times then `env`, nine assignments then `env`), a ninth option of `env`,
+`timeout`, `xargs` or `watch` there (`env -i` ten times), or a ninth option
+of a shell anywhere (`bash -e` nine times then `-c env`); a value longer
+than 256 characters in an assignment that a command follows
+(`A=<257 characters> env`), in an option or an assignment of `env`, in an
+option or the duration of `timeout`, in an option of `xargs`, `watch` or
+`nice`, or in a shell's `-o`, `--rcfile` or `--init-file`. A lone
+assignment runs nothing and does not ask, however long its value. It asks
+whatever the command behind the run is, as that command was not read, and it
+skips a line handed whole to another machine, like the dump rows. Every
+count is bounded at nine and every value read at 257 characters, so the row
+stays linear.
 
 **2. References to a protected variable name.** A name is protected when it
 is uppercase and equals, or ends in `_` plus, one of `TOKEN`, `PASSWORD`,
@@ -172,16 +200,20 @@ as a string). A baseline row that needs it writes `{{protected-name}}` in its
 regex and the loader fills it in at load time, once — as it fills the git
 `config_read_modes` list — so `bouncer rules list` shows the effective regex.
 The long alternations the environment rows share are fragments of the same
-kind (`src/policy/fragments.ts`): the reference forms (`{{env-reference}}`,
-built from `{{env-object}}` and `{{env-call}}`), the command-position lead-in
-(`{{command-position}}`, `{{shell-c}}`) and jq's builtin (`{{jq-lead}}`,
-`{{jq-env}}`). A `{{name}}` that no fragment defines, or that survives the
-fill, makes the baseline refuse to load (a typo would silently disable its
-rule). An overlay row writes its own whole regex — layers add rows, never
-data into a row — and lint rejects any `{{…}}` in an overlay (escape the
-braces, `\{\{`, to match them literally). Anything else that has to recognise
-a protected name imports the definition from there; a second copy would
-drift.
+kind (`src/policy/fragments.ts`): the command position
+(`{{command-position}}`), the quoted command lines read again
+(`{{reread-open}}`, `{{shell-c-open}}`), whole-environment command and end
+(`{{env-dump-command}}`, `{{env-dump-end}}`), the run past the lead-in's bound
+(`{{unjudged-command}}`), the line handed to another machine
+(`{{remote-command-line}}`), the reference forms (`{{env-reference}}`,
+built from `{{env-object}}` and `{{env-call}}`), and jq's builtin
+(`{{jq-lead}}`, `{{jq-env}}`). A `{{name}}` that no fragment defines,
+or that survives the fill, makes the baseline refuse to load (a typo would
+silently disable its rule). An overlay row writes its own whole regex — layers
+add rows, never data into a row — and lint rejects any `{{…}}` in an overlay
+(escape the braces, `\{\{`, to match them literally). Anything else that has to
+recognise a protected name imports the definition from there; a second copy
+would drift.
 
 The forms recognised: `$NAME` and `${NAME}` (shell); `process.env.NAME`,
 `process.env["NAME"]`, `Bun.env.NAME`, `Deno.env.get("NAME")`;
@@ -216,9 +248,10 @@ or a session token, and `aws configure export-credentials`. It keeps its id:
 an overlay that relaxed it keeps working.
 
 **Order is behaviour.** The first matching row of a table wins, so every
-block row sits before the confirm rows (`env-dump-docker-inspect`, `env-ref`,
-`credential-printer`): a confirm placed first would hide a block later in the
-same command. **Relaxing:** each row has its own id for `[[override]]`
+block row sits before the confirm rows (`env-dump-unjudged`,
+`env-dump-docker-inspect`, `env-ref`, `credential-printer`): a confirm placed
+first would hide a block later in the same command. **Relaxing:** each row has
+its own id for `[[override]]`
 ([Override a baseline rule](../how-to/override-a-baseline-rule.md)), so a
 workflow that inspects containers all day relaxes `env-dump-docker-inspect`
 alone, and one that really needs `docker compose config` relaxes
@@ -363,34 +396,54 @@ elsewhere"` without removing the baseline guard.
   the `env-value` verdict's, which withholds a path that carries a protected
   value. A command that carries a literal value and is blocked by another
   rule is therefore logged in clear.
-- The environment rows read command text. Not covered: a variable name or a
-  command built at run time (`eval`, a base64-decoded command, a pid in
-  `/proc/$$/environ`); Perl `%ENV`, PHP `$_ENV` and Python's bare `environ`
-  after `from os import environ`; `docker run … env`, `podman`,
-  `kubectl exec … -- env`, `yq` `env()`; `readonly -p` and `compgen -v`;
-  `ps` options ahead of the BSD operand (`ps -p 1 eww`); `ps`, `jq`,
-  `docker` or `launchctl` behind something the command-position lead-in does
-  not know — a wrapper (`timeout 5 docker exec c env`, `watch`, `xargs`,
-  `env VAR=value docker …`; `sudo` is blocked outright by the command
-  family), a bare `( … )` subshell, a pipe with no space before it
-  (`a|jq -n env`), `docker exec c ps eww`; a `docker compose config` flag the
-  printing-flag list does not know.
+- The environment rows read command text. Not covered: a command built at run
+  time (`eval "$cmd"`, a base64-decoded command, a pid in `/proc/$$/environ`);
+  Perl `%ENV`, PHP `$_ENV` and Python's bare `environ` after `from os import
+  environ`; a container command without a shell `-c` — `docker run … env`,
+  `podman exec c env`, `kubectl exec … -- env` — and `yq` `env()`;
+  `readonly -p` and `compgen -v`; `ps` options ahead of the BSD operand
+  (`ps -p 1 eww`); `docker exec c ps eww`; or a `docker compose config`
+  printing flag the positive list does not know. Wrappers that are not listed
+  (`stdbuf`, `flock`, `caffeinate`) do not start a command: `stdbuf -o0 env`
+  passes, though a shell `-c` behind them is read. More than eight `(` in
+  front of one command are not followed. More than eight prefixes, wrappers
+  or options of one run, or a value longer than 256 characters, are not
+  read either: `env-dump-unjudged` asks instead, whatever the command.
+  A clean-environment launch with many variables asks for that reason:
+  `env -i` counts as one wrapper and each assignment after it as another
+  (`timeout 90 env -i` then seven assignments). Its count runs on through an
+  `eval` or `watch` quote (`eval` then eight wrappers inside the quote asks),
+  and a script whose name ends in `sh` given nine options (`./build.sh -v`
+  nine times) asks too. After an option that `timeout`, `xargs` or `watch`
+  does not list, a word longer than 256 characters ends the reading without
+  asking, as those words may be the command's own arguments (a long URL):
+  `xargs -x <257 characters> env` passes. `sudo` is blocked by the command
+  family.
+- A line handed whole to another machine is not read: a line that starts with
+  `ssh` or `limactl shell` and holds no local expansion or separator, nor the
+  word `command` (`ssh host 'printenv'`, `limactl shell vm -- bash -c 'env'`;
+  see [Environment rows: exceptions](#environment-rows-exceptions)). A
+  container shell is read like any shell `-c`: `docker exec c sh -c 'env'` is
+  blocked by `env-dump`.
+- A word split by quotes is not read as that word: `e""nv` passes the rows, and `ssh -o ProxyComman"d=…"` keeps the remote-line exemption.
+- A pipe without separating whitespace (`a|jq -n env`) is not a command start.
 - Prose is command text: a commit message or a heredoc that spells
   `process.env` or a protected variable fires the whole-environment (block)
   or the reference (confirm) row, and a line that holds only `set`, `env` or
-  `export` in a heredoc (SQL, YAML) fires `env-dump`, as does the JavaScript
-  object shorthand `{ env }` (a brace opens a command position; `node -e
-  "spawn(cmd, { env })"`). `echo $TOKEN | docker login --password-stdin` is
-  blocked because `echo` is a display; a jq program that holds `env` in a
-  string literal or as a variable name (`test("a|env b")`, `--arg env prod`)
-  matches `env-dump-jq`: jq is the command there, so command position does
-  not help; a search is excepted only when
-  the whole command is searches and harmless readers (`awk` and the
+  `export` in a heredoc (SQL, YAML) fires `env-dump`. The JavaScript object
+  shorthand `{ env }` is not a command; `{ env; }` is. `echo $TOKEN | docker
+  login --password-stdin` is blocked because `echo` is a display; a jq program
+  that holds `env` in a string literal or as a variable name
+  (`test("a|env b")`, `--arg env prod`) matches `env-dump-jq`: jq is the
+  command there, so command position does not help; a search is excepted only
+  when the whole command is searches and harmless readers (`awk` and the
   interpreters are not).
 - A non-default `SOPS_AGE_KEY_FILE` is a human choice and needs a personal
   overlay row.
 - A command hidden inside a finder or pipeline executor's `sh -c` argument is
-  not inspected; the guard does not parse shell command strings.
+  not inspected by the destructive proxy-execution rows, which do not parse
+  shell command strings; the environment rows do read it
+  (`find . -exec sh -c 'env' \;` is blocked).
 - `docker-destructive` recognizes literal Docker commands at command position,
   after shell control keywords, in `sh -c`/`eval`, nested active command
   substitutions, here-strings, remote and interpreter command strings, and a
@@ -837,14 +890,14 @@ algorithm, not by a row of the six regex tables).
 
 ## What counts as the start of a command
 
-`git-protected`, `git-config-exec`, `sudo` (privilege escalation) and
-`rm-rf-dangerous` judge a command by its name, so they first find where each
-command of a line starts. This list is the one definition they share.
-`tests/command-start-forms.ts` writes it once as forms around a command `X`
-and replays them on `git push`, `sudo ls`, `rm -rf /` and `git status`; the
-result is the `command-start-*` cases of `fixtures/command.json`. The env rows
-of `rules.secret.bash` find a command with their own pattern, the
-command-position lead-in described with them above.
+`git-protected`, `git-config-exec`, `sudo` (privilege escalation),
+`rm-rf-dangerous` and the environment rows that use `command-position` judge a
+command by its name, so they first find where each command of a line starts.
+This is the shared definition. `tests/command-start-forms.ts` writes forms
+around a command `X` once and replays them across the command families and the
+environment families; `fixtures/command.json` holds the generated
+`command-start-*` cases. The environment dump rows use the same
+`{{command-position}}` lead-in described in [The environment rows](#the-environment-rows).
 
 A command starts:
 
@@ -928,6 +981,41 @@ use the segment reading alone.
   escalation use (`cat <<EOF` … `$(sudo ls)` is blocked) but `rm -rf` does
   not (`$(rm -rf /)` there passes);
 - a command line nested more than three levels down.
+
+### Environment rows: exceptions
+
+The environment rows (`{{command-position}}`, see
+[The environment rows](#the-environment-rows)) differ from the shared
+definition in these ways:
+
+- Broader: they read the argument of a `sh`, `bash`, `zsh`, `dash` or `ksh`
+  `-c` wherever the shell stands, also started by a path and with grouped
+  flags (`/bin/bash -lc`), not only when the shell starts a command. A local
+  launcher (`find -exec`, `stdbuf`, `flock`, `caffeinate`, `script`) or a
+  container command (`docker exec`, `docker compose exec`, `podman exec`,
+  `kubectl exec`) therefore does not hide `sh -c 'env'`.
+- Broader: their `env` wrapper also reads `--ignore-environment`,
+  `--unset NAME`, `-C`/`--chdir DIR`, `-0`/`--null`, `-v` and `--` before
+  the command.
+- Narrower: a line handed whole to another machine is not read
+  (`{{remote-command-line}}`). Such a line starts with `ssh` or
+  `limactl shell`, followed by a blank, and holds none of `$`, a backtick,
+  `<`, `>`, `;`, `&`, `|` or a newline: `ssh h 'printenv'` and
+  `limactl shell vm -- bash -c 'env'` pass. A line that holds a local
+  expansion or a separator is judged like any other: `ssh h "echo $(env)"`,
+  `` ssh h `env` ``, `ssh h cat < <(env)` and `ssh h 'ls'; env` are blocked,
+  and so is `ssh-agent bash -c 'env'`, which is not `ssh`. Nor does such a
+  line hold the word `command`, in any letter case: the ssh options
+  `ProxyCommand` and `LocalCommand` run a command on this machine, so
+  `ssh -o ProxyCommand="sh -c 'env'" h`, `ssh -oproxycommand=… h` and
+  `ssh -o "LocalCommand …" h` are judged like any other line, as is a remote
+  line that merely says `command` (the regex dialect has no look-ahead, and
+  every spelling of the two options holds that word).
+- Narrower: the `env` dump row treats a lone `}` as an argument: `{ env }` is
+  allowed. A semicolon or newline that ends the command keeps `{ env; }` and
+  `{ env;}` blocked.
+- Narrower: an environment row starts after `|` only when whitespace precedes
+  the pipe: `true |env` blocks, `true|env` does not.
 
 ## The two algorithm-driven tables
 

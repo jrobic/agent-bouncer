@@ -43,6 +43,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- **Environment dumps are refused behind command wrappers and inside every
+  shell `-c`.** The environment rows follow subshells, `!`, `timeout`,
+  `xargs`, `env` options and assignments, `nohup` and `watch`, also started
+  by a path; `eval`, `watch` and `env -S` command strings are read again, and
+  the argument of a `sh`/`bash`/`zsh`/`dash`/`ksh -c` is read wherever the
+  shell stands (`find -exec`, `stdbuf`, `docker exec`, `kubectl exec`). A
+  closing quote ends a dump only when it closes such an argument, so
+  `echo "a&env"` and a URL that holds `&env` stay allowed. A line handed to
+  `ssh` or `limactl shell` with no local `$`, backtick, redirection or
+  separator is not read; `ssh h "echo $(env)"` is, and so is a line that
+  holds the word `command` (ssh's `ProxyCommand` and `LocalCommand` run on
+  this machine). `{ env }` is allowed because a lone `}` is an argument, not
+  a terminator; `{ env; }` remains blocked. A new confirm row,
+  `env-dump-unjudged`, asks when more than eight prefixes, wrappers or
+  options of one run, or a value longer than 256 characters, stand in front
+  of a command (`nice` nine times then `env`, `bash -e` nine times then
+  `-c env`, `A=<257 characters> env`), since the dump rows do not read that
+  far; the baseline grows by one rule (`bouncer rules list`: 113). Details: [Environment rows: exceptions](docs/reference/policy.md#environment-rows-exceptions)
+  and [The environment rows](docs/reference/policy.md#the-environment-rows).
+
 - **Git destructive-option checks now confirm branch force-copies, forced tag
   moves, and destructive checkout option spellings.** Baseline `branch -C`
   and tag `-f` / `--force` ask, as do grouped, abbreviated, and `=value`

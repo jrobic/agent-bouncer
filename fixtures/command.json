@@ -10547,6 +10547,2441 @@
       "expected": []
     },
     {
+      "id": "command-start-env-dump-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\nenv"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(env)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( env )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && env )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (env) )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ env; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { env; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if env; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then env; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif env; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else env; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do env; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until env; do true; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do env; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(env)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `env`"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(env)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(env)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(env | wc -l)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"env\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"env\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"env\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"env\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'env'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 env"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (env); fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(env)\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'env')"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"env\"; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `env`'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ env; }'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 env; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval env'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(env))))"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(env)\\\"'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-dump-limactl-shell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "limactl shell vm -- bash -c 'env'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-dump-docker-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "docker exec c sh -c 'env'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-dump"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\necho $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(echo $GITHUB_TOKEN)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( echo $GITHUB_TOKEN )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && echo $GITHUB_TOKEN )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (echo $GITHUB_TOKEN) )"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ echo $GITHUB_TOKEN; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { echo $GITHUB_TOKEN; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if echo $GITHUB_TOKEN; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then echo $GITHUB_TOKEN; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif echo $GITHUB_TOKEN; then true; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else echo $GITHUB_TOKEN; fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do echo $GITHUB_TOKEN; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until echo $GITHUB_TOKEN; do true; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do echo $GITHUB_TOKEN; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(echo $GITHUB_TOKEN)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `echo $GITHUB_TOKEN`"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(echo $GITHUB_TOKEN)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(echo $GITHUB_TOKEN)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(echo $GITHUB_TOKEN | wc -l)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"echo $GITHUB_TOKEN\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"echo $GITHUB_TOKEN\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"echo $GITHUB_TOKEN\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"echo $GITHUB_TOKEN\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'echo $GITHUB_TOKEN'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 echo $GITHUB_TOKEN"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (echo $GITHUB_TOKEN); fi"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(echo $GITHUB_TOKEN)\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'echo $GITHUB_TOKEN')"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"echo $GITHUB_TOKEN\"; done"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `echo $GITHUB_TOKEN`'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'echo $GITHUB_TOKEN'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ echo $GITHUB_TOKEN; }'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 echo $GITHUB_TOKEN; }"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval echo $GITHUB_TOKEN'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(echo $GITHUB_TOKEN))))"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-ref-display-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(echo $GITHUB_TOKEN)\\\"'\""
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "env-ref-display"
+        }
+      ]
+    },
+    {
+      "id": "command-start-env-command-after-semicolon",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true; env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-after-and",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true && env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-after-or",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "false || env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-after-pipe",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true | env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-after-background",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true & env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-after-newline",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "true\nenv FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(env FOO=1 make test)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell-spaced",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( env FOO=1 make test )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell-after-cd",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( cd /tmp && env FOO=1 make test )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell-nested",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "( (env FOO=1 make test) )"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ env FOO=1 make test; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-function-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "f() { env FOO=1 make test; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bang",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "! env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-if-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if env FOO=1 make test; then true; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then env FOO=1 make test; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-elif-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; elif env FOO=1 make test; then true; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-else",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if false; then true; else env FOO=1 make test; fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-while-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "while false; do env FOO=1 make test; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-until-condition",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "until env FOO=1 make test; do true; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-for-body",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do env FOO=1 make test; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-dollar-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo $(env FOO=1 make test)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `env FOO=1 make test`"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-process-input",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(env FOO=1 make test)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-process-output",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "tee >(env FOO=1 make test)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-assignment-of-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "OUT=$(env FOO=1 make test | wc -l)"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"env FOO=1 make test\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-sh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "sh -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-zsh-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "zsh -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-dash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "dash -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-lc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -lc \"env FOO=1 make test\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-euc",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -euc 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-option-before-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -o pipefail -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/bin/bash -c \"env FOO=1 make test\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval \"env FOO=1 make test\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-eval-unquoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-c-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'env FOO=1 make test'\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "A=1 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-rtk",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-rtk-proxy",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "rtk proxy env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "command env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-exec",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "exec env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-nice",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nice -n 5 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-time",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "time env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-builtin",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "builtin env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-timeout-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout -k 2 -s KILL 5 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-timeout-long-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout --signal=KILL --preserve-status 5s env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-nohup",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "nohup env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-env-ignore-environment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -i env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-env-unset-and-assignment",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -u FOO BAR=1 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-xargs-options",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0 -n 1 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-xargs-glued-values",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -0r -n1 -I{} env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-watch-quoted",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -n 1 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 env FOO=1 make test"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell-in-then",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "if true; then (env FOO=1 make test); fi"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-subshell-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"(env FOO=1 make test)\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-c-in-subshell",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "(bash -c 'env FOO=1 make test')"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-c-after-timeout",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout 5 bash -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-bash-c-in-for",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "for x in a; do bash -c \"env FOO=1 make test\"; done"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-backtick-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c 'echo `env FOO=1 make test`'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-sh-c-after-xargs",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -I {} sh -c 'env FOO=1 make test'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-brace-group-in-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval '{ env FOO=1 make test; }'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-wrapper-in-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ timeout 5 env FOO=1 make test; }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval env FOO=1 make test'\""
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-fourth-nested-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(cat <(cat <(cat <(env FOO=1 make test))))"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-env-command-substitution-in-third-nested-reading",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"eval 'eval \\\"cat <(env FOO=1 make test)\\\"'\""
+      },
+      "expected": []
+    },
+    {
       "id": "command-start-literal-assignment-of-substitution-is-not-a-prefix",
       "toolName": "Bash",
       "toolInput": {

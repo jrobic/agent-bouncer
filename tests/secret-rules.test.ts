@@ -467,10 +467,9 @@ describe('secret-rules: sops and age decryption', () => {
   });
 });
 
-// Ticket 57 — the environment rows. The agent's own environment holds what
-// its launcher exported; these rows refuse the commands that print or
-// reference it. A net, not a barrier (docs/reference/policy.md).
-describe('secret-rules: environment dumps (ticket 57)', () => {
+// Environment rows refuse commands that print or reference the agent's
+// inherited environment (docs/reference/policy.md).
+describe('secret-rules: environment dumps', () => {
   test('ruleId env-dump: env with nothing to run is blocked', () => {
     expect(checkSecretBash('env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
   });
@@ -627,7 +626,7 @@ describe('secret-rules: environment dumps (ticket 57)', () => {
     expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-jq' });
   });
 
-  // `.env` is a field accessor (ticket 28's guard), `{env: …}` an object key,
+  // `.env` is a field accessor, `{env: …}` an object key,
   // `env.NAME` one variable (a non-protected one is allowed), and a `| grep
   // env` after the program is not jq.
   test.each([
@@ -690,6 +689,28 @@ describe('secret-rules: environment dumps (ticket 57)', () => {
     expect(checkSecretBash('docker image inspect alpine')).toBeNull();
   });
 
+  // Past the eight the lead-in reads, the command is not judged: the row asks,
+  // and a block found elsewhere in the same command still wins.
+  test('ruleId env-dump-unjudged: a ninth wrapper or option asks instead of passing', () => {
+    const run = (word: string, count: number): string => Array.from({ length: count }, () => word).join(' ');
+    expect(checkSecretBash(`timeout ${run('-k 1', 9)} 5 env`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    expect(checkSecretBash(`timeout ${run('-k 1', 8)} 5 env`)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+    expect(checkSecretBash(`${run('nice', 9)} make; env`)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test('ruleId env-dump-unjudged: a value past 256 characters asks instead of passing', () => {
+    const value = (length: number): string => 'x'.repeat(length);
+    expect(checkSecretBash(`A=${value(256)} env`)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+    expect(checkSecretBash(`A=${value(257)} env`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    expect(checkSecretBash(`env A=${value(256)}`)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+    expect(checkSecretBash(`env A=${value(257)}`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    expect(checkSecretBash(`env -u ${value(257)}`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    expect(checkSecretBash(`timeout ${'0'.repeat(256)}5 env`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    expect(checkSecretBash(`bash -o ${value(257)} -c env`)).toMatchObject({ verdict: 'confirm', ruleId: 'env-dump-unjudged' });
+    // A lone assignment runs nothing, however long its value.
+    expect(checkSecretBash(`KEY=${value(300)}`)).toBeNull();
+  });
+
   test('a block row beats a confirm row in the same command (first match wins, block rows come first)', () => {
     expect(checkSecretBash('docker inspect app-db && env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
     expect(checkSecretBash('gh auth token; env')).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
@@ -717,7 +738,7 @@ describe('secret-rules: environment dumps (ticket 57)', () => {
   });
 });
 
-describe('secret-rules: references to a protected variable (ticket 57)', () => {
+describe('secret-rules: references to a protected variable', () => {
   test('ruleId env-ref-display: a protected variable fed to echo is blocked', () => {
     expect(checkSecretBash('echo $ATLASSIAN_TOKEN')).toMatchObject({ verdict: 'block', ruleId: 'env-ref-display' });
   });
@@ -1208,9 +1229,9 @@ describe('secret-rules: known limits (shell obfuscation bypasses)', () => {
   });
 });
 
-// Review fix pass (ticket 57): precision of `ps`, the compose `-q` family, every
-// reference form through both reference rows, and rows that stay linear.
-describe('secret-rules: environment rows, review fix pass (ticket 57)', () => {
+// Environment regression coverage: ps precision, compose flags, protected
+// reference forms and pathological inputs.
+describe('secret-rules: environment rows and linear matching', () => {
   // The BSD `e` rides on the FIRST operand of a `ps` at command position:
   // a later word, a compose service, prose that mentions ps never counts.
   test.each([
@@ -1314,6 +1335,51 @@ describe('secret-rules: environment rows, review fix pass (ticket 57)', () => {
     ['launchctl after separators (24 KB)', '; launchctl '.repeat(2000)],
     ['wrappers repeated, then jq (25 KB)', `${'time '.repeat(5000)}jq`],
     ['wrappers after separators (28 KB)', '; time '.repeat(4000)],
+    ['timeout wrappers repeated (27 KB)', 'timeout 5 '.repeat(3000) + 'env'],
+    ['watch wrappers repeated (22 KB)', 'watch -n 1 '.repeat(2000) + 'env'],
+    ['timeout wrappers after separators (26 KB)', '; timeout 5 '.repeat(2000)],
+    ['timeout unknown option repeated (220 B)', 'timeout -x '.repeat(20)],
+    [
+      'timeout unknown option plus nested shell and wrapper split',
+      'timeout -x '.repeat(8) + 'bash -c ' + 'timeout -x '.repeat(100) + 'env',
+    ],
+    ['xargs unknown option repeated', 'xargs -x '.repeat(100) + 'env'],
+    ['watch unknown option repeated', 'watch -b '.repeat(100) + '\'env\''],
+    [
+      'timeout unknown options, nested shell and repeats without a command',
+      'timeout -x '.repeat(8) + 'bash -c ' + 'timeout -x '.repeat(100),
+    ],
+    ['xargs unknown options repeated without a command', 'xargs -x '.repeat(100)],
+    ['watch unknown options repeated without a command', 'watch -b '.repeat(100)],
+    [
+      'interleaved unknown wrappers with ambiguous command words',
+      'timeout -x '.repeat(40) + 'xargs -x '.repeat(40) + 'watch -b '.repeat(40),
+    ],
+    ['timeout and xargs ambiguous wrapper splits', 'timeout -x '.repeat(100) + 'xargs -x '.repeat(100) + 'env'],
+    ['xargs and watch ambiguous wrapper splits', 'xargs -x '.repeat(100) + 'watch -b '.repeat(100) + 'env'],
+    ['watch and timeout ambiguous wrapper splits', 'watch -b '.repeat(100) + 'timeout -x '.repeat(100) + 'env'],
+    ['xargs shell and watch ambiguous wrapper splits', 'xargs -x '.repeat(100) + 'bash -c ' + 'watch -b '.repeat(100) + 'env'],
+    ['braces (2 KB)', '{ '.repeat(1000)],
+    ['braces (4 KB)', '{ '.repeat(2000)],
+    ['one word (20 KB)', 'a'.repeat(20000)],
+    ['one path (20 KB)', 'a/'.repeat(10000)],
+    ['braces and parentheses (20 KB)', '{ ( '.repeat(5000)],
+    ['a shell -c, then braces (10 KB)', 'bash -c ' + '{ '.repeat(5000)],
+    ['a word without a space (40 KB)', 'x'.repeat(40000)],
+    ['a path that ends in a shell (40 KB)', '/usr'.repeat(10000) + '/bin/bash'],
+    ['shell names glued to dashes (20 KB)', 'sh -'.repeat(5000)],
+    ['assignments that open braces (20 KB)', 'A={ '.repeat(5000)],
+    ['env options whose values open braces (20 KB)', '{env -u'.repeat(2857)],
+    ['env options whose values open backticks (20 KB)', '`env -u'.repeat(2857)],
+    ['env assignments whose values open braces (20 KB)', 'env A={'.repeat(2857)],
+    ['declare flags that hold x twice (30 flags)', `declare${' -xx'.repeat(30)} Q`],
+    ['glued assignments that open braces (36 KB)', '{A='.repeat(12000)],
+    ['glued assignments that open backticks (36 KB)', '`A='.repeat(12000)],
+    ['glued timeout signals that open braces (88 KB)', '{timeout -s'.repeat(8000)],
+    ['glued xargs sizes that open braces (72 KB)', '{xargs -s'.repeat(8000)],
+    ['glued watch intervals that open braces (72 KB)', '{watch -n'.repeat(8000)],
+    // The printenv, export and declare flag runs have no bound; this pins that they stay linear.
+    ['declare with ten thousand -x flags (30 KB)', `declare${' -x'.repeat(10000)}`],
   ];
 
   test.each(PATHOLOGICAL)('pathological input stays fast: %s', (_name, input) => {
@@ -1327,12 +1393,83 @@ describe('secret-rules: environment rows, review fix pass (ticket 57)', () => {
   });
 });
 
-// Review K1 (ticket 57): `env-dump-launchctl`, `env-dump-docker` and
-// `env-dump-jq` start at command position — the lead-in `env-dump` and
-// `env-dump-ps` already use — so a search or a sentence that spells the
-// command text is not the command. (Words like `then` or `do` in a comment
-// are shell keywords to that lead-in, so the sentences below avoid them.)
-describe('secret-rules: launchctl, docker and jq rows read command position (ticket 57)', () => {
+describe('secret-rules: environment-specific command starts', () => {
+  test.each([
+    'find . -exec sh -c \'env\' \\;',
+    'stdbuf -o0 bash -c \'env\'',
+    'flock f bash -c \'env\'',
+    'caffeinate bash -c \'env\'',
+    'script -q /dev/null bash -c \'env\'',
+    'docker compose exec app sh -c \'env\'',
+    'docker exec c /bin/sh -c \'env\'',
+    'docker exec c ksh -c \'env\'',
+    'docker --context x exec c sh -c \'env\'',
+    'podman exec c bash -lc \'env\'',
+    'kubectl exec pod -- sh -c \'env\'',
+    '/bin/bash -lc \'env\'',
+    'ksh -ec \'printenv\'',
+  ])('%s blocks a command read by a shell', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test.each([
+    'true&&env',
+    'true &&env',
+    'true&env',
+    'x=1&&set',
+    'true | env',
+    'true |env',
+  ])('%s starts an environment command', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test.each([
+    'timeout -x env',
+    'timeout -x 5 env',
+    'xargs -x env',
+  ])('%s keeps an unknown wrapper option conservative', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test.each([
+    'limactl shell vm -- bash -c \'env\'',
+    'limactl shell vm -- bash -c \'printenv\'',
+    'ssh h \'printenv\'',
+    'ssh h \'bash -lc "env"\'',
+    'docker exec c sh -c \'echo env\'',
+    'true|env',
+    'node -e \'console.log(env)\'',
+    'python3 -c \'print(set)\'',
+    'git commit -m "docs: explain (env) usage"',
+    'grep -n "(env)" README.md',
+    '{ env }',
+  ])('%s is not an environment dump command', (command) => {
+    expect(checkSecretBash(command)).toBeNull();
+  });
+
+  test.each([
+    '(env)',
+    '( env )',
+    'true && (env)',
+    '{ env; }',
+    '{ env;}',
+  ])('%s starts an environment dump command', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+
+  test.each([
+    'docker exec c sh -c \'env\'',
+    'docker exec c bash -c "printenv"',
+    'docker exec c zsh -c \'env\'',
+    'docker exec c dash -c \'printenv\'',
+  ])('%s blocks a container environment dump', (command) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump' });
+  });
+});
+
+// These rows share command-position matching: a search or sentence that only
+// spells a command is not itself the command.
+describe('secret-rules: launchctl, docker and jq rows read command position', () => {
   test.each([
     'grep -n "TERM\\|launchctl getenv" docs/reference/policy.md',
     'git commit -m \'docs: launchctl getenv reads the launchd environment\'',
@@ -1389,20 +1526,19 @@ describe('secret-rules: launchctl, docker and jq rows read command position (tic
     expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId: 'env-dump-docker' });
   });
 
-  // The price of command position, said out loud: the lead-in knows a handful
-  // of wrappers (`VAR=value`, rtk, command, exec, nice, time, builtin, proxy,
-  // eval) and a pipe preceded by whitespace; what stands in front of the
-  // command otherwise is not seen. (`env-dump` and `env-dump-ps` have the
-  // same edges; `sudo` is not seen here either, but the command family
-  // blocks it outright.)
+  // Wrappers preserve command position across the environment rows. A pipe
+  // without preceding whitespace remains outside the shared start forms.
   test.each([
-    'timeout 5 docker exec app env',
-    'env DOCKER_HOST=ssh://build docker exec app env',
-    'watch -n 5 launchctl getenv PATH',
-    'cat data.json|jq -n env',
-    '(docker exec app env)',
-  ])('known limit: %s is not seen', (command) => {
-    expect(checkSecretBash(command)).toBeNull();
+    ['timeout 5 docker exec app env', 'env-dump-docker'],
+    ['env DOCKER_HOST=ssh://build docker exec app env', 'env-dump-docker'],
+    ['watch -n 5 launchctl getenv PATH', 'env-dump-launchctl'],
+    ['(docker exec app env)', 'env-dump-docker'],
+  ])('%s is checked at command position', (command, ruleId) => {
+    expect(checkSecretBash(command)).toMatchObject({ verdict: 'block', ruleId });
+  });
+
+  test('a pipe without separating whitespace remains outside the command starts', () => {
+    expect(checkSecretBash('cat data.json|jq -n env')).toBeNull();
   });
 
   // Not a command-position problem: jq IS the command and the text `|env ` sits
