@@ -230,6 +230,10 @@ const LITERAL_CASES: readonly FixtureCase[] = [
   ),
   // bash reads an unclosed heredoc body to the end of its input.
   bashCase('literal-unclosed-heredoc-body-is-data', 'cat <<\'EOF\'\nsee `sudo ls`', []),
+  // Two commands of a line each announce a heredoc: both bodies are data, and
+  // the line after them is read.
+  bashCase('literal-two-heredocs-of-a-line-are-data', 'cat <<A; cat <<B\nx `sudo ls`\nA\ny `sudo ls`\nB', []),
+  bashCase('literal-line-after-two-heredocs-is-read', 'cat <<A; cat <<B\nx\nA\ny\nB\n(sudo ls)', SUDO),
   // A redirection with the subshell's closer glued to it still names its file.
   bashCase('literal-glued-closer-after-redirection', '(git ls-files | xargs git grep -l x 2>/dev/null)', []),
   {

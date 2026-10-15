@@ -10742,6 +10742,27 @@
       "expected": []
     },
     {
+      "id": "command-start-literal-two-heredocs-of-a-line-are-data",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<A; cat <<B\nx `sudo ls`\nA\ny `sudo ls`\nB"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-line-after-two-heredocs-is-read",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <<A; cat <<B\nx\nA\ny\nB\n(sudo ls)"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
       "id": "command-start-literal-glued-closer-after-redirection",
       "toolName": "Bash",
       "toolInput": {

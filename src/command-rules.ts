@@ -1754,9 +1754,48 @@ type SubstitutionScan = Readonly<{
   // What each backtick and process substitution runs.
   bodies: readonly string[];
   // The heredoc bodies the tokenizer did not record: inside a `$( … )` it
-  // could not close, or never closed.
+  // could not close, never closed, or announced by a command before the last
+  // one of its line.
   heredocs: readonly SourceRange[];
 }>;
+
+// Where to resume after the bodies of the heredocs `announced` on a line,
+// read from `start`. A body the tokenizer recorded is taken from `recorded`
+// when the line after it is its delimiter: the tokenizer records the
+// heredocs of a line's last command only, so a recorded range may run over
+// two bodies. Any other body is read line by line and added to `unrecorded`;
+// null when one is never closed, which runs to the end of the source.
+function skipHeredocBodies(
+  source: string,
+  start: number,
+  announced: readonly HeredocDelimiter[],
+  recorded: ReadonlyMap<number, number>,
+  unrecorded: SourceRange[],
+): number | null {
+  let cursor = start;
+  let resume = start;
+  for (let index = 0; index < announced.length; index++) {
+    const { value, stripTabs } = announced[index]!;
+    const end = recorded.get(cursor);
+    if (end !== undefined) {
+      const lineEnd = source.indexOf('\n', end);
+      const line = source.slice(end, lineEnd === -1 ? source.length : lineEnd);
+      if ((stripTabs ? line.replace(/^\t+/, '') : line) === value) {
+        resume = end;
+        cursor = lineEnd === -1 ? source.length : lineEnd + 1;
+        continue;
+      }
+    }
+    const read = consumeHeredocBodies(source, cursor, announced.slice(index));
+    if (read === null) {
+      unrecorded.push({ start: cursor, end: source.length });
+      return null;
+    }
+    unrecorded.push(...read);
+    return read[read.length - 1]!.end;
+  }
+  return resume;
+}
 
 // The body of an open process substitution: where it starts, how far its
 // text is taken, and the text taken so far.
@@ -1838,15 +1877,10 @@ function scanSubstitutions(source: string, recorded: ReadonlyMap<number, number>
     if (character === '"' || character === '\'') {
       quote = character;
     } else if (character === '\n' && announced.length > 0) {
-      const recordedEnd = announced.length === 1 ? recorded.get(i + 1) : undefined;
-      const read = recordedEnd === undefined ? consumeHeredocBodies(source, i + 1, announced) : [];
+      const resume = skipHeredocBodies(source, i + 1, announced, recorded, heredocs);
       announced = [];
-      if (read === null) {
-        heredocs.push({ start: i + 1, end: source.length });
-        break;
-      }
-      heredocs.push(...read);
-      i = (recordedEnd ?? read[read.length - 1]!.end) - 1;
+      if (resume === null) break;
+      i = resume - 1;
     } else if (character === '#' && (i === 0 || /[\s;&|]/.test(source[i - 1]!))) {
       const newline = source.indexOf('\n', i);
       if (newline === -1) break;
