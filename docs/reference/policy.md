@@ -894,15 +894,15 @@ fourth level is not read. A substitution (item 4) is read at the depth of
 its line, however deep it nests, like `$( … )`:
 `cat <(cat <(cat <(cat <(sudo ls))))` is blocked.
 
-**The reading before this list stays.** Each rule first reads every segment
-of the line the way it did before, from its first word past the prefixes of
-item 6, then every command this list finds. A command that asked before
-therefore asks with the same rule and reason, and no verdict loosens:
-`(cd /tmp && git status)` still asks, as that reading takes `status)` for the
-subcommand. `rm-rf-dangerous` also still reads every `rm` word of the line
-wherever it stands (`echo rm -rf /` is blocked). The path scans
-(protected-write targets, the secret path scan, `docker-destructive`) keep
-their own reading.
+**Two readings, the segment reading first.** Each rule first reads every
+segment of the line from its first word past the prefixes of item 6 (the
+segment reading), then every command this list finds; the first reading
+that asks answers. A command the segment reading asks for therefore keeps
+that rule and reason: `(cd /tmp && git status)` asks, as the segment reading
+takes `status)` for the subcommand. `rm-rf-dangerous` also reads every `rm`
+word of the line wherever it stands (`echo rm -rf /` is blocked). The path
+scans (protected-write targets, the secret path scan, `docker-destructive`)
+use the segment reading alone.
 
 **Not the start of a command** (known limits):
 
@@ -914,14 +914,16 @@ their own reading.
   is judged as `git branch x`;
 - a command run on another machine, in a virtual machine or in a container:
   `ssh host '…'`, `limactl shell vm -- bash -c '…'`, `docker exec c sh -c '…'`;
-- `parallel`, `script -c`, and the wrappers not listed (`stdbuf`, `flock`,
-  `caffeinate`…);
+- `parallel`, `script -c`, `coproc`, and the wrappers not listed (`stdbuf`,
+  `flock`, `caffeinate`…);
 - a variable exported earlier (`export GIT_EXTERNAL_DIFF=…`, see
   § [`git-config-exec`](#git-config-exec-what-may-stand-before-git));
 - a heredoc body, which is the input of a command, not a command line: its
-  lines keep the reading before this list (their first word only), and a
-  backtick bash runs in an unquoted heredoc (`cat <<EOF` … `` `git push` ``)
-  is not read;
+  lines get the segment reading only (their first word). A backtick bash
+  runs in an unquoted heredoc (`cat <<EOF` … `` `git push` ``) is not read;
+  a `$( … )` there is read by the segment reading, which git and privilege
+  escalation use (`cat <<EOF` … `$(sudo ls)` is blocked) but `rm -rf` does
+  not (`$(rm -rf /)` there passes);
 - a command line nested more than three levels down.
 
 ## The two algorithm-driven tables
