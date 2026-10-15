@@ -1434,6 +1434,8 @@ export type CommandStartWrapper = Readonly<{
   shellOperandsUnless?: ReadonlySet<string>;
 }>;
 
+const SEGMENT_READING_ENV = WRAPPER_OPTION_POLICIES.env!;
+
 // Tokenizer grammar like WRAPPER_OPTION_POLICIES, from which the prefixes
 // come with their options (`proxy` is read only after `rtk`), `env` gaining
 // `-S`; then the wrappers, each with the shape of its arguments. `--` ends
@@ -1443,8 +1445,8 @@ export type CommandStartWrapper = Readonly<{
 export const COMMAND_START_WRAPPERS: Readonly<Record<string, CommandStartWrapper>> = {
   ...Object.fromEntries(Object.entries(WRAPPER_OPTION_POLICIES).filter(([name]) => name !== 'proxy')),
   env: {
-    ...WRAPPER_OPTION_POLICIES.env!,
-    optionsWithArg: new Set([...WRAPPER_OPTION_POLICIES.env!.optionsWithArg, '-S']),
+    ...SEGMENT_READING_ENV,
+    optionsWithArg: new Set([...SEGMENT_READING_ENV.optionsWithArg, '-S']),
     commandLineOptions: new Set(['-S']),
   },
   timeout: {
@@ -1468,7 +1470,7 @@ export const COMMAND_START_WRAPPERS: Readonly<Record<string, CommandStartWrapper
 
 // The shells that read the argument of `-c` as a command line, also when
 // started by a path (`/bin/bash`).
-const COMMAND_LINE_SHELLS: Readonly<Record<string, true>> = { bash: true, sh: true, zsh: true, dash: true };
+const COMMAND_LINE_SHELLS: ReadonlySet<string> = new Set(['bash', 'sh', 'zsh', 'dash']);
 const SHELL_OPTIONS_WITH_ARG: Readonly<Record<string, true>> = {
   '-o': true,
   '+o': true,
@@ -1497,7 +1499,7 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
       continue;
     }
     // A prefix or a wrapper may be started by a path: `/usr/bin/env`.
-    const wrapper = word.slice(word.lastIndexOf('/') + 1);
+    const wrapper = commandBaseName(word);
     if (!Object.hasOwn(COMMAND_START_WRAPPERS, wrapper)) break;
     i++;
     if (wrapper === 'rtk' && tokens[i]?.value === 'proxy') i++;
@@ -1510,20 +1512,24 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
   }
 
   const name = tokens[i]?.value;
-  if (name === 'eval') {
-    // eval joins its arguments with spaces.
-    return {
-      kind: 'line',
-      line: tokens.slice(i + 1).map((token) => token.value).join(' '),
-      assignments: assignmentsBefore(tokens, i),
-      ambiguous: false,
-    };
-  }
-  if (name !== undefined && Object.hasOwn(COMMAND_LINE_SHELLS, name.slice(name.lastIndexOf('/') + 1))) {
+  // eval joins its arguments with spaces.
+  if (name === 'eval') return joinedWordsLine(tokens, i + 1, false);
+  if (isCommandNamed(name, COMMAND_LINE_SHELLS)) {
     const line = shellCommandLine(tokens, i);
     if (line !== null) return { kind: 'line', line, assignments: assignmentsBefore(tokens, i), ambiguous: false };
   }
   return { kind: 'name', index: i, ambiguous: false };
+}
+
+// The command line `eval` and `watch` hand to a shell: their words from
+// `from` on joined with spaces, with the assignments written before them.
+function joinedWordsLine(tokens: readonly ShellToken[], from: number, ambiguous: boolean): CommandStart {
+  return {
+    kind: 'line',
+    line: tokens.slice(from).map((token) => token.value).join(' '),
+    assignments: assignmentsBefore(tokens, from),
+    ambiguous,
+  };
 }
 
 // The argument a shell named at `index` reads as its command line after a
@@ -1561,13 +1567,6 @@ function consumeWrapperOptions(
 ): CommandStart {
   let i = start;
   let execs = false;
-  // watch joins its words from `from` on with spaces and runs them with `sh -c`.
-  const shellLine = (from: number, ambiguous: boolean): CommandStart => ({
-    kind: 'line',
-    line: tokens.slice(from).map((token) => token.value).join(' '),
-    assignments: assignmentsBefore(tokens, from),
-    ambiguous,
-  });
   while (i < tokens.length) {
     const word = tokens[i]!.value;
     if (wrapper.acceptsAssignments === true && ENV_ASSIGNMENT.test(word)) {
@@ -1583,7 +1582,9 @@ function consumeWrapperOptions(
     if (option === null) {
       // An option watch does not list may take a value: its words from the
       // option on are the line, read as an ambiguous one.
-      return wrapper.shellOperandsUnless !== undefined && !execs ? shellLine(i, true) : { kind: 'name', index: i, ambiguous: true };
+      return wrapper.shellOperandsUnless !== undefined && !execs
+        ? joinedWordsLine(tokens, i, true)
+        : { kind: 'name', index: i, ambiguous: true };
     }
     if (option.valued !== undefined && wrapper.commandLineOptions?.has(option.valued.name) === true) {
       // `env -S` splits its value into words that come before the rest.
@@ -1597,7 +1598,8 @@ function consumeWrapperOptions(
     i = option.next;
   }
   i = Math.min(i + (wrapper.operands ?? 0), tokens.length);
-  if (wrapper.shellOperandsUnless !== undefined && !execs) return shellLine(i, false);
+  // watch runs its words with `sh -c`.
+  if (wrapper.shellOperandsUnless !== undefined && !execs) return joinedWordsLine(tokens, i, false);
   return { kind: 'name', index: i, ambiguous: false };
 }
 
@@ -2089,10 +2091,13 @@ export function maskSearchPatternArguments(
   return masked + cmd.slice(offset);
 }
 
+// A command's name without the path it may be started by (`/bin/bash`).
+function commandBaseName(word: string): string {
+  return word.slice(word.lastIndexOf('/') + 1);
+}
+
 function isCommandNamed(token: string | undefined, names: ReadonlySet<string>): boolean {
-  if (token === undefined) return false;
-  const basename = token.slice(token.lastIndexOf('/') + 1);
-  return names.has(basename);
+  return token !== undefined && names.has(commandBaseName(token));
 }
 
 function checkPrivilegeEscalationWith(cmd: string, line: CommandLine, privilegeCommands: ReadonlySet<string>): Verdict | null {
