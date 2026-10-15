@@ -1287,8 +1287,14 @@ export function extractGitSubcommandFromTokens(
 
 // The git command whose words `tokens` are, once `prefix` has passed what
 // stands before the command name; `forceConfirm` when a redirection among the
-// words could not be read.
-function gitCommandAt(tokens: readonly ShellToken[], prefix: CommandPrefix, forceConfirm: boolean): GitCommand | null {
+// words could not be read; `inherited`, the assignments written before the
+// shell that runs it.
+function gitCommandAt(
+  tokens: readonly ShellToken[],
+  prefix: CommandPrefix,
+  forceConfirm: boolean,
+  inherited: readonly string[] = [],
+): GitCommand | null {
   let i = prefix.index;
   if (prefix.ambiguous) {
     i = tokens.findIndex((token, index) => index >= prefix.index && (token.value === 'git' || token.value.endsWith('/git')));
@@ -1311,12 +1317,12 @@ function gitCommandAt(tokens: readonly ShellToken[], prefix: CommandPrefix, forc
     }
   }
   if (i >= tokens.length) return null;
-  const assignments = prefix.index > 0 ? assignmentsBefore(tokens, prefix.index) : null;
+  const assignments = prefix.index > 0 ? [...inherited, ...assignmentsBefore(tokens, prefix.index)] : [...inherited];
   return {
     sub: tokens[i]!.value,
     rest: tokens.slice(i + 1).map((token) => token.value),
     ...(globals.length > 0 ? { globals } : {}),
-    ...(assignments !== null && assignments.length > 0 ? { assignments } : {}),
+    ...(assignments.length > 0 ? { assignments } : {}),
     ...(prefix.ambiguous || forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1472,11 +1478,12 @@ const SHELL_OPTIONS_WITH_ARG: Readonly<Record<string, true>> = {
 
 // Where a command's name stands among its words, past the prefixes and
 // wrappers; or, when the words hand a command line to a shell (`bash -c`,
-// `eval`, `watch`, `env -S`), that line: the words then have no command name
-// of their own.
+// `eval`, `watch`, `env -S`), that line and the assignments written before
+// it, which every command of the line inherits: the words then have no
+// command name of their own.
 type CommandStart =
   | CommandPrefix & Readonly<{ kind: 'name'; }>
-  | Readonly<{ kind: 'line'; line: string; }>;
+  | Readonly<{ kind: 'line'; line: string; assignments: readonly string[]; }>;
 
 function consumeCommandStart(tokens: readonly ShellToken[], source: string): CommandStart {
   let i = 0;
@@ -1500,11 +1507,11 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
   const name = tokens[i]?.value;
   if (name === 'eval') {
     // eval joins its arguments with spaces.
-    return { kind: 'line', line: tokens.slice(i + 1).map((token) => token.value).join(' ') };
+    return { kind: 'line', line: tokens.slice(i + 1).map((token) => token.value).join(' '), assignments: assignmentsBefore(tokens, i) };
   }
   if (name !== undefined && Object.hasOwn(COMMAND_LINE_SHELLS, name.slice(name.lastIndexOf('/') + 1))) {
     const line = shellCommandLine(tokens, i);
-    if (line !== null) return { kind: 'line', line };
+    if (line !== null) return { kind: 'line', line, assignments: assignmentsBefore(tokens, i) };
   }
   return { kind: 'name', index: i, ambiguous: false };
 }
@@ -1563,7 +1570,7 @@ function consumeWrapperOptions(
       const line = rest === undefined
         ? option.valued.value
         : `${option.valued.value} ${source.slice(rest.start, tokens[tokens.length - 1]!.end)}`;
-      return { kind: 'line', line };
+      return { kind: 'line', line, assignments: assignmentsBefore(tokens, i) };
     }
     if (option.names.some((name) => wrapper.shellOperandsUnless?.has(name) === true)) execs = true;
     i = option.next;
@@ -1571,7 +1578,7 @@ function consumeWrapperOptions(
   i = Math.min(i + (wrapper.operands ?? 0), tokens.length);
   // watch joins its operands with spaces and runs them with `sh -c`.
   if (wrapper.shellOperandsUnless !== undefined && !execs) {
-    return { kind: 'line', line: tokens.slice(i).map((token) => token.value).join(' ') };
+    return { kind: 'line', line: tokens.slice(i).map((token) => token.value).join(' '), assignments: assignmentsBefore(tokens, i) };
   }
   return { kind: 'name', index: i, ambiguous: false };
 }
@@ -1827,6 +1834,8 @@ type FoundCommand = Readonly<{
   forceConfirm: boolean;
   // The line the token ranges point into.
   source: string;
+  // The assignments written before the shells that run it, outermost first.
+  inherited: readonly string[];
 }>;
 
 // The text of a command from its word at `index` to its last word.
@@ -1845,7 +1854,7 @@ type CommandLine = Readonly<{
 function readCommandLine(cmd: string): CommandLine {
   const tokenized = tokenizeShellSegments(cmd);
   const commands: FoundCommand[] = [];
-  collectCommands(cmd, tokenized, 0, commands);
+  collectCommands(cmd, tokenized, 0, [], commands);
   return { segments: tokenized.segments, commands };
 }
 
@@ -1868,22 +1877,37 @@ function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => b
   };
 }
 
-function collectCommands(source: string, tokenized: TokenizedShell, depth: number, commands: FoundCommand[]): void {
+// The commands of a line read `depth` levels below the outer one, which
+// inherit the assignments `inherited`; the substitutions of the line inherit
+// them too, while those written before one of its commands reach that
+// command only.
+function collectCommands(
+  source: string,
+  tokenized: TokenizedShell,
+  depth: number,
+  inherited: readonly string[],
+  commands: FoundCommand[],
+): void {
   const scan = scanSubstitutions(source, new Map(tokenized.heredocBodies.map((body) => [body.start, body.end])));
   // A heredoc body is data: its lines keep only the segment reading.
   const insideHeredoc = insideAnyRange([...tokenized.heredocBodies, ...scan.heredocs]);
-  const nested: string[] = [];
+  const nested: { line: string; inherited: readonly string[]; }[] = [];
   for (const segment of tokenized.segments) {
     if (insideHeredoc(segment[0]!.start)) continue;
     const filtered = withoutShellRedirections(commandWords(segment, source));
     if (filtered.tokens.length === 0) continue;
     const start = consumeCommandStart(filtered.tokens, source);
-    if (start.kind === 'line') nested.push(start.line);
-    else commands.push({ tokens: filtered.tokens, start, forceConfirm: filtered.forceConfirm, source });
+    if (start.kind === 'line') {
+      nested.push({ line: start.line, inherited: start.assignments.length === 0 ? inherited : [...inherited, ...start.assignments] });
+    } else {
+      commands.push({ tokens: filtered.tokens, start, forceConfirm: filtered.forceConfirm, source, inherited });
+    }
   }
   if (depth === MAX_NESTED_READS) return;
-  nested.push(...scan.bodies);
-  for (const line of nested) collectCommands(line, tokenizeShellSegments(line), depth + 1, commands);
+  for (const body of scan.bodies) nested.push({ line: body, inherited });
+  for (const { line, inherited: lineInherited } of nested) {
+    collectCommands(line, tokenizeShellSegments(line), depth + 1, lineInherited, commands);
+  }
 }
 
 // The index of the command's name when it is one of `names`, -1 otherwise.
@@ -2277,8 +2301,8 @@ function* gitCommands(line: CommandLine): Generator<GitCommand> {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (parsed !== null) yield parsed;
   }
-  for (const { tokens, start, forceConfirm } of line.commands) {
-    const parsed = gitCommandAt(tokens, start, forceConfirm);
+  for (const { tokens, start, forceConfirm, inherited } of line.commands) {
+    const parsed = gitCommandAt(tokens, start, forceConfirm, inherited);
     if (parsed !== null) yield parsed;
   }
 }

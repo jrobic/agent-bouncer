@@ -862,7 +862,11 @@ A command starts:
    command line with these same rules, only when the shell itself starts a
    command (after items 1 to 4, the prefixes and the wrappers). An argument
    holding `$var`, `$( … )` or backticks is read too; those are opaque words
-   in it.
+   in it. An assignment written before the shell reaches every command of the
+   line read again, its substitutions included, as it reaches the shell's
+   environment: `GIT_SSH_COMMAND=x bash -c 'git fetch'` asks like
+   `GIT_SSH_COMMAND=x git fetch`. The same holds for `watch` and `env -S`
+   (item 7).
 6. **After a prefix**: an assignment `VAR=x` or `VAR+=x`, `rtk` (and
    `rtk proxy`), `command`, `exec`, `nice` (`-n N`), `time` (`-p`) and
    `builtin`.
@@ -910,10 +914,7 @@ their own reading.
 - `parallel`, `script -c`, and the wrappers not listed (`stdbuf`, `flock`,
   `caffeinate`…);
 - a variable exported earlier (`export GIT_EXTERNAL_DIFF=…`, see
-  § [`git-config-exec`](#git-config-exec-what-may-stand-before-git)), and an
-  assignment written before a shell, `eval` or `watch`
-  (`GIT_SSH_COMMAND=x bash -c 'git fetch'`): like an export, it is not carried
-  into the command line read again;
+  § [`git-config-exec`](#git-config-exec-what-may-stand-before-git));
 - a heredoc body, which is the input of a command, not a command line: its
   lines keep the reading before this list (their first word only), and a
   backtick bash runs in an unquoted heredoc (`cat <<EOF` … `` `git push` ``)

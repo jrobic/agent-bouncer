@@ -187,6 +187,17 @@ export const COMMAND_START_FAMILIES: readonly CommandStartFamily[] = [
 const LITERAL_CASES: readonly FixtureCase[] = [
   bashCase('literal-assignment-of-substitution-is-not-a-prefix', 'STRAY=$(rtk git status --short | wc -l)', []),
   bashCase('literal-for-body-reads-a-safe-subcommand', 'for f in a b; do git log -1 "$f"; done', []),
+  // An assignment written before a shell reaches the environment of every
+  // command the shell runs, the substitutions of its line included; one
+  // written before a command does not reach that command's own substitutions.
+  bashCase('literal-assignment-before-bash-c', 'GIT_SSH_COMMAND=x bash -c \'git fetch\'', GIT_CONFIG_EXEC),
+  bashCase('literal-assignment-before-eval', 'GIT_SSH_COMMAND=x eval \'git fetch\'', GIT_CONFIG_EXEC),
+  bashCase('literal-listed-assignment-before-bash-c', 'LC_ALL=C bash -c \'git status\'', []),
+  bashCase('literal-env-assignment-before-bash-c', 'env GIT_SSH_COMMAND=x bash -c \'git fetch\'', GIT_CONFIG_EXEC),
+  bashCase('literal-assignment-before-env-split-string', 'GIT_SSH_COMMAND=x env -S \'git fetch\'', GIT_CONFIG_EXEC),
+  bashCase('literal-assignment-before-watch', 'GIT_SSH_COMMAND=x watch \'git fetch\'', GIT_CONFIG_EXEC),
+  bashCase('literal-assignment-reaches-substitution-in-bash-c', 'GIT_SSH_COMMAND=x bash -c \'echo $(git fetch)\'', GIT_CONFIG_EXEC),
+  bashCase('literal-assignment-misses-own-substitution', 'GIT_SSH_COMMAND=x echo $(git fetch)', []),
   {
     ...bashCase('literal-dynamic-shell-command', 'cmd="git push"; bash -c "$cmd"', []),
     knownLimit: true,

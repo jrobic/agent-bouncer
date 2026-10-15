@@ -10323,6 +10323,100 @@
       "expected": []
     },
     {
+      "id": "command-start-literal-assignment-before-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x bash -c 'git fetch'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-assignment-before-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x eval 'git fetch'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-listed-assignment-before-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "LC_ALL=C bash -c 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-env-assignment-before-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env GIT_SSH_COMMAND=x bash -c 'git fetch'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-assignment-before-env-split-string",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x env -S 'git fetch'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-assignment-before-watch",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x watch 'git fetch'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-assignment-reaches-substitution-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x bash -c 'echo $(git fetch)'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-config-exec"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-assignment-misses-own-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "GIT_SSH_COMMAND=x echo $(git fetch)"
+      },
+      "expected": []
+    },
+    {
       "id": "command-start-literal-dynamic-shell-command",
       "toolName": "Bash",
       "toolInput": {
