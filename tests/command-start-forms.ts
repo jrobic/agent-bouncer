@@ -73,6 +73,7 @@ export const COMMAND_START_FORMS: readonly CommandStartForm[] = [
   { id: 'nice', point: 6, wrap: (x) => `nice -n 5 ${x}` },
   { id: 'time', point: 6, wrap: (x) => `time ${x}` },
   { id: 'builtin', point: 6, wrap: (x) => `builtin ${x}` },
+  { id: 'prefix-by-path', point: 6, wrap: (x) => `/usr/bin/env ${x}` },
   // 7. Wrappers, with the shape of their arguments.
   { id: 'timeout', point: 7, wrap: (x) => `timeout 5 ${x}` },
   { id: 'timeout-options', point: 7, wrap: (x) => `timeout -k 2 -s KILL 5 ${x}` },
@@ -86,6 +87,7 @@ export const COMMAND_START_FORMS: readonly CommandStartForm[] = [
   { id: 'xargs-glued-values', point: 7, wrap: (x) => `xargs -0r -n1 -I{} ${x}` },
   { id: 'watch', point: 7, wrap: (x) => `watch -n 1 ${x}` },
   { id: 'watch-quoted', point: 7, wrap: (x) => `watch -n 1 '${x}'` },
+  { id: 'wrapper-by-path', point: 7, wrap: (x) => `/usr/bin/timeout 5 ${x}` },
   // Nestings.
   { id: 'subshell-in-then', point: 0, wrap: (x) => `if true; then (${x}); fi` },
   { id: 'subshell-in-bash-c', point: 0, wrap: (x) => `bash -c "(${x})"` },
@@ -198,6 +200,9 @@ const LITERAL_CASES: readonly FixtureCase[] = [
   bashCase('literal-assignment-before-watch', 'GIT_SSH_COMMAND=x watch \'git fetch\'', GIT_CONFIG_EXEC),
   bashCase('literal-assignment-reaches-substitution-in-bash-c', 'GIT_SSH_COMMAND=x bash -c \'echo $(git fetch)\'', GIT_CONFIG_EXEC),
   bashCase('literal-assignment-misses-own-substitution', 'GIT_SSH_COMMAND=x echo $(git fetch)', []),
+  // A prefix or a wrapper is recognised by its name, also started by a path.
+  bashCase('literal-env-by-path-before-bash-c', '/usr/bin/env bash -c \'sudo ls\'', SUDO),
+  bashCase('literal-xargs-by-path', '/usr/bin/xargs sudo ls', SUDO),
   {
     ...bashCase('literal-dynamic-shell-command', 'cmd="git push"; bash -c "$cmd"', []),
     knownLimit: true,

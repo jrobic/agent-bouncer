@@ -1493,13 +1493,15 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
       i++;
       continue;
     }
-    if (!Object.hasOwn(COMMAND_START_WRAPPERS, word)) break;
+    // A prefix or a wrapper may be started by a path: `/usr/bin/env`.
+    const wrapper = word.slice(word.lastIndexOf('/') + 1);
+    if (!Object.hasOwn(COMMAND_START_WRAPPERS, wrapper)) break;
     i++;
-    if (word === 'rtk' && tokens[i]?.value === 'proxy') i++;
-    const options = consumeWrapperOptions(tokens, i, COMMAND_START_WRAPPERS[word]!, source);
+    if (wrapper === 'rtk' && tokens[i]?.value === 'proxy') i++;
+    const options = consumeWrapperOptions(tokens, i, COMMAND_START_WRAPPERS[wrapper]!, source);
     if (options.kind === 'line' || options.ambiguous) return options;
     i = options.index;
-    if (word === 'time') {
+    if (wrapper === 'time') {
       while (tokens[i]?.kind === 'bang-operator') i++;
     }
   }

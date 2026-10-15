@@ -880,7 +880,9 @@ A command starts:
 | `nohup` | none |
 | `watch` | `-n`/`--interval` S, `-d`/`--differences[=permanent]`, `-t`/`--no-title`, `-x`/`--exec`, `-c`/`--color`, `-g`/`--chgexit`, `-e`/`--errexit`, `-p`/`--precise`; without `-x`, watch runs its words with `sh -c`, so they are read as a command line (item 5) |
 
-Options are read the way getopt reads them: grouped (`-0r`), with a glued
+Prefixes and wrappers are recognised by name, also when started by a path
+(`/usr/bin/env git push`, `/usr/bin/timeout 5 git push`). Options are read
+the way getopt reads them: grouped (`-0r`), with a glued
 value (`-n1`, `-I{}`, `-sKILL`) or as `--name=value`; `--` ends them. An option
 that is not listed for a prefix or a wrapper makes the start uncertain: each
 rule then looks for its command name among the words that follow

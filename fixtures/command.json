@@ -7614,6 +7614,19 @@
       ]
     },
     {
+      "id": "command-start-git-push-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "command-start-git-push-timeout",
       "toolName": "Bash",
       "toolInput": {
@@ -7761,6 +7774,19 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "watch -n 1 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-git-push-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 git push"
       },
       "expected": [
         {
@@ -8522,6 +8548,19 @@
       ]
     },
     {
+      "id": "command-start-sudo-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
       "id": "command-start-sudo-timeout",
       "toolName": "Bash",
       "toolInput": {
@@ -8669,6 +8708,19 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "watch -n 1 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 sudo ls"
       },
       "expected": [
         {
@@ -9430,6 +9482,19 @@
       ]
     },
     {
+      "id": "command-start-rm-rf-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env rm -rf /"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
       "id": "command-start-rm-rf-timeout",
       "toolName": "Bash",
       "toolInput": {
@@ -9577,6 +9642,19 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "watch -n 1 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
+      "id": "command-start-rm-rf-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 rm -rf /"
       },
       "expected": [
         {
@@ -10126,6 +10204,14 @@
       "expected": []
     },
     {
+      "id": "command-start-git-status-prefix-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env git status"
+      },
+      "expected": []
+    },
+    {
       "id": "command-start-git-status-timeout",
       "toolName": "Bash",
       "toolInput": {
@@ -10223,6 +10309,14 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "watch -n 1 'git status'"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-git-status-wrapper-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/timeout 5 git status"
       },
       "expected": []
     },
@@ -10415,6 +10509,32 @@
         "command": "GIT_SSH_COMMAND=x echo $(git fetch)"
       },
       "expected": []
+    },
+    {
+      "id": "command-start-literal-env-by-path-before-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/env bash -c 'sudo ls'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-xargs-by-path",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "/usr/bin/xargs sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
     },
     {
       "id": "command-start-literal-dynamic-shell-command",
