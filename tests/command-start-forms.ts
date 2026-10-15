@@ -88,6 +88,7 @@ export const COMMAND_START_FORMS: readonly CommandStartForm[] = [
   { id: 'watch', point: 7, wrap: (x) => `watch -n 1 ${x}` },
   { id: 'watch-quoted', point: 7, wrap: (x) => `watch -n 1 '${x}'` },
   { id: 'wrapper-by-path', point: 7, wrap: (x) => `/usr/bin/timeout 5 ${x}` },
+  { id: 'watch-unknown-option', point: 7, wrap: (x) => `watch -b '${x}'` },
   // Nestings.
   { id: 'subshell-in-then', point: 0, wrap: (x) => `if true; then (${x}); fi` },
   { id: 'subshell-in-bash-c', point: 0, wrap: (x) => `bash -c "(${x})"` },
@@ -182,8 +183,13 @@ export const COMMAND_START_FAMILIES: readonly CommandStartFamily[] = [
     id: 'git-status',
     command: 'git status',
     expected: [],
-    // A variable written in front of git that git-config-exec does not list.
-    exceptions: { assignment: GIT_CONFIG_EXEC, 'env-unset-and-assignment': GIT_CONFIG_EXEC },
+    // A variable written in front of git that git-config-exec does not list;
+    // an option watch does not list, which asks whatever the command.
+    exceptions: {
+      assignment: GIT_CONFIG_EXEC,
+      'env-unset-and-assignment': GIT_CONFIG_EXEC,
+      'watch-unknown-option': GIT_PROTECTED,
+    },
     limits: false,
   },
 ];

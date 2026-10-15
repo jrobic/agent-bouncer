@@ -7796,6 +7796,19 @@
       ]
     },
     {
+      "id": "command-start-git-push-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'git push'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
       "id": "command-start-git-push-subshell-in-then",
       "toolName": "Bash",
       "toolInput": {
@@ -8747,6 +8760,19 @@
       "toolName": "Bash",
       "toolInput": {
         "command": "/usr/bin/timeout 5 sudo ls"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "sudo"
+        }
+      ]
+    },
+    {
+      "id": "command-start-sudo-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'sudo ls'"
       },
       "expected": [
         {
@@ -9716,6 +9742,19 @@
       ]
     },
     {
+      "id": "command-start-rm-rf-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'rm -rf /'"
+      },
+      "expected": [
+        {
+          "verdict": "block",
+          "ruleId": "rm-rf-dangerous"
+        }
+      ]
+    },
+    {
       "id": "command-start-rm-rf-subshell-in-then",
       "toolName": "Bash",
       "toolInput": {
@@ -10397,6 +10436,19 @@
         "command": "/usr/bin/timeout 5 git status"
       },
       "expected": []
+    },
+    {
+      "id": "command-start-git-status-watch-unknown-option",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch -b 'git status'"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
     },
     {
       "id": "command-start-git-status-subshell-in-then",

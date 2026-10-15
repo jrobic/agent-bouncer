@@ -878,7 +878,7 @@ A command starts:
 | `xargs` | `-0`/`--null`, `-r`/`--no-run-if-empty`, `-t`/`--verbose`, `-n`/`--max-args` N, `-I` R, `-P`/`--max-procs` N, `-L` N, `-d`/`--delimiter` C, `-E` S, `-s`/`--max-chars` N, `--replace[=R]`, `--max-lines[=N]`, `--eof[=S]` |
 | `env` | `-i`, `-u` NAME, `VAR=x`, and `-S` STRING, whose words are read as the start of a command line |
 | `nohup` | none |
-| `watch` | `-n`/`--interval` S, `-d`/`--differences[=permanent]`, `-t`/`--no-title`, `-x`/`--exec`, `-c`/`--color`, `-g`/`--chgexit`, `-e`/`--errexit`, `-p`/`--precise`; without `-x`, watch runs its words with `sh -c`, so they are read as a command line (item 5) |
+| `watch` | `-n`/`--interval` S, `-d`/`--differences[=permanent]`, `-t`/`--no-title`, `-x`/`--exec`, `-c`/`--color`, `-g`/`--chgexit`, `-e`/`--errexit`, `-p`/`--precise`; without `-x`, watch runs its words with `sh -c`, so they are read as a command line (item 5). After an option not listed, which may take a value, the words from that option on are read as a command line in which each rule looks for its command name among the words of every command: `watch -b 'git push'` and `watch -b 'git status'` ask, as an option not listed does after the other wrappers |
 
 Prefixes and wrappers are recognised by name, also when started by a path
 (`/usr/bin/env git push`, `/usr/bin/timeout 5 git push`). Options are read

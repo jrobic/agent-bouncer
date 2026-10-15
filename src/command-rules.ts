@@ -1481,10 +1481,11 @@ const SHELL_OPTIONS_WITH_ARG: Readonly<Record<string, true>> = {
 // wrappers; or, when the words hand a command line to a shell (`bash -c`,
 // `eval`, `watch`, `env -S`), that line and the assignments written before
 // it, which every command of the line inherits: the words then have no
-// command name of their own.
+// command name of their own. An ambiguous line comes from an option `watch`
+// does not list: each family looks for its command name in its commands.
 type CommandStart =
   | CommandPrefix & Readonly<{ kind: 'name'; }>
-  | Readonly<{ kind: 'line'; line: string; assignments: readonly string[]; }>;
+  | Readonly<{ kind: 'line'; line: string; assignments: readonly string[]; ambiguous: boolean; }>;
 
 function consumeCommandStart(tokens: readonly ShellToken[], source: string): CommandStart {
   let i = 0;
@@ -1510,11 +1511,16 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
   const name = tokens[i]?.value;
   if (name === 'eval') {
     // eval joins its arguments with spaces.
-    return { kind: 'line', line: tokens.slice(i + 1).map((token) => token.value).join(' '), assignments: assignmentsBefore(tokens, i) };
+    return {
+      kind: 'line',
+      line: tokens.slice(i + 1).map((token) => token.value).join(' '),
+      assignments: assignmentsBefore(tokens, i),
+      ambiguous: false,
+    };
   }
   if (name !== undefined && Object.hasOwn(COMMAND_LINE_SHELLS, name.slice(name.lastIndexOf('/') + 1))) {
     const line = shellCommandLine(tokens, i);
-    if (line !== null) return { kind: 'line', line, assignments: assignmentsBefore(tokens, i) };
+    if (line !== null) return { kind: 'line', line, assignments: assignmentsBefore(tokens, i), ambiguous: false };
   }
   return { kind: 'name', index: i, ambiguous: false };
 }
@@ -1554,6 +1560,13 @@ function consumeWrapperOptions(
 ): CommandStart {
   let i = start;
   let execs = false;
+  // watch joins its words from `from` on with spaces and runs them with `sh -c`.
+  const shellLine = (from: number, ambiguous: boolean): CommandStart => ({
+    kind: 'line',
+    line: tokens.slice(from).map((token) => token.value).join(' '),
+    assignments: assignmentsBefore(tokens, from),
+    ambiguous,
+  });
   while (i < tokens.length) {
     const word = tokens[i]!.value;
     if (wrapper.acceptsAssignments === true && ENV_ASSIGNMENT.test(word)) {
@@ -1566,23 +1579,24 @@ function consumeWrapperOptions(
     }
     if (!word.startsWith('-') || word === '-') break;
     const option = wrapperOption(tokens, i, wrapper);
-    if (option === null) return { kind: 'name', index: i, ambiguous: true };
+    if (option === null) {
+      // An option watch does not list may take a value: its words from the
+      // option on are the line, read as an ambiguous one.
+      return wrapper.shellOperandsUnless !== undefined && !execs ? shellLine(i, true) : { kind: 'name', index: i, ambiguous: true };
+    }
     if (option.valued !== undefined && wrapper.commandLineOptions?.has(option.valued.name) === true) {
       // `env -S` splits its value into words that come before the rest.
       const rest = tokens[option.next];
       const line = rest === undefined
         ? option.valued.value
         : `${option.valued.value} ${source.slice(rest.start, tokens[tokens.length - 1]!.end)}`;
-      return { kind: 'line', line, assignments: assignmentsBefore(tokens, i) };
+      return { kind: 'line', line, assignments: assignmentsBefore(tokens, i), ambiguous: false };
     }
     if (option.names.some((name) => wrapper.shellOperandsUnless?.has(name) === true)) execs = true;
     i = option.next;
   }
   i = Math.min(i + (wrapper.operands ?? 0), tokens.length);
-  // watch joins its operands with spaces and runs them with `sh -c`.
-  if (wrapper.shellOperandsUnless !== undefined && !execs) {
-    return { kind: 'line', line: tokens.slice(i).map((token) => token.value).join(' '), assignments: assignmentsBefore(tokens, i) };
-  }
+  if (wrapper.shellOperandsUnless !== undefined && !execs) return shellLine(i, false);
   return { kind: 'name', index: i, ambiguous: false };
 }
 
@@ -1890,7 +1904,7 @@ type CommandLine = Readonly<{
 function readCommandLine(cmd: string): CommandLine {
   const tokenized = tokenizeShellSegments(cmd);
   const commands: FoundCommand[] = [];
-  collectCommands(cmd, tokenized, 0, [], commands);
+  collectCommands(cmd, tokenized, { depth: 0, inherited: [], ambiguous: false }, commands);
   return { segments: tokenized.segments, commands };
 }
 
@@ -1913,40 +1927,51 @@ function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => b
   };
 }
 
-// The commands of a line read `depth` levels below the outer one, which
-// inherit the assignments `inherited`; the substitutions of the line inherit
-// them too, while those written before one of its commands reach that
-// command only. A substitution body is read at the depth of its line; only
-// a command line handed to a shell goes one level down.
-function collectCommands(
-  source: string,
-  tokenized: TokenizedShell,
-  depth: number,
-  inherited: readonly string[],
-  commands: FoundCommand[],
-): void {
+// How a line is read: how many levels below the outer one, the assignments
+// its commands inherit, and whether each family looks for its command name
+// anywhere among a command's words.
+type LineReading = Readonly<{ depth: number; inherited: readonly string[]; ambiguous: boolean; }>;
+
+// The commands of a line. The substitutions of the line inherit its
+// assignments too, while those written before one of its commands reach
+// that command only. A substitution body is read at the depth of its line;
+// only a command line handed to a shell goes one level down.
+function collectCommands(source: string, tokenized: TokenizedShell, reading: LineReading, commands: FoundCommand[]): void {
+  const { depth, inherited, ambiguous } = reading;
   const scan = scanSubstitutions(source, new Map(tokenized.heredocBodies.map((body) => [body.start, body.end])));
   // A heredoc body is data: its lines keep only the segment reading.
   const insideHeredoc = insideAnyRange([...tokenized.heredocBodies, ...scan.heredocs]);
-  const nested: { line: string; inherited: readonly string[]; }[] = [];
+  const nested: { line: string; reading: LineReading; }[] = [];
   for (const segment of tokenized.segments) {
     if (insideHeredoc(segment[0]!.start)) continue;
     const filtered = withoutShellRedirections(commandWords(segment, source));
     if (filtered.tokens.length === 0) continue;
     const start = consumeCommandStart(filtered.tokens, source);
-    if (start.kind === 'line') {
-      nested.push({ line: start.line, inherited: start.assignments.length === 0 ? inherited : [...inherited, ...start.assignments] });
-    } else {
-      commands.push({ tokens: filtered.tokens, start, forceConfirm: filtered.forceConfirm, source, inherited });
+    if (start.kind === 'name') {
+      commands.push({
+        tokens: filtered.tokens,
+        start: ambiguous ? { index: 0, ambiguous: true } : start,
+        forceConfirm: filtered.forceConfirm,
+        source,
+        inherited,
+      });
+      continue;
     }
+    nested.push({
+      line: start.line,
+      reading: {
+        depth: depth + 1,
+        inherited: start.assignments.length === 0 ? inherited : [...inherited, ...start.assignments],
+        ambiguous: start.ambiguous,
+      },
+    });
   }
   // The scan has cut each body of the substitutions nested in it, so reading
   // the bodies goes no deeper than the backticks a body still holds.
-  for (const body of scan.bodies) collectCommands(body, tokenizeShellSegments(body), depth, inherited, commands);
+  const bodyReading = ambiguous ? { ...reading, ambiguous: false } : reading;
+  for (const body of scan.bodies) collectCommands(body, tokenizeShellSegments(body), bodyReading, commands);
   if (depth === MAX_NESTED_READS) return;
-  for (const { line, inherited: lineInherited } of nested) {
-    collectCommands(line, tokenizeShellSegments(line), depth + 1, lineInherited, commands);
-  }
+  for (const { line, reading: lineReading } of nested) collectCommands(line, tokenizeShellSegments(line), lineReading, commands);
 }
 
 // The index of the command's name when it is one of `names`, -1 otherwise.
