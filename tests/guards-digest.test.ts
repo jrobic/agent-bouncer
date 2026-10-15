@@ -180,10 +180,13 @@ describe('guards-digest: the wrappers of the shared start of a command', () => {
   });
 
   // Inside an `if`, where only the shared start of a command reads the
-  // wrapper: the segment reading stops at `if`.
+  // wrapper: the segment reading stops at `if`. Two words follow the option:
+  // were the option skipped, `x` would be read as the command (or, after
+  // timeout, as its duration and `y` as the command), and sudo would pass;
+  // only the search an unknown option triggers finds it.
   for (const wrapper of Object.keys(COMMAND_START_WRAPPERS)) {
     test(`${wrapper} unknown option fails closed`, () => {
-      expect(checkCommandBash(`if ${wrapper} --unknown sudo apt; then :; fi`)?.ruleId).toBe('sudo');
+      expect(checkCommandBash(`if ${wrapper} --unknown x y sudo apt; then :; fi`)?.ruleId).toBe('sudo');
     });
   }
 });
