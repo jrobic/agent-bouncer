@@ -14,128 +14,119 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExpectedVerdict, FixtureCase, FixtureFile } from './fixture-runner.ts';
 
+export const COMMAND_START_CASE_PREFIX = 'command-start-';
+
 export type CommandStartForm = Readonly<{
   id: string;
-  // The item of the list the form exercises (1 to 7); 0 for a nesting of several.
-  point: number;
   wrap: (command: string) => string;
 }>;
 
 // A form whose X starts a command: X gets the verdict it has on its own.
 export const COMMAND_START_FORMS: readonly CommandStartForm[] = [
   // 1. Separators.
-  { id: 'after-semicolon', point: 1, wrap: (x) => `true; ${x}` },
-  { id: 'after-and', point: 1, wrap: (x) => `true && ${x}` },
-  { id: 'after-or', point: 1, wrap: (x) => `false || ${x}` },
-  { id: 'after-pipe', point: 1, wrap: (x) => `true | ${x}` },
-  { id: 'after-background', point: 1, wrap: (x) => `true & ${x}` },
-  { id: 'after-newline', point: 1, wrap: (x) => `true\n${x}` },
+  { id: 'after-semicolon', wrap: (x) => `true; ${x}` },
+  { id: 'after-and', wrap: (x) => `true && ${x}` },
+  { id: 'after-or', wrap: (x) => `false || ${x}` },
+  { id: 'after-pipe', wrap: (x) => `true | ${x}` },
+  { id: 'after-background', wrap: (x) => `true & ${x}` },
+  { id: 'after-newline', wrap: (x) => `true\n${x}` },
   // 2. Groupings, glued or spaced, with the closer removed.
-  { id: 'subshell', point: 2, wrap: (x) => `(${x})` },
-  { id: 'subshell-spaced', point: 2, wrap: (x) => `( ${x} )` },
-  { id: 'subshell-after-cd', point: 2, wrap: (x) => `( cd /tmp && ${x} )` },
-  { id: 'subshell-nested', point: 2, wrap: (x) => `( (${x}) )` },
-  { id: 'brace-group', point: 2, wrap: (x) => `{ ${x}; }` },
-  { id: 'function-body', point: 2, wrap: (x) => `f() { ${x}; }` },
+  { id: 'subshell', wrap: (x) => `(${x})` },
+  { id: 'subshell-spaced', wrap: (x) => `( ${x} )` },
+  { id: 'subshell-after-cd', wrap: (x) => `( cd /tmp && ${x} )` },
+  { id: 'subshell-nested', wrap: (x) => `( (${x}) )` },
+  { id: 'brace-group', wrap: (x) => `{ ${x}; }` },
+  { id: 'function-body', wrap: (x) => `f() { ${x}; }` },
   // 3. Shell keywords.
-  { id: 'bang', point: 3, wrap: (x) => `! ${x}` },
-  { id: 'if-condition', point: 3, wrap: (x) => `if ${x}; then true; fi` },
-  { id: 'then', point: 3, wrap: (x) => `if true; then ${x}; fi` },
-  { id: 'elif-condition', point: 3, wrap: (x) => `if false; then true; elif ${x}; then true; fi` },
-  { id: 'else', point: 3, wrap: (x) => `if false; then true; else ${x}; fi` },
-  { id: 'while-body', point: 3, wrap: (x) => `while false; do ${x}; done` },
-  { id: 'until-condition', point: 3, wrap: (x) => `until ${x}; do true; done` },
-  { id: 'for-body', point: 3, wrap: (x) => `for x in a; do ${x}; done` },
+  { id: 'bang', wrap: (x) => `! ${x}` },
+  { id: 'if-condition', wrap: (x) => `if ${x}; then true; fi` },
+  { id: 'then', wrap: (x) => `if true; then ${x}; fi` },
+  { id: 'elif-condition', wrap: (x) => `if false; then true; elif ${x}; then true; fi` },
+  { id: 'else', wrap: (x) => `if false; then true; else ${x}; fi` },
+  { id: 'while-body', wrap: (x) => `while false; do ${x}; done` },
+  { id: 'until-condition', wrap: (x) => `until ${x}; do true; done` },
+  { id: 'for-body', wrap: (x) => `for x in a; do ${x}; done` },
   // 4. Substitutions.
-  { id: 'dollar-substitution', point: 4, wrap: (x) => `echo $(${x})` },
-  { id: 'backtick', point: 4, wrap: (x) => `echo \`${x}\`` },
-  { id: 'process-input', point: 4, wrap: (x) => `cat <(${x})` },
-  { id: 'process-output', point: 4, wrap: (x) => `tee >(${x})` },
-  { id: 'assignment-of-substitution', point: 4, wrap: (x) => `OUT=$(${x} | wc -l)` },
+  { id: 'dollar-substitution', wrap: (x) => `echo $(${x})` },
+  { id: 'backtick', wrap: (x) => `echo \`${x}\`` },
+  { id: 'process-input', wrap: (x) => `cat <(${x})` },
+  { id: 'process-output', wrap: (x) => `tee >(${x})` },
+  { id: 'assignment-of-substitution', wrap: (x) => `OUT=$(${x} | wc -l)` },
   // 5. A shell or eval at the start of a command reads its argument again.
-  { id: 'bash-c', point: 5, wrap: (x) => `bash -c "${x}"` },
-  { id: 'sh-c', point: 5, wrap: (x) => `sh -c '${x}'` },
-  { id: 'zsh-c', point: 5, wrap: (x) => `zsh -c '${x}'` },
-  { id: 'dash-c', point: 5, wrap: (x) => `dash -c '${x}'` },
-  { id: 'bash-lc', point: 5, wrap: (x) => `bash -lc "${x}"` },
-  { id: 'bash-euc', point: 5, wrap: (x) => `bash -euc '${x}'` },
-  { id: 'bash-option-before-c', point: 5, wrap: (x) => `bash -o pipefail -c '${x}'` },
-  { id: 'bash-by-path', point: 5, wrap: (x) => `/bin/bash -c "${x}"` },
-  { id: 'eval', point: 5, wrap: (x) => `eval "${x}"` },
-  { id: 'eval-unquoted', point: 5, wrap: (x) => `eval ${x}` },
-  { id: 'bash-c-eval', point: 5, wrap: (x) => `bash -c "eval '${x}'"` },
+  { id: 'bash-c', wrap: (x) => `bash -c "${x}"` },
+  { id: 'sh-c', wrap: (x) => `sh -c '${x}'` },
+  { id: 'zsh-c', wrap: (x) => `zsh -c '${x}'` },
+  { id: 'dash-c', wrap: (x) => `dash -c '${x}'` },
+  { id: 'bash-lc', wrap: (x) => `bash -lc "${x}"` },
+  { id: 'bash-euc', wrap: (x) => `bash -euc '${x}'` },
+  { id: 'bash-option-before-c', wrap: (x) => `bash -o pipefail -c '${x}'` },
+  { id: 'bash-by-path', wrap: (x) => `/bin/bash -c "${x}"` },
+  { id: 'eval', wrap: (x) => `eval "${x}"` },
+  { id: 'eval-unquoted', wrap: (x) => `eval ${x}` },
+  { id: 'bash-c-eval', wrap: (x) => `bash -c "eval '${x}'"` },
   // 6. Prefixes already recognised.
-  { id: 'assignment', point: 6, wrap: (x) => `A=1 ${x}` },
-  { id: 'rtk', point: 6, wrap: (x) => `rtk ${x}` },
-  { id: 'rtk-proxy', point: 6, wrap: (x) => `rtk proxy ${x}` },
-  { id: 'command', point: 6, wrap: (x) => `command ${x}` },
-  { id: 'exec', point: 6, wrap: (x) => `exec ${x}` },
-  { id: 'nice', point: 6, wrap: (x) => `nice -n 5 ${x}` },
-  { id: 'time', point: 6, wrap: (x) => `time ${x}` },
-  { id: 'builtin', point: 6, wrap: (x) => `builtin ${x}` },
-  { id: 'prefix-by-path', point: 6, wrap: (x) => `/usr/bin/env ${x}` },
+  { id: 'assignment', wrap: (x) => `A=1 ${x}` },
+  { id: 'rtk', wrap: (x) => `rtk ${x}` },
+  { id: 'rtk-proxy', wrap: (x) => `rtk proxy ${x}` },
+  { id: 'command', wrap: (x) => `command ${x}` },
+  { id: 'exec', wrap: (x) => `exec ${x}` },
+  { id: 'nice', wrap: (x) => `nice -n 5 ${x}` },
+  { id: 'time', wrap: (x) => `time ${x}` },
+  { id: 'builtin', wrap: (x) => `builtin ${x}` },
+  { id: 'prefix-by-path', wrap: (x) => `/usr/bin/env ${x}` },
   // 7. Wrappers, with the shape of their arguments.
-  { id: 'timeout', point: 7, wrap: (x) => `timeout 5 ${x}` },
-  { id: 'timeout-options', point: 7, wrap: (x) => `timeout -k 2 -s KILL 5 ${x}` },
-  { id: 'timeout-long-options', point: 7, wrap: (x) => `timeout --signal=KILL --preserve-status 5s ${x}` },
-  { id: 'nohup', point: 7, wrap: (x) => `nohup ${x}` },
-  { id: 'env-ignore-environment', point: 7, wrap: (x) => `env -i ${x}` },
-  { id: 'env-unset-and-assignment', point: 7, wrap: (x) => `env -u FOO BAR=1 ${x}` },
-  { id: 'env-split-string', point: 7, wrap: (x) => `env -S '${x}'` },
-  { id: 'xargs', point: 7, wrap: (x) => `xargs ${x}` },
-  { id: 'xargs-options', point: 7, wrap: (x) => `xargs -0 -n 1 ${x}` },
-  { id: 'xargs-glued-values', point: 7, wrap: (x) => `xargs -0r -n1 -I{} ${x}` },
-  { id: 'watch', point: 7, wrap: (x) => `watch -n 1 ${x}` },
-  { id: 'watch-quoted', point: 7, wrap: (x) => `watch -n 1 '${x}'` },
-  { id: 'wrapper-by-path', point: 7, wrap: (x) => `/usr/bin/timeout 5 ${x}` },
-  { id: 'watch-unknown-option', point: 7, wrap: (x) => `watch -b '${x}'` },
+  { id: 'timeout', wrap: (x) => `timeout 5 ${x}` },
+  { id: 'timeout-options', wrap: (x) => `timeout -k 2 -s KILL 5 ${x}` },
+  { id: 'timeout-long-options', wrap: (x) => `timeout --signal=KILL --preserve-status 5s ${x}` },
+  { id: 'nohup', wrap: (x) => `nohup ${x}` },
+  { id: 'env-ignore-environment', wrap: (x) => `env -i ${x}` },
+  { id: 'env-unset-and-assignment', wrap: (x) => `env -u FOO BAR=1 ${x}` },
+  { id: 'env-split-string', wrap: (x) => `env -S '${x}'` },
+  { id: 'xargs', wrap: (x) => `xargs ${x}` },
+  { id: 'xargs-options', wrap: (x) => `xargs -0 -n 1 ${x}` },
+  { id: 'xargs-glued-values', wrap: (x) => `xargs -0r -n1 -I{} ${x}` },
+  { id: 'watch', wrap: (x) => `watch -n 1 ${x}` },
+  { id: 'watch-quoted', wrap: (x) => `watch -n 1 '${x}'` },
+  { id: 'wrapper-by-path', wrap: (x) => `/usr/bin/timeout 5 ${x}` },
+  { id: 'watch-unknown-option', wrap: (x) => `watch -b '${x}'` },
   // Nestings.
-  { id: 'subshell-in-then', point: 0, wrap: (x) => `if true; then (${x}); fi` },
-  { id: 'subshell-in-bash-c', point: 0, wrap: (x) => `bash -c "(${x})"` },
-  { id: 'bash-c-in-subshell', point: 0, wrap: (x) => `(bash -c '${x}')` },
-  { id: 'bash-c-after-timeout', point: 0, wrap: (x) => `timeout 5 bash -c '${x}'` },
-  { id: 'bash-c-in-for', point: 0, wrap: (x) => `for x in a; do bash -c "${x}"; done` },
-  { id: 'backtick-in-bash-c', point: 0, wrap: (x) => `bash -c 'echo \`${x}\`'` },
-  { id: 'sh-c-after-xargs', point: 0, wrap: (x) => `xargs -I {} sh -c '${x}'` },
-  { id: 'brace-group-in-eval', point: 0, wrap: (x) => `eval '{ ${x}; }'` },
-  { id: 'wrapper-in-brace-group', point: 0, wrap: (x) => `{ timeout 5 ${x}; }` },
-  { id: 'third-nested-reading', point: 0, wrap: (x) => `bash -c "eval 'eval ${x}'"` },
+  { id: 'subshell-in-then', wrap: (x) => `if true; then (${x}); fi` },
+  { id: 'subshell-in-bash-c', wrap: (x) => `bash -c "(${x})"` },
+  { id: 'bash-c-in-subshell', wrap: (x) => `(bash -c '${x}')` },
+  { id: 'bash-c-after-timeout', wrap: (x) => `timeout 5 bash -c '${x}'` },
+  { id: 'bash-c-in-for', wrap: (x) => `for x in a; do bash -c "${x}"; done` },
+  { id: 'backtick-in-bash-c', wrap: (x) => `bash -c 'echo \`${x}\`'` },
+  { id: 'sh-c-after-xargs', wrap: (x) => `xargs -I {} sh -c '${x}'` },
+  { id: 'brace-group-in-eval', wrap: (x) => `eval '{ ${x}; }'` },
+  { id: 'wrapper-in-brace-group', wrap: (x) => `{ timeout 5 ${x}; }` },
+  { id: 'third-nested-reading', wrap: (x) => `bash -c "eval 'eval ${x}'"` },
   // A substitution body is read at the depth of its line, like `$( … )`.
-  { id: 'fourth-nested-process-substitution', point: 0, wrap: (x) => `cat <(cat <(cat <(cat <(${x}))))` },
-  { id: 'substitution-in-third-nested-reading', point: 0, wrap: (x) => `bash -c "eval 'eval \\"cat <(${x})\\"'"` },
+  { id: 'fourth-nested-process-substitution', wrap: (x) => `cat <(cat <(cat <(cat <(${x}))))` },
+  { id: 'substitution-in-third-nested-reading', wrap: (x) => `bash -c "eval 'eval \\"cat <(${x})\\"'"` },
 ];
 
 export type CommandStartLimit = CommandStartForm & Readonly<{ reason: string; }>;
 
 // A form whose X is not judged: the list documents each one as a known limit.
 export const COMMAND_START_LIMITS: readonly CommandStartLimit[] = [
-  {
-    id: 'ssh',
-    point: 0,
-    wrap: (x) => `ssh h '${x}'`,
-    reason: 'a command sent to another machine is not judged: only the command on this one is',
-  },
+  { id: 'ssh', wrap: (x) => `ssh h '${x}'`, reason: 'a command sent to another machine is not judged: only the command on this one is' },
   {
     id: 'limactl-shell',
-    point: 0,
     wrap: (x) => `limactl shell vm -- bash -c '${x}'`,
     reason: 'a command run in a virtual machine is not judged: bash is an argument of limactl, not the start of a command',
   },
   {
     id: 'docker-exec',
-    point: 0,
     wrap: (x) => `docker exec c sh -c '${x}'`,
     reason: 'a command run in a container is not judged: sh is an argument of docker, not the start of a command',
   },
   {
     id: 'case-pattern',
-    point: 0,
     wrap: (x) => `case x in a) ${x};; esac`,
     reason: 'a case pattern is not read as a command start: the command after `a)` is not judged',
   },
   {
     id: 'fourth-nested-reading',
-    point: 0,
     wrap: (x) => `bash -c "eval 'eval \\"eval ${x}\\"'"`,
     reason: 'a command line is read again three levels deep at most: the fourth eval argument is not read',
   },
@@ -194,7 +185,7 @@ export const COMMAND_START_FAMILIES: readonly CommandStartFamily[] = [
   },
 ];
 
-// Commands from the shared list's acceptance that do not fit a form.
+// Commands that do not fit a form around X, and malformed lines.
 const LITERAL_CASES: readonly FixtureCase[] = [
   bashCase('literal-assignment-of-substitution-is-not-a-prefix', 'STRAY=$(rtk git status --short | wc -l)', []),
   bashCase('literal-for-body-reads-a-safe-subcommand', 'for f in a b; do git log -1 "$f"; done', []),
@@ -223,9 +214,8 @@ const LITERAL_CASES: readonly FixtureCase[] = [
     knownLimitReason: 'xargs adds the words it reads on standard input: `git branch x` is judged without the -D',
   },
   {
-    // Each segment is still read the way it was before the shared list, so
-    // no verdict loosens: that reading takes the glued `)` for part of the
-    // subcommand, which no grammar allows.
+    // Each segment is read through the prefixes alone first, a reading that
+    // takes the glued `)` for part of the subcommand, which no grammar allows.
     ...bashCase('literal-glued-closer-keeps-the-segment-reading', '(cd /tmp && git status)', GIT_PROTECTED),
     knownLimit: true,
     knownLimitReason: 'the segment reading, kept so that no verdict loosens, reads `status)` as an unknown git subcommand',
@@ -248,10 +238,32 @@ const LITERAL_CASES: readonly FixtureCase[] = [
     knownLimitReason:
       'bash runs a backtick in an unquoted heredoc body; heredoc bodies keep the segment reading, which does not read substitutions',
   },
+  // Malformed lines get a verdict.
+  bashCase('literal-unclosed-quote-in-bash-c', 'bash -c "git push', GIT_PROTECTED),
+  bashCase('literal-bash-c-without-argument', 'bash -c', []),
+  bashCase('literal-bash-c-empty-argument', 'bash -c \'\'', []),
+  bashCase('literal-eval-without-argument', 'eval', []),
+  bashCase('literal-env-split-string-without-value', 'env -S', []),
+  bashCase('literal-timeout-without-duration', 'timeout', []),
+  bashCase('literal-xargs-option-without-value', 'xargs -n', []),
+  bashCase('literal-watch-without-command', 'watch', []),
+  bashCase('literal-lone-opening-parenthesis', '(', []),
+  bashCase('literal-empty-brace-group', '{ }', []),
+  bashCase('literal-lone-backtick', 'echo `', []),
+  bashCase('literal-unclosed-backtick', 'echo `git push', GIT_PROTECTED),
+  bashCase('literal-lone-process-substitution', 'cat <(', []),
+  bashCase('literal-unclosed-process-substitution', 'cat <(git push', GIT_PROTECTED),
+  // A command line is read again three levels down at most.
+  bashCase('literal-third-eval', 'eval eval eval git push', GIT_PROTECTED),
+  {
+    ...bashCase('literal-fourth-eval', 'eval eval eval eval git push', []),
+    knownLimit: true,
+    knownLimitReason: 'a command line is read again three levels deep at most: the fourth eval argument is not read',
+  },
 ];
 
 function bashCase(id: string, command: string, expected: readonly ExpectedVerdict[]): FixtureCase {
-  return { id: `command-start-${id}`, toolName: 'Bash', toolInput: { command }, expected };
+  return { id: `${COMMAND_START_CASE_PREFIX}${id}`, toolName: 'Bash', toolInput: { command }, expected };
 }
 
 /** The `command-start-*` cases of fixtures/command.json, in order. */
@@ -270,8 +282,6 @@ export function commandStartCases(): FixtureCase[] {
   }
   return [...cases, ...LITERAL_CASES];
 }
-
-export const COMMAND_START_CASE_PREFIX = 'command-start-';
 
 const COMMAND_FIXTURES = join(import.meta.dir, '..', 'fixtures', 'command.json');
 

@@ -10758,6 +10758,156 @@
       "expected": [],
       "knownLimit": true,
       "knownLimitReason": "bash runs a backtick in an unquoted heredoc body; heredoc bodies keep the segment reading, which does not read substitutions"
+    },
+    {
+      "id": "command-start-literal-unclosed-quote-in-bash-c",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c \"git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-bash-c-without-argument",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-bash-c-empty-argument",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "bash -c ''"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-eval-without-argument",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-env-split-string-without-value",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "env -S"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-timeout-without-duration",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "timeout"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-xargs-option-without-value",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "xargs -n"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-watch-without-command",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "watch"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-lone-opening-parenthesis",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "("
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-empty-brace-group",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "{ }"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-lone-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `"
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-unclosed-backtick",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo `git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-lone-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <("
+      },
+      "expected": []
+    },
+    {
+      "id": "command-start-literal-unclosed-process-substitution",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "cat <(git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-third-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval eval eval git push"
+      },
+      "expected": [
+        {
+          "verdict": "confirm",
+          "ruleId": "git-protected"
+        }
+      ]
+    },
+    {
+      "id": "command-start-literal-fourth-eval",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "eval eval eval eval git push"
+      },
+      "expected": [],
+      "knownLimit": true,
+      "knownLimitReason": "a command line is read again three levels deep at most: the fourth eval argument is not read"
     }
   ]
 }

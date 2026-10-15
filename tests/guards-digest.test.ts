@@ -179,9 +179,11 @@ describe('guards-digest: the wrappers of the shared start of a command', () => {
     expect(commandStartWrapperDigest(COMMAND_START_WRAPPERS)).toEqual([...EXPECTED_COMMAND_START_WRAPPER_DIGEST]);
   });
 
+  // Inside an `if`, where only the shared start of a command reads the
+  // wrapper: the segment reading stops at `if`.
   for (const wrapper of Object.keys(COMMAND_START_WRAPPERS)) {
     test(`${wrapper} unknown option fails closed`, () => {
-      expect(checkCommandBash(`${wrapper} --unknown sudo apt`)?.ruleId).toBe('sudo');
+      expect(checkCommandBash(`if ${wrapper} --unknown sudo apt; then :; fi`)?.ruleId).toBe('sudo');
     });
   }
 });
