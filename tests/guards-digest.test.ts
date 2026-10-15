@@ -159,9 +159,9 @@ function commandStartWrapperDigest(wrappers: Readonly<Record<string, CommandStar
 
 const EXPECTED_COMMAND_START_WRAPPER_DIGEST: readonly string[] = [
   '0 rtk flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
-  '1 command flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
-  '2 exec flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
-  '3 env flags=[-i] args=[-u,-S] optional=[] operands=0 assignments=true line=[-S] shell-unless=[]',
+  '1 command flags=[--] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '2 exec flags=[--] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
+  '3 env flags=[--,-i] args=[-u,-S] optional=[] operands=0 assignments=true line=[-S] shell-unless=[]',
   '4 nice flags=[] args=[-n] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
   '5 time flags=[-p] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',
   '6 builtin flags=[] args=[] optional=[] operands=0 assignments=false line=[] shell-unless=[]',

@@ -88,7 +88,7 @@ function checkRmRfWith(cmd: string, line: CommandLine, dangerousTargets: readonl
   const texts: string[] = cmd.match(/\brm\b[^;|&\n]*/g) ?? [];
   for (const command of line.commands) {
     const index = namedCommandIndex(command, RM_COMMAND);
-    if (index !== -1) texts.push(command.source.slice(command.tokens[index]!.start, command.tokens[command.tokens.length - 1]!.end));
+    if (index !== -1) texts.push(commandText(command, index));
   }
   for (const text of texts) {
     const target = dangerousRmTarget(text, dangerousTargets);
@@ -1377,10 +1377,11 @@ export function consumeCommandPrefixes(
 // The one definition of the start of a command for git, privilege
 // escalation and rm -rf: docs/reference/policy.md § What counts as the start
 // of a command, pinned by the forms of tests/command-start-forms.ts. Those
-// three families read each segment with consumeCommandPrefixes first, as
-// they always did, so a command that asked before asks the same way; this
-// reading only adds the commands that one missed. The path scans
-// (protected-write, secret masking, docker) keep consumeCommandPrefixes alone.
+// three families read each segment with consumeCommandPrefixes first, then
+// each command this reading finds, and the first reading that asks answers:
+// a command the segment reading asks for keeps that rule and reason. The
+// path scans (protected-write, secret masking, docker) read with
+// consumeCommandPrefixes alone.
 
 // A shell, `eval`, `watch` or `env -S` argument is read again as a command
 // line, and so is the body of a backtick or process substitution: down to
@@ -1425,27 +1426,19 @@ export type CommandStartWrapper = Readonly<{
   shellOperandsUnless?: ReadonlySet<string>;
 }>;
 
-const NO_OPTIONS: CommandStartWrapper = { flags: new Set(), optionsWithArg: new Set() };
-
-// Tokenizer grammar like WRAPPER_OPTION_POLICIES: the prefixes recognised
-// before (the first seven, with the same options, plus `env -S`) and the
-// wrappers (the last four), each with the shape of its arguments. `--` ends
-// the options of every one, and `rtk` may be followed by `proxy`. An option
-// not listed makes the start ambiguous: each family then looks for its
-// command name among the words that follow, as with consumeCommandPrefixes.
+// Tokenizer grammar like WRAPPER_OPTION_POLICIES, from which the prefixes
+// come with their options (`proxy` is read only after `rtk`), `env` gaining
+// `-S`; then the wrappers, each with the shape of its arguments. `--` ends
+// the options of every one. An option not listed makes the start ambiguous:
+// each family then looks for its command name among the words that follow,
+// as with consumeCommandPrefixes.
 export const COMMAND_START_WRAPPERS: Readonly<Record<string, CommandStartWrapper>> = {
-  rtk: NO_OPTIONS,
-  command: NO_OPTIONS,
-  exec: NO_OPTIONS,
+  ...Object.fromEntries(Object.entries(WRAPPER_OPTION_POLICIES).filter(([name]) => name !== 'proxy')),
   env: {
-    flags: new Set(['-i']),
-    optionsWithArg: new Set(['-u', '-S']),
-    acceptsAssignments: true,
+    ...WRAPPER_OPTION_POLICIES.env!,
+    optionsWithArg: new Set([...WRAPPER_OPTION_POLICIES.env!.optionsWithArg, '-S']),
     commandLineOptions: new Set(['-S']),
   },
-  nice: { flags: new Set(), optionsWithArg: new Set(['-n']) },
-  time: { flags: new Set(['-p']), optionsWithArg: new Set() },
-  builtin: NO_OPTIONS,
   timeout: {
     flags: new Set(['--foreground', '--preserve-status']),
     optionsWithArg: new Set(['-k', '--kill-after', '-s', '--signal']),
@@ -1456,7 +1449,7 @@ export const COMMAND_START_WRAPPERS: Readonly<Record<string, CommandStartWrapper
     optionsWithArg: new Set(['-n', '--max-args', '-I', '-P', '--max-procs', '-L', '-d', '--delimiter', '-E', '-s', '--max-chars']),
     optionalArg: new Set(['--replace', '--max-lines', '--eof']),
   },
-  nohup: NO_OPTIONS,
+  nohup: { flags: new Set(), optionsWithArg: new Set() },
   watch: {
     flags: new Set(['-d', '-t', '--no-title', '-x', '--exec', '-c', '--color', '-g', '--chgexit', '-e', '--errexit', '-p', '--precise']),
     optionsWithArg: new Set(['-n', '--interval']),
@@ -1478,10 +1471,12 @@ const SHELL_OPTIONS_WITH_ARG: Readonly<Record<string, true>> = {
 };
 
 // Where a command's name stands among its words, past the prefixes and
-// wrappers. When the words hand a command line to a shell (`bash -c`,
-// `eval`, `watch`, `env -S`), that line is `commandLine` and the words have
-// no command name of their own: `index` is past the last one.
-type CommandStart = CommandPrefix & Readonly<{ commandLine?: string; }>;
+// wrappers; or, when the words hand a command line to a shell (`bash -c`,
+// `eval`, `watch`, `env -S`), that line: the words then have no command name
+// of their own.
+type CommandStart =
+  | CommandPrefix & Readonly<{ kind: 'name'; }>
+  | Readonly<{ kind: 'line'; line: string; }>;
 
 function consumeCommandStart(tokens: readonly ShellToken[], source: string): CommandStart {
   let i = 0;
@@ -1495,7 +1490,7 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
     i++;
     if (word === 'rtk' && tokens[i]?.value === 'proxy') i++;
     const options = consumeWrapperOptions(tokens, i, COMMAND_START_WRAPPERS[word]!, source);
-    if (options.ambiguous || options.commandLine !== undefined) return options;
+    if (options.kind === 'line' || options.ambiguous) return options;
     i = options.index;
     if (word === 'time') {
       while (tokens[i]?.kind === 'bang-operator') i++;
@@ -1505,13 +1500,13 @@ function consumeCommandStart(tokens: readonly ShellToken[], source: string): Com
   const name = tokens[i]?.value;
   if (name === 'eval') {
     // eval joins its arguments with spaces.
-    return { index: tokens.length, ambiguous: false, commandLine: tokens.slice(i + 1).map((token) => token.value).join(' ') };
+    return { kind: 'line', line: tokens.slice(i + 1).map((token) => token.value).join(' ') };
   }
   if (name !== undefined && Object.hasOwn(COMMAND_LINE_SHELLS, name.slice(name.lastIndexOf('/') + 1))) {
-    const commandLine = shellCommandLine(tokens, i);
-    if (commandLine !== null) return { index: tokens.length, ambiguous: false, commandLine };
+    const line = shellCommandLine(tokens, i);
+    if (line !== null) return { kind: 'line', line };
   }
-  return { index: i, ambiguous: false };
+  return { kind: 'name', index: i, ambiguous: false };
 }
 
 // The argument a shell named at `index` reads as its command line after a
@@ -1561,14 +1556,14 @@ function consumeWrapperOptions(
     }
     if (!word.startsWith('-') || word === '-') break;
     const option = wrapperOption(tokens, i, wrapper);
-    if (option === null) return { index: i, ambiguous: true };
+    if (option === null) return { kind: 'name', index: i, ambiguous: true };
     if (option.valued !== undefined && wrapper.commandLineOptions?.has(option.valued.name) === true) {
       // `env -S` splits its value into words that come before the rest.
       const rest = tokens[option.next];
-      const commandLine = rest === undefined
+      const line = rest === undefined
         ? option.valued.value
         : `${option.valued.value} ${source.slice(rest.start, tokens[tokens.length - 1]!.end)}`;
-      return { index: tokens.length, ambiguous: false, commandLine };
+      return { kind: 'line', line };
     }
     if (option.names.some((name) => wrapper.shellOperandsUnless?.has(name) === true)) execs = true;
     i = option.next;
@@ -1576,9 +1571,9 @@ function consumeWrapperOptions(
   i = Math.min(i + (wrapper.operands ?? 0), tokens.length);
   // watch joins its operands with spaces and runs them with `sh -c`.
   if (wrapper.shellOperandsUnless !== undefined && !execs) {
-    return { index: tokens.length, ambiguous: false, commandLine: tokens.slice(i).map((token) => token.value).join(' ') };
+    return { kind: 'line', line: tokens.slice(i).map((token) => token.value).join(' ') };
   }
-  return { index: i, ambiguous: false };
+  return { kind: 'name', index: i, ambiguous: false };
 }
 
 // The option at `index`, read as getopt reads it: a long option (`--name`,
@@ -1616,9 +1611,9 @@ function wrapperOption(tokens: readonly ShellToken[], index: number, wrapper: Co
 // How many `)` and `}` end the word without being opened in it, outside
 // quotes: the closers of a grouping glued to its last word (`push)`).
 function unopenedClosers(token: ShellToken, source: string): number {
-  const text = source.slice(token.start, token.end);
-  const last = text[text.length - 1];
+  const last = source[token.end - 1];
   if (last !== ')' && last !== '}') return 0;
+  const text = source.slice(token.start, token.end);
   let parens = 0;
   let braces = 0;
   let quote: '"' | '\'' | null = null;
@@ -1670,7 +1665,7 @@ function cutToken(token: ShellToken, source: string, start: number, end: number)
 // the list): the keywords, groupings and function heads before it are taken
 // off, with a `(` glued to it, and so are the closers that end a grouping and
 // whatever follows them. Empty when the segment holds no command.
-function commandWords(segment: readonly ShellToken[], source: string): ShellToken[] {
+function commandWords(segment: readonly ShellToken[], source: string): readonly ShellToken[] {
   let first = 0;
   let head: ShellToken | null = null;
   while (head === null && first < segment.length) {
@@ -1691,15 +1686,14 @@ function commandWords(segment: readonly ShellToken[], source: string): ShellToke
   }
   if (head === null) return [];
 
-  const words = [head, ...segment.slice(first + 1)];
-  for (let index = 0; index < words.length; index++) {
-    const token = words[index]!;
+  for (let index = first; index < segment.length; index++) {
+    const token = index === first ? head : segment[index]!;
     const closers = unopenedClosers(token, source);
     if (closers === 0) continue;
-    if (closers === token.end - token.start) return words.slice(0, index);
-    return [...words.slice(0, index), cutToken(token, source, token.start, token.end - closers)];
+    const before = index === first ? [] : [head, ...segment.slice(first + 1, index)];
+    return closers === token.end - token.start ? before : [...before, cutToken(token, source, token.start, token.end - closers)];
   }
-  return words;
+  return first === 0 && head === segment[0] ? segment : [head, ...segment.slice(first + 1)];
 }
 
 // The delimiter of a heredoc whose `<<` ends at `start`, and where its word
@@ -1735,7 +1729,8 @@ function heredocAt(source: string, start: number): Readonly<{ delimiter: Heredoc
 type SubstitutionScan = Readonly<{
   // What each backtick and process substitution runs.
   bodies: readonly string[];
-  // The heredoc bodies, closed or running to the end of the line.
+  // The heredoc bodies the tokenizer did not record: inside a `$( … )` it
+  // could not close, or never closed.
   heredocs: readonly SourceRange[];
 }>;
 
@@ -1744,8 +1739,9 @@ type SubstitutionScan = Readonly<{
 // `$( … )` is not listed: the tokenizer reads its words as segments of the
 // line already; it is followed here for its quotes and its heredocs, whose
 // body may hold a quote that hides its end from the tokenizer
-// (`git commit -m "$(cat <<'EOF' … EOF )"`).
-function scanSubstitutions(source: string): SubstitutionScan {
+// (`git commit -m "$(cat <<'EOF' … EOF )"`). A heredoc body the tokenizer
+// recorded (`recorded`, by start) is skipped without being read again.
+function scanSubstitutions(source: string, recorded: ReadonlyMap<number, number>): SubstitutionScan {
   const bodies: string[] = [];
   const heredocs: SourceRange[] = [];
   // Each enclosing `$( … )`: the quote it was opened in, and the parentheses
@@ -1788,14 +1784,15 @@ function scanSubstitutions(source: string): SubstitutionScan {
     if (character === '"' || character === '\'') {
       quote = character;
     } else if (character === '\n' && announced.length > 0) {
-      const read = consumeHeredocBodies(source, i + 1, announced);
+      const recordedEnd = announced.length === 1 ? recorded.get(i + 1) : undefined;
+      const read = recordedEnd === undefined ? consumeHeredocBodies(source, i + 1, announced) : [];
       announced = [];
       if (read === null) {
         heredocs.push({ start: i + 1, end: source.length });
         break;
       }
       heredocs.push(...read);
-      i = read[read.length - 1]!.end - 1;
+      i = (recordedEnd ?? read[read.length - 1]!.end) - 1;
     } else if (character === '#' && (i === 0 || /[\s;&|]/.test(source[i - 1]!))) {
       const newline = source.indexOf('\n', i);
       if (newline === -1) break;
@@ -1821,28 +1818,33 @@ function scanSubstitutions(source: string): SubstitutionScan {
 }
 
 // One command of a line, as the families judge it.
-type CommandWords = Readonly<{
+type FoundCommand = Readonly<{
   // Its words from the first one, without the redirections.
   tokens: readonly ShellToken[];
   // Where its name stands among them.
   start: CommandPrefix;
   // A redirection among the words could not be read.
-  unclearRedirection: boolean;
+  forceConfirm: boolean;
   // The line the token ranges point into.
   source: string;
 }>;
+
+// The text of a command from its word at `index` to its last word.
+function commandText({ tokens, source }: FoundCommand, index: number): string {
+  return source.slice(tokens[index]!.start, tokens[tokens.length - 1]!.end);
+}
 
 type CommandLine = Readonly<{
   // The segments as consumeCommandPrefixes reads them.
   segments: readonly ShellToken[][];
   // Every command whose start the list finds: in the line, then in each
   // command line and substitution body read again.
-  commands: readonly CommandWords[];
+  commands: readonly FoundCommand[];
 }>;
 
 function readCommandLine(cmd: string): CommandLine {
   const tokenized = tokenizeShellSegments(cmd);
-  const commands: CommandWords[] = [];
+  const commands: FoundCommand[] = [];
   collectCommands(cmd, tokenized, 0, commands);
   return { segments: tokenized.segments, commands };
 }
@@ -1866,23 +1868,18 @@ function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => b
   };
 }
 
-function collectCommands(source: string, tokenized: TokenizedShell, depth: number, commands: CommandWords[]): void {
-  const scan = scanSubstitutions(source);
-  // A heredoc body is data: its lines keep only the segment reading. The scan
-  // also finds the bodies the tokenizer misses (inside a `$( … )` it could not
-  // close, or never closed).
+function collectCommands(source: string, tokenized: TokenizedShell, depth: number, commands: FoundCommand[]): void {
+  const scan = scanSubstitutions(source, new Map(tokenized.heredocBodies.map((body) => [body.start, body.end])));
+  // A heredoc body is data: its lines keep only the segment reading.
   const insideHeredoc = insideAnyRange([...tokenized.heredocBodies, ...scan.heredocs]);
   const nested: string[] = [];
   for (const segment of tokenized.segments) {
     if (insideHeredoc(segment[0]!.start)) continue;
     const filtered = withoutShellRedirections(commandWords(segment, source));
     if (filtered.tokens.length === 0) continue;
-    const commandStart = consumeCommandStart(filtered.tokens, source);
-    if (commandStart.commandLine === undefined) {
-      commands.push({ tokens: filtered.tokens, start: commandStart, unclearRedirection: filtered.forceConfirm, source });
-    } else {
-      nested.push(commandStart.commandLine);
-    }
+    const start = consumeCommandStart(filtered.tokens, source);
+    if (start.kind === 'line') nested.push(start.line);
+    else commands.push({ tokens: filtered.tokens, start, forceConfirm: filtered.forceConfirm, source });
   }
   if (depth === MAX_NESTED_READS) return;
   nested.push(...scan.bodies);
@@ -1891,7 +1888,7 @@ function collectCommands(source: string, tokenized: TokenizedShell, depth: numbe
 
 // The index of the command's name when it is one of `names`, -1 otherwise.
 // An ambiguous start is searched for the name, like the segment reading does.
-function namedCommandIndex({ tokens, start }: CommandWords, names: ReadonlySet<string>): number {
+function namedCommandIndex({ tokens, start }: FoundCommand, names: ReadonlySet<string>): number {
   if (!start.ambiguous) return isCommandNamed(tokens[start.index]?.value, names) ? start.index : -1;
   return tokens.findIndex((token, index) => index >= start.index && isCommandNamed(token.value, names));
 }
@@ -2273,15 +2270,15 @@ function gitConfigExecOffender({ globals, assignments }: GitCommand, lists: Conf
   return null;
 }
 
-// Every git command of the line: each segment read as it always was, then
-// each command the shared start of a command finds.
+// Every git command of the line: each segment through consumeCommandPrefixes,
+// then each command the shared start of a command finds.
 function* gitCommands(line: CommandLine): Generator<GitCommand> {
   for (const tokens of line.segments) {
     const parsed = extractGitSubcommandFromTokens(tokens);
     if (parsed !== null) yield parsed;
   }
-  for (const { tokens, start, unclearRedirection } of line.commands) {
-    const parsed = gitCommandAt(tokens, start, unclearRedirection);
+  for (const { tokens, start, forceConfirm } of line.commands) {
+    const parsed = gitCommandAt(tokens, start, forceConfirm);
     if (parsed !== null) yield parsed;
   }
 }
