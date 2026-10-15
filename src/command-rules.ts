@@ -1317,12 +1317,13 @@ function gitCommandAt(
     }
   }
   if (i >= tokens.length) return null;
-  const assignments = prefix.index > 0 ? [...inherited, ...assignmentsBefore(tokens, prefix.index)] : [...inherited];
+  const own = prefix.index > 0 ? assignmentsBefore(tokens, prefix.index) : null;
+  const assignments = inherited.length === 0 ? own : [...inherited, ...(own ?? [])];
   return {
     sub: tokens[i]!.value,
     rest: tokens.slice(i + 1).map((token) => token.value),
     ...(globals.length > 0 ? { globals } : {}),
-    ...(assignments.length > 0 ? { assignments } : {}),
+    ...(assignments !== null && assignments.length > 0 ? { assignments } : {}),
     ...(prefix.ambiguous || forceConfirm ? { forceConfirm: true as const } : {}),
   };
 }
@@ -1961,6 +1962,10 @@ function insideAnyRange(ranges: readonly SourceRange[]): (position: number) => b
   };
 }
 
+// Most lines hold no heredoc: they build neither a map of recorded bodies
+// nor a search over them.
+const NO_RECORDED_HEREDOCS: ReadonlyMap<number, number> = new Map();
+
 // How a line is read: how many levels below the outer one, the assignments
 // its commands inherit, and whether each family looks for its command name
 // anywhere among a command's words.
@@ -1972,12 +1977,16 @@ type LineReading = Readonly<{ depth: number; inherited: readonly string[]; ambig
 // only a command line handed to a shell goes one level down.
 function collectCommands(source: string, tokenized: TokenizedShell, reading: LineReading, commands: FoundCommand[]): void {
   const { depth, inherited, ambiguous } = reading;
-  const scan = scanSubstitutions(source, new Map(tokenized.heredocBodies.map((body) => [body.start, body.end])));
+  const recorded = tokenized.heredocBodies.length === 0
+    ? NO_RECORDED_HEREDOCS
+    : new Map(tokenized.heredocBodies.map((body) => [body.start, body.end]));
+  const scan = scanSubstitutions(source, recorded);
   // A heredoc body is data: its lines keep only the segment reading.
-  const insideHeredoc = insideAnyRange([...tokenized.heredocBodies, ...scan.heredocs]);
+  const heredocs = scan.heredocs.length === 0 ? tokenized.heredocBodies : [...tokenized.heredocBodies, ...scan.heredocs];
+  const insideHeredoc = heredocs.length === 0 ? null : insideAnyRange(heredocs);
   const nested: { line: string; reading: LineReading; }[] = [];
   for (const segment of tokenized.segments) {
-    if (insideHeredoc(segment[0]!.start)) continue;
+    if (insideHeredoc?.(segment[0]!.start) === true) continue;
     const filtered = withoutShellRedirections(commandWords(segment, source));
     if (filtered.tokens.length === 0) continue;
     const start = consumeCommandStart(filtered.tokens, source);
