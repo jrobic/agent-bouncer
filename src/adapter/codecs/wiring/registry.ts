@@ -10,7 +10,7 @@
 // src/cli-commands.ts's runDoctor/runPrintCanary need, regardless of how
 // many files (or none, for an in-process shim) that codec's own wiring
 // source actually is: what checks does its own wiring look like right
-// now (`buildChecks` — S-4/ticket 15c: hook-file's and codex-hooks'
+// now (`buildChecks` — hook-file's and codex-hooks'
 // settings-shaped settings/per-event/canary assembly moved HERE, into
 // each codec's own closure, so shim-file's own two-check shape — no
 // settings object, no per-event loop, no canary — is a real, equally
@@ -62,7 +62,7 @@ export interface WiringCodec {
   ) => Promise<CanonicalCanaryEntry>;
 }
 
-// Shared by hook-file and codex-hooks (S-5 discipline: one assembly, not
+// Shared by hook-file and codex-hooks (one assembly, not
 // two copies drifting apart) — both produce a real `SettingsReadResult`,
 // the same `{hooks: {...}}` shape `checkWiring`/`checkCanary` have always
 // read, merged or not. Skips events absent from this harness's declaration:
@@ -110,14 +110,14 @@ const CODEX_HOOKS_CODEC: WiringCodec = {
   formatCanonicalCanaryEntry: formatCodexCanonicalCanaryEntry,
 };
 
-// ADR-0006 § 6/7, ticket 15c: pi-agent/omp are IN-PROCESS harnesses — the
+// ADR-0006 § 6/7: pi-agent/omp are IN-PROCESS harnesses — the
 // installed shim relays every event uniformly, so there is no per-event
 // settings shape and no `settingsCheck` at all, only the two checks
 // named below. No canary concept either: the printed shim already fails
 // closed on its own liveness (bouncer missing/non-executable/non-zero
 // exit/timeout, ADR-0006 § 7's own fixed rule 1) — `doctor --print-canary`
 // for this wiring is a real, honest error, never a fabricated entry.
-// Ticket 56: one more `wiring:shim (profile <name>)` check per omp profile
+// One more `wiring:shim (profile <name>)` check per omp profile
 // (each its own agent directory, loading nothing from the default one),
 // except under an explicit `--settings` path, which pins the check to that
 // one file.
@@ -134,7 +134,7 @@ const SHIM_FILE_CODEC: WiringCodec = {
   }),
 };
 
-// Exported for the S-3 parity test (tests/adapter-codec-registries.test.ts):
+// Exported for the registry parity test (tests/adapter-codec-registries.test.ts):
 // this runtime registry and src/policy/harness.ts's KNOWN_WIRINGS
 // lint-time registry must name the same key set.
 export const WIRING_CODECS: Readonly<Record<string, WiringCodec>> = {

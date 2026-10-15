@@ -6,10 +6,10 @@
 // its output table, and renders the matching template — nothing here
 // names Claude Code specifically any more; the declaration does.
 //
-// Review round 1 S-3: an unreadable or unparseable stdin envelope (empty,
+// An unreadable or unparseable stdin envelope (empty,
 // invalid JSON) honours the harness's OWN declared `on_malformed`
 // (mandatory, ADR-0006 § 4) rather than always allowing silently —
-// `"allow"` (Claude Code's contract, unchanged) is the pre-15a silent
+// `"allow"` (Claude Code's contract, unchanged) is the former silent
 // allow; `"deny"` renders that harness's own `deny` template
 // (`envelope-malformed: unreadable or malformed hook envelope — failing
 // closed`) and logs a policy-warning. A WELL-FORMED envelope naming an
@@ -73,7 +73,7 @@ export interface RunResult {
   readonly exit?: number;
 }
 
-// Ticket 08: `bouncer run --shadow` (cli.ts parses the flag; `run()` here
+// `bouncer run --shadow` (cli.ts parses the flag; `run()` here
 // is where it actually takes effect). Absolute contract — shadow evaluates
 // every event exactly as normal (same dispatch, same policy, same
 // logging), but NEVER writes to stdout, on any event shape: no deny, no
@@ -88,7 +88,7 @@ export interface RunResult {
 // (only the EXACT string `--shadow` ever sets `shadow: true` — a typo
 // stays false, by construction) — but it also must not be silently
 // swallowed, since a live typo desyncing "I meant to be in shadow mode"
-// from "I am actually enforcing" is exactly the kind of drift this ticket
+// from "I am actually enforcing" is exactly the kind of drift this check
 // exists to make loud. Logged via logPolicyWarnings so it survives in the
 // audit trail even though the tool call itself proceeds normally.
 //
@@ -100,7 +100,7 @@ export interface RunOptions {
   readonly harness?: string;
   // Test seam for replaying the clean compiled-binary SessionStart contract.
   readonly build?: BuildInfo;
-  // The environment the env-value guard (ticket 58) reads protected values
+  // The environment the env-value guard reads protected values
   // from. Absent = this process's own (`process.env`), taken here, at the edge,
   // once per invocation; every dispatcher construction then reads that record
   // (the overlay-aware one, then the baseline retry). The hook's environment
@@ -111,7 +111,7 @@ export interface RunOptions {
 
 const SILENT: RunResult = { stdout: null };
 
-/** Parses a stdin-json envelope (the only transport codec this ticket declares). `null` for anything unreadable. */
+/** Parses a stdin-json envelope (the only transport codec declared so far). `null` for anything unreadable. */
 export function parseEnvelope(raw: string): Record<string, unknown> | null {
   return parseStdinJson(raw);
 }
@@ -126,7 +126,7 @@ function recordField(envelope: Record<string, unknown>, selector: string): Recor
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-// Review round 1 P-4: `permission` is the one OPTIONAL selector on
+// `permission` is the one OPTIONAL selector on
 // `[harness.protocol.input]` with no engine-side reader at all — it
 // exists purely so `run.ts` can attach it to every logged verdict entry
 // (log.ts's own VerdictLogContext.permission). `undefined` (the selector
@@ -198,7 +198,7 @@ async function runUserPromptSubmit(
 ): Promise<RunResult> {
   // `input.prompt` is guaranteed defined here — this function is only ever
   // called when `protocol.events.prompt` is declared, and lint requires
-  // `input.prompt` whenever `events.prompt` is (R2-1 protocolCoherenceIssues).
+  // `input.prompt` whenever `events.prompt` is (protocolCoherenceIssues).
   const prompt = stringField(envelope, protocol.input.prompt!) ?? '';
   const hits = dispatcher.inspectUserPromptSubmit(prompt);
   if (hits.length === 0) return SILENT;
@@ -229,7 +229,7 @@ async function runUserPromptSubmit(
 // hook (Claude Code's cue for "no hook ran at all") — and the catch LOGS
 // before falling silent: a silent catch here would itself be an
 // unannounced loss of the doctor signal, the exact failure class this
-// ticket exists to catch.
+// doctor path exists to catch.
 export async function runSessionStart(
   harness: HarnessDeclaration,
   protocol: HarnessProtocol,
@@ -247,7 +247,7 @@ export async function runSessionStart(
     const report = await checkFn(undefined, loaded, harness, build);
     const context = buildSessionStartContext(report);
     if (shadow) {
-      // Ticket 08 decision 2: the scream/announcement never reaches
+      // The scream/announcement never reaches
       // stdout in shadow, but it must not be lost either — logged so
       // shadow wiring health stays verifiable through the log. Nothing to
       // log when context is null (a fully healthy SessionStart stays
@@ -268,9 +268,9 @@ export async function runSessionStart(
   }
 }
 
-// Review round 1 S-3: `on_malformed` is mandatory on every protocol (ADR-
+// `on_malformed` is mandatory on every protocol (ADR-
 // 0006 § 4) but was read nowhere until now — this is that one call site.
-// "allow" is Claude Code's own pre-15a contract: silent, exit 0, nothing
+// "allow" is Claude Code's own original contract: silent, exit 0, nothing
 // logged (an unreadable envelope on a healthy install is noise, not a
 // signal). "deny" renders the harness's OWN `deny` template — the same
 // template a real blocked tool call would get — with a fixed, harness-
@@ -331,7 +331,7 @@ async function dispatchByEvent(
  * that acts on the loaded policy goes through here — `run` (a full dispatcher
  * for a tool call or a prompt; only the env-value guard for a post-tool
  * event, ADR-0008) and `ping` — so a runnable baseline has one definition.
- * The environment the env-value guard reads (ticket 58) is captured by the
+ * The environment the env-value guard reads is captured by the
  * caller's `bind`: the SAME record for both attempts, so the guard survives
  * the retry.
  */

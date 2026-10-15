@@ -1,4 +1,4 @@
-// The protected-variable-name definition (ticket 57, decision F1) — ONE place.
+// The protected-variable-name definition — ONE place.
 // Pure: no Bun/Node APIs, no harness shapes, like the other rule modules.
 //
 // A name is protected when it is uppercase and equals, or ends in `_` plus,

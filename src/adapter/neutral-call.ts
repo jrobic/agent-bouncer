@@ -5,7 +5,7 @@
 // string out of TOML; src/adapter/dispatch.ts and every family checker it
 // wires (src/*-rules.ts) never see a tool name or a field name again.
 //
-// Ported straight from the pre-15a hardcoded readers (src/targets.ts,
+// Ported straight from the former hardcoded readers (src/targets.ts,
 // src/adapter/dispatch.ts's NATIVE_FILE_PATH_FIELD/writeSecretText) —
 // same stderr diagnostics, same array-entry leniency, same defaults —
 // just driven by a selector string instead of a hardcoded key.
@@ -23,7 +23,7 @@ function joinCwd(path: string, cwd: string | null): string {
   return cwd === null || isAbsolute(path) ? path : resolve(cwd, path);
 }
 
-// Review round 1 L-1 (lead): a raw path selector's value may carry a
+// A raw path selector's value may carry a
 // harness-specific SUFFIX or LIST that never reaches the filesystem
 // verbatim — pi-agent's own `read`/`grep`/`find`/`ls` (and omp's `glob`)
 // let a model append a trailing `:<selector>` (`~/.zsh_history:1-5`, this
@@ -31,7 +31,7 @@ function joinCwd(path: string, cwd: string | null): string {
 // several targets with `;` (`~/.ssh; ~/.aws`) — and every `$`-anchored
 // path rule (`ssh-key`, `dotenv`, …) is written against the LITERAL
 // target, never a superstring carrying extra trailing text. Measured
-// live (ticket 15c review round 1): `~/.zsh_history:1-5` and
+// live: `~/.zsh_history:1-5` and
 // `proj/secrets.pem:1-2` both read as `allow` against the unmodified
 // path string alone — the suffix defeats the `$`-anchor. Fix: for every
 // role="read" row's `path` selector, judge the WHOLE candidate set this
@@ -111,7 +111,7 @@ function parseArraySelector(selector: string): ArraySelector | null {
   return { base, rest };
 }
 
-// Review round 4 R4-1: the inverse of readCommandsSelector's own parsing
+// The inverse of readCommandsSelector's own parsing
 // — given a tool row's own `command` selector string, builds the ONE
 // input-bag shape that selector reads a single command string back from.
 // `check` (src/cli-commands.ts) is the one caller: it has no real
@@ -128,7 +128,7 @@ export function buildCommandInputBag(selector: string, command: string): Record<
 }
 
 // A plain (non-array) selector's single value — mirrors src/targets.ts's
-// pre-15a readStringField: absent/null is silently "no value", a
+// former readStringField: absent/null is silently "no value", a
 // non-string logs the diagnostic every dispatch.ts family relied on.
 function readPlainSelector(ti: Record<string, unknown>, selector: string, hookName: string): string | null {
   const value = ti[selector];
@@ -144,7 +144,7 @@ function readPlainSelector(ti: Record<string, unknown>, selector: string, hookNa
 // — a string element is the command directly, an object element reads
 // `rest` off it, and an unreadable entry is skipped with a diagnostic
 // rather than crashing the guard into failing open silently. Mirrors
-// src/targets.ts's pre-15a readBatchCommands.
+// src/targets.ts's former readBatchCommands.
 function readCommandsSelector(ti: Record<string, unknown>, selector: string, hookName: string): readonly string[] {
   const arraySelector = parseArraySelector(selector);
   if (arraySelector === null) {
@@ -174,7 +174,7 @@ function readCommandsSelector(ti: Record<string, unknown>, selector: string, hoo
 
 // URL-shaped array selector (ctx_fetch_and_index's `requests[].url`) —
 // entries missing a string `rest` field are silently dropped (mirrors
-// src/targets.ts's pre-15a readBatchUrls: no per-entry diagnostic, only
+// src/targets.ts's former readBatchUrls: no per-entry diagnostic, only
 // the whole-field type check does).
 function readUrlsSelector(ti: Record<string, unknown>, selector: string, hookName: string): readonly string[] {
   const arraySelector = parseArraySelector(selector);
@@ -198,7 +198,7 @@ function readUrlsSelector(ti: Record<string, unknown>, selector: string, hookNam
 // Text-shaped array selector (MultiEdit's `edits[].new_string`) — the
 // single scanned string every element joins into, one line each; an
 // entry missing a string `rest` field contributes an empty line rather
-// than being dropped (mirrors src/adapter/dispatch.ts's pre-15a
+// than being dropped (mirrors src/adapter/dispatch.ts's former
 // writeSecretText exactly, including its silence on a non-array `edits`).
 function readTextSelector(ti: Record<string, unknown>, selector: string, hookName: string): string | null {
   const arraySelector = parseArraySelector(selector);
@@ -222,8 +222,8 @@ function readTextSelector(ti: Record<string, unknown>, selector: string, hookNam
 
 /**
  * Builds the neutral call a tool name's row describes, or `null` when no
- * row (exact or glob) matches — "not judged", exactly as before ticket
- * 15a. `ti` is the envelope's raw input bag (`tool_input` for Claude
+ * row (exact or glob) matches — "not judged", exactly as before
+ * `f69d37a`. `ti` is the envelope's raw input bag (`tool_input` for Claude
  * Code); `cwd` is the envelope's own working directory (`null` when the
  * harness's input map has no `cwd` selector or the envelope didn't send
  * one — Claude Code sends absolute paths and never sends `cwd`, so this
@@ -250,7 +250,7 @@ export function buildNeutralCall(
 
   if (row.codec !== undefined) {
     const codec = inputCodecFor(row.codec);
-    // Review round 1 S-3: `rules lint` already proved row.codec is a
+    // `rules lint` already proved row.codec is a
     // member of src/policy/harness.ts's KNOWN_INPUT_CODECS before this
     // declaration ever reached run() — an unresolvable name here means
     // the lint-time and runtime registries drifted, not a real envelope

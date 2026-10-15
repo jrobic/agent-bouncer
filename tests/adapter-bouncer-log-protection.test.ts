@@ -1,9 +1,9 @@
-// Ticket 14: bouncer's own audit log (logs/hooks/bouncer.log, the
+// bouncer's own audit log (logs/hooks/bouncer.log, the
 // binary's own denial/confirm history — reconnaissance for a compromised
 // agent) is now a baseline secret.path rule, verdict "confirm". This file
 // proves it end to end, through the REAL adapter dispatch (src/adapter/
 // run.ts) against a REAL on-disk log file under a throwaway, EXPLICITLY
-// VERIFIED CLAUDE_CONFIG_DIR — the ticket-13 incident (an unverified,
+// VERIFIED CLAUDE_CONFIG_DIR — a past incident (an unverified,
 // accidentally-empty CLAUDE_CONFIG_DIR fell through to the real live
 // ~/.claude) is why every smoke/adapter invocation here asserts the env
 // var is set and non-empty before calling run().
@@ -29,7 +29,7 @@ async function freshAccountWithRealLog(): Promise<{ accountDir: string; logPath:
   const logPath = join(logDir, 'bouncer.log');
   await writeFile(logPath, '{"timestamp":"2026-08-17T00:00:00.000Z","rule_id":"mkfs","verdict":"block"}\n', 'utf8');
 
-  // The ticket-13 lesson: assert before use, never trust an unverified var.
+  // Lesson learned: assert before use, never trust an unverified var.
   process.env.CLAUDE_CONFIG_DIR = accountDir;
   if (!process.env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR.trim() === '') {
     throw new Error('CLAUDE_CONFIG_DIR failed to set — refusing to proceed (would fall through to live ~/.claude)');
@@ -107,7 +107,7 @@ describe('run(): Read on bouncer\'s own audit log confirms, under a real custom 
     // (see tests/adapter-audit.test.ts), so the report legitimately shows
     // no findings — what this test actually proves is `ok: true` and a
     // well-formed report: the file was read and parsed successfully,
-    // never rejected or blocked by anything this ticket added.
+    // never rejected or blocked by anything this guard added.
     expect(ok).toBe(true);
     expect(text).toContain('bouncer audit');
   });

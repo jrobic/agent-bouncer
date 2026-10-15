@@ -1,5 +1,5 @@
 // The `stdin-json` transport codec (ADR-0006 § 6) — every harness
-// declared in this ticket speaks it: one JSON object on stdin, no framing.
+// declared so far speaks it: one JSON object on stdin, no framing.
 // Kept as its own module (rather than an inline `JSON.parse` in run.ts) so
 // the codec registry names a real thing: a future transport (a length-
 // prefixed stream, say) is a sibling file here, not a rewrite of run.ts's

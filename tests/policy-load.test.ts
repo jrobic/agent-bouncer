@@ -36,7 +36,7 @@ describe('loadPolicyFromOverlayText: additive merge', () => {
   });
 
   test('a direct rules.command.git.safe_subcommands addition is rejected (must go through [[relax]])', () => {
-    // Round-3 review, blocking item 4: a plain overlay addition to a pure
+    // A plain overlay addition to a pure
     // allowlist can ONLY relax security, so it must carry a reason —
     // which the [rules] table form has nowhere to put. Probed exploit
     // this closes: a 2-line overlay silently allowlisting `git push`.
@@ -508,7 +508,7 @@ describe('loadPolicyFromOverlayText: SHA-constrained safe grammar', () => {
   });
 });
 
-describe('loadPolicyFromOverlayText: the declarative overlay forms are shape-validated (round-3 review, blocking item 1)', () => {
+describe('loadPolicyFromOverlayText: the declarative overlay forms are shape-validated', () => {
   test('an ask_flags entry missing "flags" fails lint instead of throwing at match time', () => {
     const overlay = `
       [[rules.command.git.ask_flags]]
@@ -683,7 +683,7 @@ describe('loadPolicyFromOverlayText: the safe_flags overlay form', () => {
   });
 });
 
-describe('loadPolicyFromOverlayText: the lint pass actually compiles every regex (round-3 review, blocking item 1)', () => {
+describe('loadPolicyFromOverlayText: the lint pass actually compiles every regex', () => {
   test('an overlay rule with an unclosed group is rejected — baseline stays active, the hook still responds', () => {
     const overlay = `
       [[rules.command.bash]]
@@ -841,7 +841,7 @@ describe('loadPolicyFromOverlayText: [[override]] application', () => {
     });
   });
 
-  test('secret.bash\'s two former same-id entries now disable independently (round-3 review, standards item 7)', () => {
+  test('secret.bash\'s two former same-id entries now disable independently', () => {
     // Before the id-suffixing fix, both secret.bash entries shared the id
     // "bash-git-leak" — a `disable` override on that id silently took out
     // BOTH, including the one marked `special = "git_remote_url"`. They
@@ -861,7 +861,7 @@ describe('loadPolicyFromOverlayText: [[override]] application', () => {
   });
 });
 
-describe('loadPolicyFromOverlayText: [[override]] action is a closed enum (round-3 review, blocking item 2)', () => {
+describe('loadPolicyFromOverlayText: [[override]] action is a closed enum', () => {
   test('an unknown action fails lint instead of silently behaving like "relax"', () => {
     const overlay = `
       [[override]]
@@ -890,7 +890,7 @@ describe('loadPolicyFromOverlayText: [[override]] action is a closed enum (round
   });
 });
 
-describe('loadPolicyFromOverlayText: an override-injected regex passes the same RE2 dialect (round-3 review, blocking item 2)', () => {
+describe('loadPolicyFromOverlayText: an override-injected regex passes the same RE2 dialect', () => {
   test('action "replace" with a lookahead regex is rejected — baseline stays active', () => {
     const overlay = `
       [[override]]

@@ -64,7 +64,7 @@ export interface ParsedHarnessFlag {
   readonly error?: string;
 }
 
-// Review round 1 S-5: `--harness <id>` was parsed three times (cli.ts's
+// `--harness <id>` was parsed three times (cli.ts's
 // `run`/`check`, and inline in parseDoctorArgs/parseAuditArgs below) —
 // one extraction, one error message. Same missing-argument protocol
 // `--settings`/`--days`/every other valued flag in this codebase uses:
@@ -88,10 +88,10 @@ export function extractHarnessFlag(argv: readonly string[]): ParsedHarnessFlag {
   return { harness: value, rest: argv.filter((_, i) => i !== index && i !== index + 1) };
 }
 
-// Review round 3 R3-2: `check` used to look up a tool row literally named
+// `check` used to look up a tool row literally named
 // `"Bash"` — worked for claude-code (and codex, by coincidence, once
-// 15b lands it), but breaks for any harness whose command tool has a
-// different name (pi-agent's `bash`, 15c). `check` has no ONE call to
+// the Codex adapter lands), but breaks for any harness whose command tool has a
+// different name (pi-agent's `bash`). `check` has no ONE call to
 // dry-run against; it needs A representative command-shaped row, so it
 // takes the harness's own FIRST one, in declaration order — the same
 // "first row wins" convention `[harness.protocol.tools]` documents for
@@ -116,9 +116,9 @@ function firstCommandTool(protocol: HarnessProtocol): { readonly name: string; r
  * secret family, say, is reported faithfully) rather than command-family-
  * only. `check` appends ` → <action> (<id>)` when the degraded action's
  * name differs from the abstract verdict's (ADR-0006 § 9). Dispatched
- * through the harness's OWN first `role = "command"` tool row (review
- * round 3 R3-2), with the command string placed at THAT row's own
- * `command` selector (review round 4 R4-1 — a hardcoded `{ command }`
+ * through the harness's OWN first `role = "command"` tool row,
+ * with the command string placed at THAT row's own
+ * `command` selector (a hardcoded `{ command }`
  * input bag only worked for a row whose selector happened to be named
  * `command`; any other selector name silently dry-ran against an empty
  * call and reported `allow` for everything, the worst possible answer).
@@ -177,7 +177,7 @@ export async function runPing(): Promise<CommandResult> {
   try {
     await readdir(configDirFor(CLAUDE_CODE_BASELINE_HARNESS));
   } catch (err) {
-    // The ticket wants an unreadable config dir to surface here; run would
+    // An unreadable config dir must surface here; run would
     // silently enforce the baseline.
     if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') return { text: '', ok: false };
   }
@@ -199,8 +199,8 @@ export async function runPing(): Promise<CommandResult> {
  * always exit 0 for the hook protocol) — this is a validation command
  * meant to be scripted against. On success, names every file that was
  * actually merged in; on failure, the warning lines already name the
- * specific offending file. Scoped to claude-code's own profile, same as
- * before this ticket — `--harness` is not part of `rules lint`'s surface.
+ * specific offending file. Scoped to claude-code's own profile, as it
+ * always was — `--harness` is not part of `rules lint`'s surface.
  */
 // ADR-0001 § Provenance: "lint: OK (overlay: common/policy.d/100-x.toml,
 // profile/policy.toml)" — reads straight off LoadResult.layers, no
@@ -377,7 +377,7 @@ export interface AuditOptions {
   // Omitting the flag preserves the complete audit, including direct CLI probes.
   readonly sessionsOnly?: boolean;
   readonly suggest: boolean;
-  // Ticket 08: `bouncer audit --diff [--ts-logs <dir>]`. `diff` and
+  // `bouncer audit --diff [--ts-logs <dir>]`. `diff` and
   // `suggest` are mutually exclusive modes (parseAuditArgs rejects
   // combining them) — a report comparing against the TS generation and a
   // policy-relaxation suggestion loop answer different questions and have
@@ -450,8 +450,8 @@ const KNOWN_AUDIT_FLAGS: ReadonlySet<string> = new Set([
  * flag must not fall through to "30-day report, exit 0" as if nothing had
  * been asked for. `--diff`/`--suggest` are mutually exclusive, and
  * `--ts-logs` only makes sense alongside `--diff`. `--harness` is
- * extracted first, via the shared `extractHarnessFlag` (review round 1
- * S-5) — its own error carries no prefix, so it is added here to match
+ * extracted first, via the shared `extractHarnessFlag`
+ * — its own error carries no prefix, so it is added here to match
  * every other error this function returns.
  */
 export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
@@ -523,7 +523,7 @@ export function parseAuditArgs(rest: readonly string[]): ParsedAuditArgs {
 }
 
 /**
- * `bouncer audit --diff [--ts-logs <dir>]` (ticket 08, code-only scope):
+ * `bouncer audit --diff [--ts-logs <dir>]`:
  * compares bouncer's shadow-mode log entries against the TS generation's
  * four independent guard logs over the last `--days` days, reporting the
  * three divergence kinds src/adapter/audit-diff.ts classifies. Read-only —
@@ -618,8 +618,8 @@ async function runAuditDiff(options: AuditOptions, harness: HarnessDeclaration):
 }
 
 /**
- * `bouncer audit` / `bouncer audit --suggest` — the proactive tuning loop
- * (ticket 10): clusters this account's deny/ask and conditional-allow log
+ * `bouncer audit` / `bouncer audit --suggest` — the proactive tuning loop:
+ * clusters this account's deny/ask and conditional-allow log
  * entries over the last `--days` days and either prints the prose report
  * (frequent friction + dead conditional rules) or, with `--suggest`,
  * candidate `[[relax]]`/`[[override]]` TOML snippets. Reads the log file
@@ -722,7 +722,7 @@ export async function runAudit(options: AuditOptions): Promise<CommandResult> {
 // only the harnesses an overlay actually declared or extended (ADR-0006
 // § 5: "a harness declared or extended by an overlay is listed by `rules
 // list`" — the plain six-baseline case lists none, same filter as
-// `doctor`'s own checklist, review round 1 P-1).
+// `doctor`'s own checklist).
 function harnessListLines(loaded: LoadResult): string[] {
   return loaded.policy.harness.map((h) => harnessAnnouncementLine(h, loaded.effectiveRules));
 }
@@ -746,8 +746,8 @@ export async function runHarnessList(): Promise<CommandResult> {
 }
 
 /**
- * `bouncer harness shim <id> [--bin <absolute path>]` (ADR-0006 § 7,
- * ticket 15c) — prints the embedded shim for an in-process harness
+ * `bouncer harness shim <id> [--bin <absolute path>]` (ADR-0006 § 7)
+ * — prints the embedded shim for an in-process harness
  * (pi-agent today), `BOUNCER` baked to `bouncerPath`. `BOUNCER_BIN`
  * still overrides it at the shim's own runtime. A usage
  * error (never a crash) for a harness with no printable shim — a

@@ -310,7 +310,7 @@ barrier, like the rows above.
   value. A shared dev password that also sits in a docker-compose file or a
   test fixture blocks that file: that is the guard working, and the reason
   tells the agent to reference the variable instead.
-- **Tool output too (ADR-0008, ticket 59).** The same row, the same names,
+- **Tool output too (ADR-0008, PR #30).** The same row, the same names,
   floor and spellings, redact every tool's **output** before the model sees
   it: under a harness that declares a post-tool event (Claude Code's
   `PostToolUse`, pi-agent's `tool_result`), each occurrence becomes
@@ -357,7 +357,7 @@ spellings:
   one with a trailing newline does not match the same text without it.
 - A variable exported later inside the Bash tool's own shell, or defined only
   by a shell profile the hook never loads, is not in the hook's environment.
-- It is a net for what the agent copies. Since ticket 59 a value printed by a
+- It is a net for what the agent copies. Since PR #30 a value printed by a
   tool reaches the model redacted, within the post-tool limits above.
 - It does not redact other families' logs. Every rule other than `env-value`
   logs its `target` verbatim, so a Bash command that carries a literal value
@@ -375,8 +375,8 @@ infrastructure, cluster, release, Docker volume, or inline SQL mutations. They
 do not infer whether a target is local or remote.
 
 `kubectl-mutating` (`apply`/`create`), `helm-mutating` (`install`),
-`docker-destructive`, and `sql-destructive-inline` are **Debatable (ticket
-33)**. A profile can relax a row with `[[override]]`, `action = "relax"`,
+`docker-destructive`, and `sql-destructive-inline` are **Debatable**.
+A profile can relax a row with `[[override]]`, `action = "relax"`,
 `verdict = "observe"`, and a non-empty `reason = "local automation is reviewed
 elsewhere"` without removing the baseline guard.
 
@@ -485,7 +485,7 @@ elsewhere"` without removing the baseline guard.
 - `kill-init` recognizes only the enumerated signal spellings and `--`; a
   `killall`-specific flag ahead of the signal (`-q`, `-u`, `-t`, `-c`, …)
   is not skipped, so `killall -q -TERM init` evades the row — a deliberate
-  scope boundary, not an oversight (the ticket's own decision names "any
+  scope boundary, not an oversight (the design decision names "any
   signal spelling…and a `--` separator", not "any flag").
 - `kill-init` blocks `kill -0 -1`: signal `0` is a pure existence probe (it
   kills nothing) but the row's numeric signal alternative does not
@@ -649,7 +649,7 @@ after the first `[` — Bun's TOML parser misreads a bare leading `[[` as
 an array-of-tables header even mid-value (see `policy/command.toml`'s
 own `apply` entry, which avoids it by putting the outer bracket on its
 own line — same for `pull`/`merge` in `examples/personal-overlay.toml`,
-ticket 13's tracked example of a `safe_grammar` entry living in a
+commit `bb8b593`'s tracked example of a `safe_grammar` entry living in a
 personal overlay instead of the baseline). Baseline's own `apply` row;
 same substitution note as `ask_flags` above:
 
@@ -1188,7 +1188,7 @@ written regularly and are not session-start persistence. pi-agent's
 
 ### `[harness.protocol]`: the pipeline a generic adapter reads (ADR-0006)
 
-Since ticket 15a, `src/adapter/` names no harness, tool, or field —
+Since commit `f69d37a`, `src/adapter/` names no harness, tool, or field —
 `policy/harness/claude-code.toml` is the first declaration carrying one,
 and supports successful-output redaction and a failed-tool alert. It reproduces
 the original hardcoded Claude Code adapter byte for byte where that contract
@@ -1244,7 +1244,7 @@ stdout = '{"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additiona
 ```
 
 **`transport`** — the codec that reads the envelope. `"stdin-json"` (the
-only one this ticket declares): one JSON object on stdin, no framing.
+only one declared so far): one JSON object on stdin, no framing.
 
 **`wiring`** — the codec `doctor` uses to prove the hook is actually
 installed. `"hook-file"` (generic): reads `<configDir>/settings.json`,
@@ -1261,7 +1261,7 @@ exists and is byte-identical to what `bouncer harness shim <id>` prints today
 (`wiring:shim`) and that the shim's own baked `BOUNCER` path resolves to
 an executable that is not a versioned Homebrew Cellar path
 (`<prefix>/Cellar/<formula>/<version>/bin/<exe>`, which `brew upgrade`
-removes) (`wiring:binary`); and (ticket 56), when `witness` is an
+removes) (`wiring:binary`); and (PR #15), when `witness` is an
 `agent` directory (`~/.omp/agent`), the same byte-for-byte check for every
 omp profile beside it, each `<witness's parent>/profiles/*/agent`
 (`wiring:shim (profile <name>)` — omp loads none of the default
@@ -1280,7 +1280,7 @@ field naming which hook event this is), `tool` (the tool name), `input`
 directory — used to resolve a RELATIVE `path` selector below; Claude
 Code sends absolute paths and no `cwd`, so this is a no-op for it —
 ALWAYS required, relative-path resolution needs it regardless of which
-events a harness declares), `permission` (review round 1 P-4 — OPTIONAL,
+events a harness declares), `permission` (OPTIONAL,
 no coherence rule gates it: when declared, its value is attached to
 every logged verdict entry for that call, `docs/reference/audit-log.md`'s
 own `permission` field; logging only, never read for a decision anywhere
@@ -1294,8 +1294,7 @@ failed-tool error string, scanned for a name-only alert).
 
 **`[harness.protocol.events]`** — the literal event-name strings `event`
 takes for each event this pipeline understands. `pre_tool` is always
-required. `prompt` and `session_start` are OPTIONAL (review round 2
-R2-1) — a harness that never judges a submitted prompt (or has no
+required. `prompt` and `session_start` are OPTIONAL — a harness that never judges a submitted prompt (or has no
 doctor-facing SessionStart surface, ADR-0006 § 7's pi-agent by design)
 declares neither, rather than being forced to name an event field it has
 no real envelope shape for. `post_tool` (ADR-0008) is OPTIONAL: the event
@@ -1311,7 +1310,7 @@ today. See "Optional surfaces" below for the coherence rules gating each.
 **`[harness.protocol.tools]`** — name → `{role, ...selectors}`. A name is
 an exact tool name or a trailing-`*` glob (`"mcp__*"`); exact rows win
 over glob rows regardless of table order. A name matching no row is not
-judged (same as before this ticket). `role` is the engine's whole
+judged (same as before). `role` is the engine's whole
 vocabulary of a tool call:
 
 | Role | Families it reaches | Selectors it reads |
@@ -1328,14 +1327,14 @@ STRING element is taken as the value directly, skipping `subfield` —
 `ctx_batch_execute`'s `commands[].command` mixes both shapes in one
 call). A selector resolving to a non-string value logs `expected string
 for tool_input.<selector>, got <type> — allowing` on stderr and yields no
-value for that call — the exact diagnostic the pre-15a hardcoded readers
+value for that call — the exact diagnostic the pre-`f69d37a` hardcoded readers
 used, now general to any selector string. `path` is resolved against
 `cwd` (when the harness's envelope sends one) BEFORE canonicalisation, so
 a relative reference (Codex's own `apply_patch` paths, relative to the
 session directory) still names a real file.
 
 **Role `read`'s `path` selector is judged as a CANDIDATE SET, not the raw
-value alone (ticket 15c review round 1 L-1)** — `src/adapter/neutral-
+value alone (commit `96065fc`)** — `src/adapter/neutral-
 call.ts`'s `expandPathCandidates`, harness-neutral (every `role="read"`
 row, on every harness, not a pi-agent-only rule): the raw value; each
 `;`-split segment, trimmed; and, for the raw value and every segment,
@@ -1352,13 +1351,12 @@ defeated every `$`-anchored path rule (`~/.zsh_history:1-5`,
 `proj/secrets.pem:1-2`, `proj/.envrc; proj/README.md` all read `allow`
 before this fix) — because Claude Code's own `Read`/`Grep` rows are also
 `role="read"`, this is a Claude Code behavior CHANGE, not a pi-agent-only
-fix (ADR-0006's own Consequences and History document it, ticket 15c
-review round 2 C-3): two selector-suffixed/`;`-joined cases now judge in
+fix (ADR-0006's own Consequences and History document it): two selector-suffixed/`;`-joined cases now judge in
 `fixtures/protocol/claude-code.json`, captured from source since the
 installed binary predates the fix; every other vector stays byte-
 identical to the installed binary.
 
-**`codec` (ADR-0006 § 6, tickets 15b/15c)** — a tool row may name a
+**`codec` (ADR-0006 § 6, commits `6730a89`/`96065fc`)** — a tool row may name a
 `codec` INSTEAD of selectors: the row's role still applies, but the named
 codec parses the raw input bag itself and returns the same `{paths,
 text}` (role `write`) shape selectors would have produced, cwd-joined
@@ -1374,10 +1372,10 @@ an Add/Update section, joined by `\n`. A patch missing its FRAME (`***
 Begin Patch`/`*** End Patch`) yields no paths and no text (not judged at
 all — nothing to partially trust when the grammar's own envelope was
 never established); a patch WITH a valid frame whose BODY hits a line
-matching no recognized directive/hunk shape (review round 1 S-9) keeps
+matching no recognized directive/hunk shape keeps
 every path and `+` text line already parsed before that line — judged on
 what was seen, not discarded over one bad trailing line. `hashline`
-(`src/adapter/codecs/input/hashline.ts`, ticket 15c): pi-agent/omp's
+(`src/adapter/codecs/input/hashline.ts`, commit `96065fc`): pi-agent/omp's
 `edit` tool takes one patch string with `[PATH#TAG]` section headers and
 `+` body rows (never `-`/context/`CUT` rows — hashline's own grammar has
 no such thing) instead of discrete `path`/`text` fields; every header's
@@ -1428,7 +1426,7 @@ ADR-0006 § 6 exit-2 check for an unusable harness runs first). Every
 other baseline harness decides which value it wants in its own test
 phase.
 
-**Optional surfaces: `prompt` and `session_start` (review round 2 R2-1)**
+**Optional surfaces: `prompt` and `session_start`**
 — `input.prompt`/`events.prompt` and `events.session_start`/
 `output.session_start` are pairs that must agree; `output.ask`/`confirm`
 and `output.context`/`flag` likewise. `rules lint` rejects the block AS A
@@ -1508,7 +1506,7 @@ the result to still parse as JSON when `stdout` looks like a JSON object
 or array literal — both belts reject the containing action's block as a
 unit, the same as any other rule 1–21 failure.
 
-**Placeholders — a fixed, PER-TEMPLATE set (review round 2 C-1)**: `run.ts`
+**Placeholders — a fixed, PER-TEMPLATE set**: `run.ts`
 fills exactly these names and no others, so lint rejects any placeholder
 outside a template's own allowed set (naming the unknown placeholder and
 listing what IS allowed there) — a name lint let through but the renderer
@@ -1532,17 +1530,17 @@ harness by name. Today: `stdin-json` (transport, `src/adapter/codecs/
 stdin-json.ts`); `hook-file` (wiring, `src/adapter/codecs/wiring/hook-file.ts`,
 ADR-0006 § 6, a JSON hook file whose events name a command containing
 `bouncer run --harness <id>`), `codex-hooks` (wiring, `src/adapter/
-codecs/wiring/codex-hooks.ts`, ticket 15b — the same generic checks,
+codecs/wiring/codex-hooks.ts`, commit `6730a89` — the same generic checks,
 applied to Codex's OWN two additive sources, `hooks.json` and
 `config.toml`'s `[hooks]` table, plus its hash-trust ledger,
 `config.toml`'s `[hooks.state]`), and `shim-file` (wiring, `src/adapter/
-codecs/wiring/shim-file.ts`, ticket 15c — an in-process harness's own
-printed extension, `wiring:shim` + `wiring:binary` and, ticket 56, one
+codecs/wiring/shim-file.ts`, commit `96065fc` — an in-process harness's own
+printed extension, `wiring:shim` + `wiring:binary` and, PR #15, one
 `wiring:shim (profile <name>)` per omp profile; no settings shape and
 no canary); `apply-patch` (input codec on a tool row, `src/adapter/
-codecs/input/apply-patch.ts`, ticket 15b — Codex's `apply_patch` patch
+codecs/input/apply-patch.ts`, commit `6730a89` — Codex's `apply_patch` patch
 grammar) and `hashline` (input codec, `src/adapter/codecs/input/
-hashline.ts`, ticket 15c — pi-agent/omp's `edit` tool's own `[PATH#TAG]`
+hashline.ts`, commit `96065fc` — pi-agent/omp's `edit` tool's own `[PATH#TAG]`
 patch grammar). A new parser or a new wiring check is a codec pull
 request; a new assistant that fits the existing codecs is a file.
 
@@ -1556,26 +1554,25 @@ request; a new assistant that fits the existing codecs is a file.
   actually HONOURS `ask`, `deny`, or any of it; that is what `ask_probe`
   and a real test phase are for.
 - A shim installed by copy (in-process harnesses — pi-agent built in
-  ticket 15c, opencode not yet scheduled) is a file the user maintains
+  commit `96065fc`, opencode not yet scheduled) is a file the user maintains
   themselves (`bouncer doctor --harness <id>` reminds them to reprint it
   after every binary upgrade); `doctor` for one can only report what the
   shim itself relays back — a shim that never runs at all (the extension
   failed to load, the harness never called it) looks identical to a
   perfectly healthy, silent tool call from `doctor`'s own vantage point.
-- The `codex-hooks` trust check (ticket 15b) proves PRESENCE of a
+- The `codex-hooks` trust check (commit `6730a89`) proves PRESENCE of a
   `[hooks.state]` record for every bouncer-pointing handler, never that
   its `trusted_hash` is CURRENT — the exact hashing rule Codex uses is
-  undocumented and, as of this ticket, unconfirmed (see the 15b report);
+  undocumented and, as of commit `6730a89`, unconfirmed;
   a stale hash that still happens to have SOME record reads as trusted
   here even though Codex itself would treat it as modified and skip it.
 - pi-agent's own `confirm` mapping was `"deny"` pending a live probe of
-  the shim's ask dialog under both `pi` and `omp` (ticket 15c, then a
+  the shim's ask dialog under both `pi` and `omp` (commit `96065fc`, then a
   Yes/No `ctx.ui.confirm`); confirmed live on both binaries 2026-09-08
   (real dialog, decline blocks, accept runs) and flipped to `"ask"` — see
-  `pi-agent.toml`'s own `ask_probe` field and the 15c report's probe
-  table for both runs' evidence, including a first `omp` attempt that
+  `pi-agent.toml`'s own `ask_probe` field. A first `omp` attempt
   turned out to be a stale, reused session and was retracted before the
-  flip. Ticket 55 (2026-10-11, re-run 2026-10-12) turned the dialog into a
+  flip. PR #14 (2026-10-11, re-run 2026-10-12) turned the dialog into a
   numbered one-key `ctx.ui.select` (`1. Allow` / `2. Block`; only the
   exact `1. Allow` allows) and re-ran the probe on both binaries: accept
   runs, decline, Esc and Ctrl+C block, headless blocks without a dialog —
@@ -1585,7 +1582,7 @@ request; a new assistant that fits the existing codecs is a file.
   highlighted, so a stray Enter allows, as it did with the former Yes/No
   dialog).
 - Around the ask dialog, when a UI exists, the pi-agent shim emits omp's
-  `herdr:blocked` event on the extension bus (ticket 55) so that Herdr's
+  `herdr:blocked` event on the extension bus (PR #14) so that Herdr's
   omp integration, which listens for it, is expected to report the agent
   `blocked` while the dialog is up (pending the operator's live Herdr
   run) — an observability signal, never policy: it changes no verdict,

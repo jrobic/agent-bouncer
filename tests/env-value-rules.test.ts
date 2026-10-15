@@ -1,4 +1,4 @@
-// The env-value detector (ticket 58) and its redactor (ticket 59): a fake
+// The env-value detector and its redactor (ADR-0008): a fake
 // environment in, names and forms — or the redacted text — out. Every name and
 // value below is made up; nothing reads the machine's own environment
 // (tests/setup.ts drops the protected names from this process, and every
@@ -168,7 +168,7 @@ describe('env-value scanner: several variables, several forms', () => {
 
 describe('env-value scanner: one definition of a protected name', () => {
   // The baseline reference rows (policy/secret.toml, filled from the shared
-  // fragment) and the detector run over ticket 57's own examples: a name is
+  // fragment) and the detector run over the shared name examples: a name is
   // either protected by both or by neither.
   test.each(PROTECTED_NAMES)('protected name %s: the detector and the reference rows agree', (name) => {
     expect(scan(VALUE, { [name]: VALUE })).toEqual([{ name, form: 'plain' }]);
@@ -256,7 +256,7 @@ describe('env-value check: the row-consulting verdict', () => {
   });
 });
 
-// Ticket 59 (ADR-0008 § 4): the same row, used to replace instead of refuse.
+// ADR-0008 § 4: the same row, used to replace instead of refuse.
 describe('env-value redactor: what replaces what', () => {
   const ROW: RegexRule = { id: 'env-value', regex: '[\\s\\S]', special: ENV_VALUE_SPECIAL, reason: 'r' };
   const redact = (text: string, env: Record<string, string | undefined> = { FAKE_API_TOKEN: VALUE }) =>
@@ -354,7 +354,7 @@ describe('env-value redactor: what replaces what', () => {
   });
 });
 
-describe('env-value redactor: the row is the switch (decision H3)', () => {
+describe('env-value redactor: the row is the switch', () => {
   const ROW: RegexRule = { id: 'env-value', regex: '[\\s\\S]', special: ENV_VALUE_SPECIAL, reason: 'r' };
   const env = { FAKE_API_TOKEN: VALUE };
 
@@ -370,7 +370,7 @@ describe('env-value redactor: the row is the switch (decision H3)', () => {
     }
   });
 
-  test('the row\'s regex / except gate writes only: the redaction scans every text (decision H6); its id names it', () => {
+  test('the row\'s regex / except gate writes only: the redaction scans every text; its id names it', () => {
     const marker = '[redacted: FAKE_API_TOKEN]';
     const narrowed = createEnvValueGuard([{ ...ROW, regex: '^only-this$' }], env);
     expect(narrowed.check(VALUE, 't')).toBeNull();

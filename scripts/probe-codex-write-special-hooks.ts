@@ -19,7 +19,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { harnessCaptureFor } from './harness-capture-config.ts';
 
-// Review round 1 S-7: was an independent hand-typed copy of the matcher
+// Was an independent hand-typed copy of the matcher
 // regex — now the SAME derivation scripts/capture-protocol.ts uses,
 // imported rather than retyped.
 const MATCHER = harnessCaptureFor('codex').matcher;

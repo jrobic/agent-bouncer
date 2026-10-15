@@ -1,4 +1,4 @@
-// Pure audit logic (ticket 10): JSONL parsing, target normalization,
+// Pure audit logic: JSONL parsing, target normalization,
 // clustering, dead-conditional-rule detection, and report/suggest
 // rendering. No filesystem — see tests/cli-commands-audit.test.ts for the
 // `runAudit` command-level tests (log file + policy overlay on disk).
@@ -286,7 +286,7 @@ describe('clusterEntries', () => {
     expect(cluster!.exampleTargets.length).toBeLessThanOrEqual(3);
   });
 
-  // Pin (review round on ticket 08): the classic `audit` report never
+  // Pin: the classic `audit` report never
   // distinguishes shadow-tagged entries from enforced ones — `mode` is not
   // part of the clustering key at all, deliberately (audit-diff.ts, not
   // this module, is where the shadow/enforce distinction matters). A log
@@ -388,7 +388,7 @@ describe('renderReport', () => {
     expect(sectionOf(report, 'Frequent friction')).not.toContain('git-conditional-apply');
   });
 
-  test('Story 10: a conditional rule that fired is surfaced in its OWN section, not just absent from friction/dead', () => {
+  test('a conditional rule that fired is surfaced in its OWN section, not just absent from friction/dead', () => {
     const clusters = clusterEntries([
       entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' }),
       entry({ ruleId: 'git-conditional-apply', verdict: 'observe', target: 'git apply --check p.diff' }),
@@ -431,7 +431,7 @@ describe('renderSuggestions', () => {
   const resolvable = resolvableRuleIds(BASELINE_POLICY);
 
   test('a command.git.safe_subcommands relax for frequent git-protected friction ships COMMENTED, never active '
-    + '(round-3 review: an uncommented [[relax]] on this list silently bypasses the WHOLE subcommand grammar, '
+    + '(an uncommented [[relax]] on this list silently bypasses the WHOLE subcommand grammar, '
     + '--force included, not just the audited shape)', () => {
     const clusters = clusterEntries([
       entry({ target: 'git push origin main' }),

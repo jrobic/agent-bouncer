@@ -116,10 +116,10 @@ describe('runCheck: dry-runs a command without a session', () => {
     });
   });
 
-  // Review round 4 R4-1: `check` built its input bag with the LITERAL
+  // `check` built its input bag with the LITERAL
   // key `command`, ignoring the row's own `command` selector — worked
   // only by coincidence for a row whose selector happened to be named
-  // `command` (round 3's own test used exactly such a row, so it could
+  // `command` (an earlier test used exactly such a row, so it could
   // not see this). These three prove the fix places the dry-run string
   // at the row's OWN selector, whatever shape it is: a plain key
   // different from `command`, a selector containing a literal dot, and
@@ -323,7 +323,7 @@ describe('runRulesList', () => {
     expect(text).toContain('rule command.bash mkfs baseline');
   });
 
-  test('an overlay rule\'s provenance names its source file (ticket 12)', async () => {
+  test('an overlay rule\'s provenance names its source file', async () => {
     const dir = freshAccountDir();
     await writeOverlay(
       dir,
@@ -344,7 +344,7 @@ describe('runRulesList', () => {
       'utf8',
     );
     const { text } = await runRulesList();
-    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy() always
+    // Layer-qualified (ADR-0001): loadCurrentPolicy() always
     // reads the account's overlay as the "profile" layer now.
     expect(text).toContain('rule command.bash block-npm-publish overlay [profile:policy.d/10-npm.toml]');
     expect(text).toContain('override disable mkfs — test [profile:policy.d/10-npm.toml]');

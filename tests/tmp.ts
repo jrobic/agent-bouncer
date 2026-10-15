@@ -1,5 +1,5 @@
 // The one entry point every tests/*.test.ts file uses to create a
-// throwaway `bouncer-*`-prefixed scratch directory (ticket 39: `bun run
+// throwaway `bouncer-*`-prefixed scratch directory (`bun run
 // verify` left 7 489 of them behind in $TMPDIR — every test that
 // mkdtemp(Sync)'d one cleaned it up on its own, inconsistently, and
 // several didn't at all: a directory created inside a per-file helper
@@ -12,7 +12,7 @@
 //
 // The cleanup hook below is registered HERE, at this module's own top
 // level — never inside a test file that merely imports tmpDir. Verified
-// empirically before writing this (see the ticket 39 report): an
+// empirically before writing this: an
 // afterEach() call sitting in a module that several test files `import`
 // only fires for the FIRST file to import it, because ES module bodies
 // run exactly once and are cached — every later importer gets the
@@ -27,7 +27,7 @@
 // installGlobalFallbacks()'s own afterAll() below, including through
 // the one level of function-call indirection — also verified directly.
 //
-// Review round 1 (R1-2): that root-scoping guarantee depends entirely on
+// That root-scoping guarantee depends entirely on
 // tests/setup.ts's preload actually having run BEFORE this module's own
 // top level does — true whenever bunfig.toml is discovered (any `bun
 // test` invoked from the project root), false the moment it isn't (e.g.
@@ -35,7 +35,7 @@
 // this module then becomes an ordinary shared module, afterEach()
 // registers only for the first file that happens to import it, and
 // EVERY OTHER file's tmpDir() calls would leak silently — the exact bug
-// this ticket exists to close, reintroduced by a broken invocation.
+// this module exists to close, reintroduced by a broken invocation.
 // tmpDir() refuses to run at all in that state (see its own comment)
 // instead of creating a directory nothing will reliably clean up.
 import { afterAll, afterEach } from 'bun:test';
@@ -64,12 +64,12 @@ let fallbacks: Readonly<Record<ProtectedEnvVar, string>> | undefined;
 // an unwritable log directory — can make even rmSync's force:true throw
 // (force only swallows ENOENT, never EACCES/ENOTEMPTY: measured against
 // a real 0o000 root and a real 0o500-no-`x` nested directory while
-// designing this, see the ticket 39 report). Only reached on the rare
+// designing this). Only reached on the rare
 // path where the fast rmSync below actually throws.
 //
 // lstatSync, never statSync/readdirSync-then-follow: a symlink inside
 // the tree being swept must be unlinked as itself, never traversed —
-// review round 1 (R1-1) measured a real corruption otherwise (statSync
+// a real corruption was measured otherwise (statSync
 // follows the link; chmod'ing what it points at reached OUTSIDE the
 // swept tree entirely, and a link to an ancestor directory recurses
 // forever). rmSync itself removes a symlink without following it, so
@@ -109,7 +109,7 @@ function removeDir(dir: string): void {
   // fallbacks is always defined here: every directory this function ever
   // sees arrives through `pending`, which only tmpDir() populates, and
   // tmpDir() itself throws before creating anything if fallbacks is
-  // still undefined (review round 1, R1-2) — so the undefined case this
+  // still undefined — so the undefined case this
   // function used to guard against can no longer reach it.
   const survivors = fallbacks!;
   for (const name of PROTECTED_ENV_VARS) {
@@ -127,7 +127,7 @@ function removeDir(dir: string): void {
 const pending: string[] = [];
 
 afterEach(() => {
-  // Review round 1 (R1-3): one directory per iteration, its own
+  // One directory per iteration, its own
   // try/catch — this afterEach is root-scoped (runs after EVERY test in
   // the whole suite), so an exception escaping it would fail whichever
   // FOREIGN test happens to run next, and splice(0) has already dropped
@@ -146,19 +146,19 @@ afterEach(() => {
 /**
  * Creates a fresh `<prefix><random>` directory under the OS tmpdir and
  * registers it for removal after the CURRENT test — the one entry point
- * every tests/*.test.ts file uses for a throwaway directory (ticket 39).
+ * every tests/*.test.ts file uses for a throwaway directory.
  * `prefix` is used verbatim (its own trailing `-` included, by
  * convention); every call site keeps choosing its own `bouncer-…-`
  * shape, which is what the $TMPDIR leak count greps for.
  *
  * Throws instead of creating anything if tests/setup.ts's preload has
- * not run yet (review round 1, R1-2): every guarantee this module makes
+ * not run yet: every guarantee this module makes
  * — the per-test sweep firing for every file, the protected-env-var
  * reassignment above — depends on `fallbacks` having been set by
  * installGlobalFallbacks(), which only happens when this module is
  * reached through that preload. A directory created without that
  * guarantee would be exactly the silent-leak (and silent-real-HOME-
- * fallthrough) bug this ticket exists to close.
+ * fallthrough) bug this module exists to close.
  */
 export function tmpDir(prefix: string): string {
   if (fallbacks === undefined) {

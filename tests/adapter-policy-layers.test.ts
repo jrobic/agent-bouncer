@@ -1,13 +1,13 @@
-// End-to-end proof of ADR-0001 (ticket 20): the real `loadCurrentPolicy('claude-code')`
+// End-to-end proof of ADR-0001: the real `loadCurrentPolicy('claude-code')`
 // path reads a common layer (~/.agents/bouncer/, resolved through
 // src/adapter/policy.ts's commonRoot()) natively, with no symlink and no
 // per-profile configuration, and the profile layer wins on a shared
 // target. Modeled on tests/adapter-policy.test.ts (the profile-only,
-// pre-ticket-20 seam) — this file is the layered scenarios that seam
+// pre-layers seam) — this file is the layered scenarios that seam
 // cannot express: a common layer, a profile shadowing it, and an absent
 // common root.
 //
-// Ticket-13 lesson, doubled here: BOTH `CLAUDE_CONFIG_DIR` (the profile
+// Lesson learned, doubled here: BOTH `CLAUDE_CONFIG_DIR` (the profile
 // root) AND `HOME` (the common root, src/adapter/policy.ts's commonRoot())
 // must point at throwaway directories, explicitly verified non-empty
 // before use — an installed shared common layer is a real policy source,
@@ -51,7 +51,7 @@ interface Sandbox {
 }
 
 // A throwaway HOME and a throwaway CLAUDE_CONFIG_DIR, both explicitly
-// verified non-empty before any test proceeds — the ticket-13 lesson: an
+// verified non-empty before any test proceeds — lesson learned: an
 // accidentally-empty override for EITHER falls through to real state
 // (this account's real ~/.agents/bouncer/, or the real ~/.claude).
 async function sandbox(): Promise<Sandbox> {
@@ -223,7 +223,7 @@ describe('loadCurrentPolicy(): the profile wins over the common layer on a share
   });
 });
 
-describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejection)', () => {
+describe('loadCurrentPolicy(): per-layer rejection (ADR-0001 § Rejection)', () => {
   test('a broken common file drops ONLY the common layer — the profile rule still fires, common relaxations stay listed', async () => {
     const box = await sandbox();
     await writeCommon(
@@ -318,7 +318,7 @@ describe('loadCurrentPolicy(): per-layer rejection (ticket 21, ADR-0001 § Rejec
   });
 });
 
-describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is rejected (ADR-0001 § Precedence)', () => {
   test('a profile row reusing curl-file-upload: lint FAILED, doctor fails, the common layer stays active', async () => {
     const box = await sandbox();
     await writeCommon(
@@ -334,7 +334,7 @@ describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is reje
 
     const loaded = await loadCurrentPolicy('claude-code');
     // The common layer never contained the fault — it stays fully live,
-    // per-layer rejection (ADR-0001 § Rejection), exactly as ticket 21.
+    // per-layer rejection (ADR-0001 § Rejection).
     expect(loaded.overlayApplied).toBe(true);
     expect(loaded.policy.command.git.safe_subcommands).toContain('push');
     expect(loaded.warnings).toHaveLength(1);
@@ -361,7 +361,7 @@ describe('loadCurrentPolicy(): an overlay row reusing a baseline rule id is reje
 });
 
 describe('loadCurrentPolicy(): migration guard — the interim profile→common symlink, any of its three forms (ADR-0001 § Rejection)', () => {
-  // Lead decision, review round 1: the guard checks BOTH the profile
+  // The guard checks BOTH the profile
   // ROOT's realpath and its policy.d's realpath against the common
   // root's (equal or descendant) — not just policy.d-to-policy.d. Two
   // MORE link shapes pass the same test the profile:policy.toml shadows

@@ -1,5 +1,5 @@
 // The printed pi-agent/omp shim (policy/harness/pi-agent.shim.ts,
-// ADR-0006 § 7, ticket 15c) — proved by spawning the REAL BUILT binary
+// ADR-0006 § 7) — proved by spawning the REAL BUILT binary
 // (`bun run build`, same discipline as tests/adapter-canary.test.ts's own
 // "a freshly built binary leaves the canary silent") to print the shim,
 // writing it to a fresh temp file per case (a distinct absolute path so
@@ -223,7 +223,7 @@ describe('pi-agent shim: tool_call — {block} returned as is', () => {
   });
 });
 
-// ADR-0006 § 7 (ticket 55): an `ask` is a numbered one-key `ctx.ui.select`
+// ADR-0006 § 7: an `ask` is a numbered one-key `ctx.ui.select`
 // with Block as the default highlight; only the exact answer "1. Allow"
 // lets the call run. Around that dialog (UI only) the shim emits omp's
 // `herdr:blocked` on `pi.events` — an observability signal, never policy.

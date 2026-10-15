@@ -209,8 +209,8 @@ problems, active policy relaxations) reaches you two ways, both fixed
 rules the shim always runs (never a per-harness choice):
 
 1. `ctx.ui.notify` — an immediate, best-effort toast. Confirmed live: it
-   renders as a startup warning banner under `pi` 0.84.1's TUI (ticket
-   15c) and as a `Warning:` line in the chat under `omp` 18.10.3's TUI
+   renders as a startup warning banner under `pi` 0.84.1's TUI (commit
+   `96065fc`) and as a `Warning:` line in the chat under `omp` 18.10.3's TUI
    (2026-10-13).
 2. A message queued for the session's FIRST `before_agent_start` turn
    (`customType: "bouncer-doctor"`, `display: true`) — delivered exactly

@@ -1,5 +1,5 @@
 // The `hashline` input codec (src/adapter/codecs/input/hashline.ts,
-// ADR-0006 § 6, ticket 15c) — pi-agent/omp's `edit` tool's own
+// ADR-0006 § 6) — pi-agent/omp's `edit` tool's own
 // `[PATH#TAG]` + `+`-row patch grammar to `{paths, text}`. Each test names
 // exactly which parsing contract it proves; `parseHashline` is exercised
 // directly (raw patch text in, no `tool_input` wrapper) so a grammar bug
@@ -151,7 +151,7 @@ describe('parseHashline: CRLF line endings', () => {
 });
 
 describe('hashlineCodec: the non-string field contract (mirrors a plain selector, same as applyPatchCodec)', () => {
-  test('neither tool_input.input nor {path, edits[]} present: NOT_JUDGED WITH a stderr line (review round 1 P-1)', () => {
+  test('neither tool_input.input nor {path, edits[]} present: NOT_JUDGED WITH a stderr line', () => {
     const logs = withStderr(() => {
       const result = hashlineCodec({}, 'test');
       expect(result.paths).toEqual([]);
@@ -179,7 +179,7 @@ describe('hashlineCodec: the non-string field contract (mirrors a plain selector
   });
 });
 
-describe('hashlineCodec: pi\'s own {path, edits[]} shape (review round 1 P-1, edit.d.ts:10-16)', () => {
+describe('hashlineCodec: pi\'s own {path, edits[]} shape (edit.d.ts:10-16)', () => {
   test('path + edits[].newText: paths = [path], text = every newText joined by "\\n"', () => {
     const logs = withStderr(() => {
       const result = hashlineCodec({

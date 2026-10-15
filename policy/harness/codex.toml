@@ -21,7 +21,7 @@ id = "codex-instructions"
 path = "AGENTS\\.md$"
 reason = "Codex reads instructions for future sessions"
 
-# Review round 1 L-1: bouncer's own wiring for Codex lives here — the
+# bouncer's own wiring for Codex lives here — the
 # exact role `hooks/` plays for Claude Code (harness-hooks, above) and
 # `hooks.json` plays for Cursor (cursor-hooks, policy/harness/cursor.toml).
 # `id = "codex-hooks"` is a row-id namespace only, distinct from the
@@ -32,7 +32,7 @@ id = "codex-hooks"
 path = "hooks\\.json$"
 reason = "Codex hooks.json can alter future tool-call enforcement"
 
-# ADR-0006 § 3/10 (ticket 15b): reproduces claude-code.toml's pipeline
+# ADR-0006 § 3/10: reproduces claude-code.toml's pipeline
 # almost verbatim — Codex hooks read the SAME stdin-json envelope shape
 # and answer with the SAME `hookSpecificOutput` JSON (measured 2026-09-07,
 # Codex CLI 0.153.2, `codex features list`: `hooks stable true`; hooks
@@ -55,9 +55,9 @@ input      = "tool_input"
 session    = "session_id"
 prompt     = "prompt"
 cwd        = "cwd"
-# Review round 1 P-4: logged on every verdict entry for the call
-# (src/adapter/run.ts/log.ts), never read for a decision — the ticket's
-# own non-goal. claude-code.toml declares no such field; its envelope
+# Logged on every verdict entry for the call
+# (src/adapter/run.ts/log.ts), never read for a decision — a deliberate
+# non-goal. claude-code.toml declares no such field; its envelope
 # carries none.
 permission = "permission_mode"
 
@@ -93,7 +93,7 @@ block = "deny"
 confirm = "deny"
 observe = "silent"
 flag = "context"
-# on_malformed = "deny" (measured 2026-09-08, ticket 15b probe 5):
+# on_malformed = "deny" (measured 2026-09-08, `scripts/probe-codex.sh` probe 5):
 # Codex itself never sends a malformed envelope (its own hook stdin,
 # logged live via a throwaway hook, is always well-formed JSON) — so
 # this is a considered decision, not a live-Codex-observed fact.

@@ -26,7 +26,7 @@ describe('fixtures: the adapter matches its conformance contract', () => {
       // PreToolUse-shaped (toolName/toolInput) or UserPromptSubmit-shaped
       // (prompt). `env` is optional and only meaningful on a PreToolUse case:
       // the made-up process environment the env-value guard reads protected
-      // values from (ticket 58); a case without it is judged with none.
+      // values from; a case without it is judged with none.
       test('event names a known hook event', () => {
         expect(KNOWN_EVENTS.has(file.event)).toBe(true);
       });

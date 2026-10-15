@@ -93,7 +93,7 @@ on_malformed = "allow"
 stdout = '{"decision":"deny","reason":${reason}}'
 ```
 
-This is the MINIMUM that lints (review round 2 R2-1) — `prompt` and
+This is the MINIMUM that lints — `prompt` and
 `session_start` are both optional: `input.prompt`/`events.prompt` are
 needed together only once `acme`'s own hook sends a `UserPromptSubmit`-
 shaped event to inspect (add both, plus `output.flag = "context"` and an

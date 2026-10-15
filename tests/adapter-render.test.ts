@@ -1,6 +1,6 @@
 // The template renderer (src/adapter/render.ts) — protocol-agnostic
 // placeholder substitution and the context-assembly prose UserPromptSubmit
-// hits render through. Replaces the pre-15a src/adapter/envelopes.ts's
+// hits render through. Replaces the former src/adapter/envelopes.ts's
 // Claude-Code-shaped tests: same properties (deny/ask/silent, quote-and-
 // newline safety, empty hits), proved against a hand-built minimal
 // protocol instead of one hardcoded JSON shape. See
@@ -55,7 +55,7 @@ describe('renderAction', () => {
     expect(parsed.reason).toBe('has "quotes" and \nnewline and \\backslash');
   });
 
-  test('review round 2 C-1: a deny template naming ${rule}/${verdict} gets both filled', () => {
+  test('a deny template naming ${rule}/${verdict} gets both filled', () => {
     const withRuleVerdict: HarnessProtocol = {
       ...PROTOCOL,
       templates: {

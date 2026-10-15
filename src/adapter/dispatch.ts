@@ -3,7 +3,7 @@
 // right engine function(s), in the shape each function actually accepts.
 // Nothing here names a harness, a tool, or a field any more — the tools
 // map (src/adapter/neutral-call.ts) is what turns a harness's own
-// envelope into this vocabulary; ticket 15a is what moved the CC-specific
+// envelope into this vocabulary; commit `f69d37a` is what moved the CC-specific
 // wiring (Read/Edit/Write/Grep/Glob/MultiEdit field names, `mcp__*`
 // scoping) out of this module and into policy/harness/claude-code.toml.
 //
@@ -83,7 +83,7 @@ export function strictestOf(hits: readonly FamilyVerdict[]): FamilyVerdict | nul
  * Builds a full dispatcher — {inspectPreToolUse, classifyObserve,
  * inspectUserPromptSubmit} — bound to the given policy (baseline, or a
  * merged baseline+overlay+override set from src/policy/load.ts) and to the
- * process environment the env-value guard (ticket 58) reads protected values
+ * process environment the env-value guard reads protected values
  * from. This is what the adapter's run.ts uses for real, per-invocation,
  * overlay-aware dispatch. `env` is required, never defaulted: a call site that
  * has no environment to offer says so with `{}` (the baseline-bound exports
@@ -118,7 +118,7 @@ export function createDispatcher(policy: RulesPolicy, env: EnvRecord): Dispatche
   // path), every `paths` entry after canonicalisation, and urls. A row
   // rarely populates more than one of these — `ctx_execute_file`
   // (commands + path) is the one exception, and command order matches
-  // the pre-15a extractTargets/inspectSecretFamily order exactly
+  // the former extractTargets/inspectSecretFamily order exactly
   // (commands, then paths, then urls). `paths` loops exactly like
   // `commands`/`urls` below it — ADR-0006 § 6: a `codec` row (Codex's
   // `apply_patch` move) can populate more than one entry in one call, and
@@ -147,7 +147,7 @@ export function createDispatcher(policy: RulesPolicy, env: EnvRecord): Dispatche
   }
 
   // Protected-write reaches `paths` only for a `write` role row (mirrors
-  // the pre-15a PROTECTED_WRITE_FILE_PATH_FIELD map, which deliberately
+  // the former PROTECTED_WRITE_FILE_PATH_FIELD map, which deliberately
   // excluded Read) and `commands` for any row that populated them
   // (Bash-shaped writes, `checkBashWrites` parses shell syntax a
   // structured path never needs) — a selector-derived row supplies at
@@ -192,7 +192,7 @@ export function createDispatcher(policy: RulesPolicy, env: EnvRecord): Dispatche
   // Exact tool rows win over the `mcp__*` glob row at selector-resolution
   // time (src/adapter/neutral-call.ts's findToolRow) — a context-mode
   // tool declared with role "command" never reaches here at all, so this
-  // needs no separate exclusion the way the pre-15a isGuardedToolName
+  // needs no separate exclusion the way the former isGuardedToolName
   // check did.
   function inspectMcpWriteFamily(call: NeutralCall): FamilyVerdict | null {
     if (call.mcpName === null) return null;

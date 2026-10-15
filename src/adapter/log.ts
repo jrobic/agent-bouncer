@@ -3,12 +3,12 @@
 // it was always adapter/runtime plumbing) and adapted for the unified
 // binary: one JSONL file per account instead of one per guard, with a
 // `family` field on each entry so a single-process, six-family dispatch
-// stays legible in the log. Declaration-routed since ticket 15a (ADR-0006
+// stays legible in the log. Declaration-routed (ADR-0006
 // § 8): every call names the TARGET harness, whose own `env`/`witness`
 // resolves the log file, and every entry gains a `harness: "<id>"` field
 // — an entry without one predates this ADR.
-// Ticket 53 retains 4,096 characters so the matching bash-crypto-key token stays
-// readable; its marker lets ticket 54 skip incomplete replay targets.
+// PR #10 retains 4,096 characters so the matching bash-crypto-key token stays
+// readable; its marker lets replay (PR #11) skip incomplete replay targets.
 
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -52,7 +52,7 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-// Story 19: the first entry written to a NEW or freshly-ROTATED log file is
+// The first entry written to a NEW or freshly-ROTATED log file is
 // a header record naming every override/relaxation active in the policy
 // that produced the entry about to follow it, PLUS (ADR-0006 § 5) every
 // harness this account's overlay declared or extended — so a client
@@ -97,12 +97,12 @@ async function appendLogEntry(entry: Record<string, unknown>, harness: HarnessDe
   }
 }
 
-// Ticket 08: shadow mode logs EVERY entry it produces exactly like a real
+// Shadow mode logs EVERY entry it produces exactly like a real
 // run, plus this one extra field — the discriminator a reader (or
 // `audit --diff`) uses to tell "what bouncer would have done" apart from
 // "what bouncer actually enforced". Only ever "shadow" today (no
 // "live"/"enforced" counterpart is written — a normal invocation's entries
-// simply carry no `mode` key at all, unchanged from before this ticket).
+// simply carry no `mode` key at all, unchanged from before shadow mode existed).
 export type LogMode = 'shadow';
 
 // The `shadow: boolean -> LogMode | undefined` conversion every logVerdict/
@@ -115,12 +115,12 @@ export function toLogMode(shadow: boolean): LogMode | undefined {
 export interface VerdictLogContext {
   readonly sessionId: string | null;
   readonly toolName: string | null;
-  // Review round 1 P-4: Codex's own `permission_mode` (or any future
+  // Codex's own `permission_mode` (or any future
   // harness's equivalent field, via `[harness.protocol.input].permission`)
   // — logged verbatim when the envelope carried one, absent from the
   // entry entirely otherwise (claude-code's envelope carries none).
-  // Never read for a decision anywhere in this codebase — see the 15b
-  // report's grep proof.
+  // Never read for a decision anywhere in this codebase — a grep of
+  // the codebase proves it.
   readonly permission?: string | null;
 }
 
@@ -131,8 +131,8 @@ export interface VerdictLogContext {
 // `harness` is the TARGET harness this verdict was judged under — it resolves
 // the log path and stamps every entry.
 // `loaded`, when given, is the policy load this verdict came from — passed
-// through so a fresh/rotated file gets its Story 19 audit header. `mode`,
-// when given, is ticket 08's shadow tag — `run()` passes it on EVERY log
+// through so a fresh/rotated file gets its audit header. `mode`,
+// when given, is the shadow tag — `run()` passes it on EVERY log
 // call it makes while `--shadow` is active, never only some of them.
 export async function logVerdict(
   family: Family,
@@ -159,7 +159,7 @@ export async function logVerdict(
     build: buildIdentity(build),
     policy: policyDigest(effectivePolicy, activeOverrides, activeRelaxations),
     ...(truncated ? { target_truncated: true } : {}),
-    // The env-value guard's variable NAMES (ticket 58) — never a value; see
+    // The env-value guard's variable NAMES — never a value; see
     // Verdict.envVars. Absent on every other verdict.
     ...(verdict.envVars !== undefined ? { env_vars: verdict.envVars } : {}),
     ...(mode !== undefined ? { mode } : {}),
@@ -183,7 +183,7 @@ export async function logPolicyWarnings(
   }
 }
 
-// Ticket 08, decision 2: in shadow mode, SessionStart's own doctor verdict
+// In shadow mode, SessionStart's own doctor verdict
 // (what buildSessionStartContext would have put on stdout — a wiring
 // scream, or an override/relaxation announcement) has nowhere else to go,
 // since shadow suppresses that stdout entirely. Logged only when there

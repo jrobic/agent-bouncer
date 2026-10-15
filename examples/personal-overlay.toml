@@ -1,12 +1,12 @@
-# Example personal policy overlay (ticket 13: baseline universality
-# triage). What it is: the rules ticket 13 moved OUT of the embedded
+# Example personal policy overlay (baseline universality triage).
+# What it is: the rules commit bb8b593 moved OUT of the embedded
 # baseline because they encode legacy guard log basenames and observed
 # historical traffic, not a hazard every bouncer consumer should inherit — see
 # policy/secret.toml and policy/command.toml, git blame/log at the rules' old positions, for
 # the "why this moved" reasoning.
 #
 # How to install: never automatic. Copy this file into
-# <configDir>/bouncer/policy.d/ (ticket 12's overlay directory — see
+# <configDir>/bouncer/policy.d/ (the overlay directory — see
 # docs/reference/policy.md), e.g.:
 #
 #   cp examples/personal-overlay.toml "$(bouncer_config_dir)/bouncer/policy.d/10-personal.toml"

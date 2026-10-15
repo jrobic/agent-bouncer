@@ -1,6 +1,6 @@
 // The conformance proof ADR-0006 § 10 asks for: each fixtures/protocol/
 // <harness>.json file is captured by scripts/capture-protocol.ts BEFORE
-// (claude-code, ticket 15a) or WITH (codex, ticket 15b) that harness's
+// (claude-code) or WITH (codex) that harness's
 // own adapter code — this file replays every one of those cases through
 // the declaration-driven `run()` and asserts its stdout and exit code
 // match, byte for byte, EXCEPT `permissionDecisionReason`, compared only
@@ -9,9 +9,9 @@
 // mcp-write rewording is why this exists). If this file is green, the
 // pipeline changed nothing observable for either harness's user.
 //
-// Ticket 15b generalized this from a single hardcoded claude-code.json
+// Commit `6730a89` generalized this from a single hardcoded claude-code.json
 // read to iterating every file under fixtures/protocol/ — the "only
-// acceptable modification" the 15b brief names for this test, since it
+// acceptable modification" allowed for this test, since it
 // already iterated nothing before (one fixed path). Each case gets its
 // own throwaway HOME/<harness's own config-dir env var> (baseline only,
 // no profile overlay) — same isolation discipline as the capture
@@ -37,7 +37,7 @@ interface RecordedCase {
   readonly id: string;
   readonly argv: readonly string[];
   readonly stdin: string;
-  // Ticket 59: the made-up environment a post-tool case was captured with —
+  // The made-up environment a post-tool case was captured with —
   // handed to run() as `options.env`, never set on this process.
   readonly env?: Readonly<Record<string, string>>;
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
@@ -68,22 +68,21 @@ interface HarnessReplayConfig {
   // once the scratch config dir exists — undefined for a harness with no
   // such concept (claude-code's hook-file wiring).
   readonly trustTomlFor?: (caseId: string, hooksJsonPath: string) => string | undefined;
-  // ADR-0006 § 6/7, ticket 15c: `shim-file` wiring (pi-agent) installs a
+  // ADR-0006 § 6/7: `shim-file` wiring (pi-agent) installs a
   // raw shim SOURCE FILE (`extensions/bouncer.ts`), never a `{hooks:
   // ...}` JSON wrapper — when set, this REPLACES settingsFor/
   // trustTomlFor's write entirely for this harness, since neither
   // concept (a hooks table, a trust ledger) applies to it.
   readonly installArtifact?: (caseId: string, configDir: string) => void;
-  // Review round 1 S-6/P-6: the exact case ids this fixture file MUST
+  // The exact case ids this fixture file MUST
   // keep — a dropped case fails the meta-check by NAME, not by falling
   // under a length threshold a different added-and-dropped case could
   // silently keep satisfying. claude-code: all 33 current cases. Codex keeps
   // every captured case, including its
   // hooks.json-delete case — deliberately the full captured set (a
-  // strict superset of "the twelve the ticket lists"), not a hand-picked
+  // strict superset of the twelve required cases), not a hand-picked
   // 12, so the shared-protocol cases (malformed/shadow/posttooluse) this
-  // harness also exercises are guarded too. See the 15b report for the
-  // id-by-id mapping to the ticket's acceptance bullets.
+  // harness also exercises are guarded too.
   readonly requiredCaseIds: readonly string[];
 }
 
@@ -242,8 +241,8 @@ function parseRunArgv(argv: readonly string[]): { shadow: boolean; unrecognizedT
 // this exists).
 function normalizeReasonPrefix(stdout: string | null): string | null {
   if (stdout === null) return null;
-  // Review round 2 C-3: a future harness's template may legally render
-  // plain text, not JSON (15a's lint proves shape, never a fixed
+  // A future harness's template may legally render
+  // plain text, not JSON (the lint proves shape, never a fixed
   // output format) — a parse failure here must fall through to the
   // byte comparison unchanged, not crash the replay with a JSON error
   // instead of a diff.
@@ -260,8 +259,8 @@ function normalizeReasonPrefix(stdout: string | null): string | null {
   return stdout.replace(JSON.stringify(reason), JSON.stringify(prefix));
 }
 
-describe('normalizeReasonPrefix: non-JSON stdout falls through unchanged (review round 2 C-3)', () => {
-  test('a plain-text template (legal per 15a lint) does not crash the parse — returns stdout as-is', () => {
+describe('normalizeReasonPrefix: non-JSON stdout falls through unchanged', () => {
+  test('a plain-text template (legal per the lint) does not crash the parse — returns stdout as-is', () => {
     expect(normalizeReasonPrefix('not json at all')).toBe('not json at all');
   });
 
@@ -336,7 +335,7 @@ for (const file of FIXTURE_FILES) {
     }
   });
 
-  // A meta-check on each fixture set itself (review round 1 S-6/P-6):
+  // A meta-check on each fixture set itself:
   // every REQUIRED case id (named per harness in HARNESS_REPLAY_CONFIG,
   // not just a length threshold) must be present — dropping a specific
   // case then fails by NAME, not by a count a different dropped-and-added

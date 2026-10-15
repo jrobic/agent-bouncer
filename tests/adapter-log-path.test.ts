@@ -124,9 +124,9 @@ describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overla
     const commonHarnessDir = join(home, '.agents', 'bouncer', 'harness.d');
     mkdirSync(commonHarnessDir, { recursive: true });
     // Extends the BASELINE codex declaration (dir/env/witness/protocol
-    // already declared as of 15b) with a protocol-only addition — a
+    // already declared as of `6730a89`) with a protocol-only addition — a
     // minimal stdin-json table reusing claude-code's own envelope shape,
-    // proving nothing about codex's REAL wiring (codex-hooks, 15b's own
+    // proving nothing about codex's REAL wiring (codex-hooks, `6730a89`'s own
     // codex.toml), only that routing follows the declaration once one
     // exists. `confirm = "deny"` (not "ask"): the real baseline codex
     // protocol is `confirm = "deny"` (ADR-0006 § 4 rule 6, fact 3 for
@@ -200,7 +200,7 @@ describe('ADR-0006 § 8: declaration-driven routing — Codex, via a test overla
       // directly against loadCurrentPolicy's own layer report (an
       // `[[override]]` on `rm-rf-dangerous` cannot prove this: that
       // ruleId is a hardcoded structural check in command-rules.ts, not
-      // a resolvable regex-table row — orthogonal to this ticket).
+      // a resolvable regex-table row — orthogonal to this test).
       const codexProfileDir = join(codexHome, 'bouncer');
       mkdirSync(codexProfileDir, { recursive: true });
       writeFileSync(

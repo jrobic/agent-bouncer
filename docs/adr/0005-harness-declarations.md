@@ -186,4 +186,4 @@ facts.
 |---|---|
 | 2026-09-05 | Proposed after the design session (two rounds, seven decisions); accepted the same day. |
 | 2026-09-05 | Built on `feat/37-harness-declarations`; gate commit pending human approval. |
-| 2026-09-07 | Added the optional `witness` field, lint-checked against the derived directory row with a verified fallback; fragment-level expansion eligibility; brace cap 64; provenance per contributing source. Built and merged as `02673f5` (ticket 37), installed the same day. |
+| 2026-09-07 | Added the optional `witness` field, lint-checked against the derived directory row with a verified fallback; fragment-level expansion eligibility; brace cap 64; provenance per contributing source. Built and merged as `02673f5`, installed the same day. |

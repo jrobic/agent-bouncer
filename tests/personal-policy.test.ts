@@ -1,4 +1,4 @@
-// Ticket 13 (baseline universality triage) moved three rules OUT of the
+// The baseline universality triage (commit `bb8b593`) moved three rules OUT of the
 // embedded baseline — `hook-log` (secret.path) and `pull`/`merge`
 // `--ff-only` (command.git.safe_grammar) — into
 // examples/personal-overlay.toml, a TRACKED, zero-secrets example (never
@@ -9,7 +9,7 @@
 // against the MERGED (baseline + personal overlay) policy — same
 // commands, same expected outcomes. (`transcript-backup` moved back to
 // the baseline itself, verdict "confirm" — see tests/secret-rules.test.ts
-// — after review round 2's arbitration; it is no longer part of this
+// — after arbitration; it is no longer part of this
 // overlay.)
 //
 // Loads the real file off disk (not a copy pasted into this test) so a
@@ -71,7 +71,7 @@ describe('secret.path: hook-log is restored under the personal overlay', () => {
   test('documented gap: rotated command-guard.log.1 is not blocked', () => {
     // Rotation is not covered because hook-log ends at `.log$`. Locked as a
     // visible gap so a future extension must update this assertion
-    // consciously — unchanged by the ticket 13 move.
+    // consciously — unchanged by the `bb8b593` move.
     expect(checkPath('/proj/hooks/command-guard.log.1')).toBeNull();
   });
 
@@ -120,8 +120,8 @@ describe('command.git.safe_grammar: pull/merge --ff-only is restored under the p
 
   // The overlay's sequence match is EXACT (table-length equality, see
   // gitSubcommandNeedsConfirm) — the ratified form is narrow, not "any
-  // command containing --ff-only". Locked here per review round 2 (the
-  // narrowness was only noted in prose for ticket 08 before this).
+  // command containing --ff-only". Locked here (the
+  // narrowness was only noted in prose before this).
   test('git pull --ff-only origin main still asks (extra positionals break the exact sequence match)', () => {
     expect(checkGit('git pull --ff-only origin main')?.ruleId).toBe('git-protected');
   });

@@ -26,7 +26,7 @@ id = "shell-rc"
 regex = "(^|/)\\.(zshrc|zprofile|zshenv|zlogin|bashrc|bash_profile|bash_login|profile)$|(^|/)\\.config/fish/config\\.fish$"
 reason = "Shell startup files execute commands in future terminal sessions"
 
-# Ticket 19, moved by ticket 35 / ADR-0004 § F3: `(/|$)` excludes `.bak` and `~`.
+# Moved by ADR-0004 § F3: `(/|$)` excludes `.bak` and `~`.
 # Baseline, not overlay: an invalid overlay is rejected as a unit and falls back to it, so self-protection remains available.
 # Confirm, not block: editing this policy is legitimate and common, and a disabling override is itself an intercepted write.
 [[rules.protected_write]]

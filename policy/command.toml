@@ -32,7 +32,7 @@ reason = "Shell redirection writing to a block device (potential disk corruption
 
 [[rules.command.bash]]
 id = "device-redirect-tee"
-# Ticket 41 round 1: any operand (flag or an extra destination file -- tee
+# Any operand (flag or an extra destination file -- tee
 # writes every file it's given) may sit before the target, bounded to 8;
 # the excluded shell control characters keep a pipe/semicolon/`&`
 # boundary from being crossed (`tee out.txt | grep /dev/sda1` stays
@@ -48,10 +48,10 @@ reason = "tee writing to a block device (potential disk corruption)"
 
 [[rules.command.bash]]
 id = "chmod-root"
-# Ticket 41: -R must appear somewhere among the flags (bundled or split,
+# -R must appear somewhere among the flags (bundled or split,
 # before or after other flags: -Rf, -fR, -v -R, -R -v, --recursive), never
 # via lookaround — recursion stays required, chmod -v 777 / (no -R) stays
-# allow. Round 1: both repetitions are bounded to {0,8}, not `*`. A `-R`
+# allow. Both repetitions are bounded to {0,8}, not `*`. A `-R`
 # token satisfies BOTH the leading repetition and the mandatory R group,
 # so unbounded repetitions made this O(n^2) in the number of flag-shaped
 # tokens -- past ~16000 of them the regex engine exhausted its
@@ -68,16 +68,16 @@ reason = "Recursive chmod on / — likely to break the system"
 
 [[rules.command.bash]]
 id = "chown-root"
-# Ticket 41: same -R-anywhere-in-flags idiom as chmod-root above (bundled
+# Same -R-anywhere-in-flags idiom as chmod-root above (bundled
 # or split, before or after other flags: -Rh, -R -h, --recursive) —
-# recursion stays required, chown root / (no -R) stays allow. Round 1:
-# both repetitions bounded to {0,8} for the same reason as chmod-root's
+# recursion stays required, chown root / (no -R) stays allow. Both
+# repetitions bounded to {0,8} for the same reason as chmod-root's
 # comment above (a `-R` token satisfies both groups, unbounded that's
 # O(n^2) and fails open past ~16000 tokens).
 regex = "\\bchown\\s+(?:-\\S+\\s+){0,8}-(?:-recursive|\\w*R\\w*)\\s+(?:-\\S+\\s+){0,8}\\S+\\s+\\/(?:\\s|$)"
 reason = "Recursive chown on / — likely to break the system"
 
-# Debatable (ticket 13): fires on ANY curl file upload, including a
+# Debatable: fires on ANY curl file upload, including a
 # legitimate one (e.g. posting a build artifact to an internal API) —
 # some consumers may want to narrow this to known-untrusted destinations.
 [[rules.command.bash]]
@@ -130,22 +130,22 @@ reason = "Writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_
 
 [[rules.command.bash]]
 id = "etc-write-tee"
-# Ticket 41 round 1: same operand-before-target idiom as
+# Same operand-before-target idiom as
 # device-redirect-tee above.
 regex = "\\btee\\s+(?:[^\\s|;&]+\\s+){0,8}\\/etc\\/(sudoers|passwd|shadow|hosts|ssh\\/sshd_config)\\b"
 reason = "tee writing to a critical /etc file (sudoers, passwd, shadow, hosts, sshd_config)"
 
 [[rules.command.bash]]
 id = "kill-init"
-# Ticket 41: any signal spelling before the pid, zero or more times
-# (bounded to {0,8}, round 1 — doctrine only: this row's mandatory target
+# Any signal spelling before the pid, zero or more times
+# (bounded to {0,8} — doctrine only: this row's mandatory target
 # below is three fixed literals, not a pattern a signal token can also
 # satisfy the way chmod-root's `-R` alternation could, so it was already
 # linear unbounded), in any order relative to a `--` end-of-options
 # separator — a literal numeric or named signal (`-9`, `-15`, `-TERM`,
-# `-SIGKILL`, any case: round 1, `killall` lists its own signals in
+# `-SIGKILL`, any case: `killall` lists its own signals in
 # lowercase on this platform and bash's `kill -term` kills), `-s <sig>` or
-# `-n <signum>` (round 1: bash `kill`'s own `-n` form was missing),
+# `-n <signum>` (bash `kill`'s own `-n` form was missing at first),
 # `--signal <sig>`/`--signal=<sig>`, or a bare `--`. The letter class
 # requires at least two characters (`{2,}`), which is what keeps `-l`
 # (list signal names, one letter) and `kill -l 1` (lists signal 1's
@@ -187,35 +187,35 @@ regex = "\\b(?:bash|sh|zsh|ksh)\\s+<\\s*\\(\\s*(?:curl|wget)\\b"
 reason = "Process substitution feeding curl/wget output to a shell (download-and-execute)"
 
 # The verb list is repeated on purpose: policy rows are literal regexes, no templating at load.
-# Ticket 29: confirm rather than block — `fd -e orig -x rm` can be legitimate.
+# Confirm rather than block — `fd -e orig -x rm` can be legitimate.
 [[rules.command.bash]]
 id = "fd-exec-destructive"
 regex = "\\bfd\\b[^|;&\\n]*\\s(?:-x|-X|--exec|--exec-batch)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b"
 reason = "fd exec form runs a destructive command once per match"
 verdict = "confirm"
 
-# Ticket 29: confirm rather than block — `-ok` is indistinguishable from `-exec` for an agent.
+# Confirm rather than block — `-ok` is indistinguishable from `-exec` for an agent.
 [[rules.command.bash]]
 id = "find-exec-destructive"
 regex = "\\bfind\\b[^|;&\\n]*\\s(?:-delete\\b|(?:-exec|-execdir|-ok)\\s+(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b)"
 reason = "find exec form runs a destructive command once per match"
 verdict = "confirm"
 
-# Ticket 29: confirm rather than block — bulk proxy execution can be legitimate.
+# Confirm rather than block — bulk proxy execution can be legitimate.
 [[rules.command.bash]]
 id = "xargs-destructive"
 regex = "\\b(?:xargs|parallel)\\b[^|;&\\n]*\\s(?:rm|mv|chmod|chown|truncate|shred|git\\s+(?:rm|checkout|reset|clean|push)|sed\\s+-i)\\b"
 reason = "xargs or parallel runs a destructive command for each input"
 verdict = "confirm"
 
-# Ticket 29: confirm rather than block — a deliberate per-file preprocessor can be legitimate.
+# Confirm rather than block — a deliberate per-file preprocessor can be legitimate.
 [[rules.command.bash]]
 id = "rg-pre-exec"
 regex = "\\brg\\b[^|;&\\n]*\\s--pre(?:=|\\s+)\\S+"
 reason = "rg preprocessor runs an arbitrary command for each searched file"
 verdict = "confirm"
 
-# Ticket 30: confirm rather than block — publishing is intentional only after a human checks the target.
+# Confirm rather than block — publishing is intentional only after a human checks the target.
 [[rules.command.bash]]
 id = "publish"
 regex = "\\b(?:npm|pnpm|yarn)\\s+publish\\b|\\bcargo\\s+publish\\b|\\bgem\\s+push\\b|\\bpoetry\\s+publish\\b|\\btwine\\s+upload\\b|\\bdocker\\s+push\\b|\\bdocker\\s+compose\\s+push\\b|\\bdocker-compose\\s+push\\b|\\b(?:gh|glab)\\s+release\\s+(?:create|delete|upload)\\b"
@@ -223,7 +223,7 @@ except = "^\\s*(?:npm|pnpm|yarn)\\s+publish\\s+--dry-run\\s*$"
 reason = "publishes or withdraws a package or artifact on a public registry"
 verdict = "confirm"
 
-# Ticket 30: confirm rather than block — forge API writes can be intended but affect remote state.
+# Confirm rather than block — forge API writes can be intended but affect remote state.
 [[rules.command.bash]]
 id = "forge-api-write"
 regex = "\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-X|--method)(?:\\s+|=)(?:POST|PUT|PATCH|DELETE)\\b|\\b(?:gh|glab)\\s+api\\b[^|;&\\n]*\\s(?:-f|-F|--field|--raw-field|--input)\\b"
@@ -235,29 +235,29 @@ id = "base64-decode-exec"
 regex = "\\b(?:base64\\s+(?:-d|--decode|-D)\\b|xxd\\s+-r\\b|openssl\\s+enc\\s+-d\\b)[^|;&\\n]*\\|\\s*(?:sh|bash|zsh|python3?|node|perl)\\b"
 reason = "Decoded payload piped directly into a shell or interpreter"
 
-# Ticket 32: trusting a project .envrc makes it execute on later directory changes.
+# Trusting a project .envrc makes it execute on later directory changes.
 [[rules.command.bash]]
 id = "direnv-trust"
 regex = "\\bdirenv\\s+(?:allow|permit|grant)\\b"
 reason = "direnv grants a project .envrc permission to run outside this session"
 verdict = "confirm"
 
-# Ticket 32: scheduled jobs and services run later with the operator's rights.
+# Scheduled jobs and services run later with the operator's rights.
 [[rules.command.bash]]
 id = "persistence-scheduler"
 regex = "\\bcrontab\\s+(?:-u\\s+\\S+\\s+)*(?:-\\s|-$|-\\S*[er]\\S*(?:\\s|$)|[^-\\s]\\S*(?:\\s|$))|\\blaunchctl\\s+(?:load|bootstrap|enable|submit|kickstart)\\b|\\bsystemctl\\s+(?:(?:--user\\s+)?enable|--user\\s+start|(?:--user\\s+)?(?:restart|reload|daemon-reload))\\b|(?:^|[|;&\\n]\\s*)at\\s+(?:-f\\s+\\S+\\s+|-\\S+\\s+)*(?:now|noon|midnight|teatime|\\+|\\d)|(?:^|[|;&\\n]\\s*)batch\\b"
 reason = "installs a schedule or service that can run later outside this session"
 verdict = "confirm"
 
-# Ticket 33: confirm rather than block — Terraform changes infrastructure state, so a human verifies the target first.
+# Confirm rather than block — Terraform changes infrastructure state, so a human verifies the target first.
 [[rules.command.bash]]
 id = "terraform-mutating"
 regex = "\\b(?:terraform|tofu)\\s+(?:apply|destroy|import|state\\s+(?:rm|mv|push))\\b"
 reason = "Terraform or OpenTofu command mutates infrastructure state or resources"
 verdict = "confirm"
 
-# Ticket 33: confirm rather than block — cluster mutations need a human target check.
-# Debatable (ticket 33): relax local `kubectl apply`/`create` in a profile with
+# Confirm rather than block — cluster mutations need a human target check.
+# Debatable: relax local `kubectl apply`/`create` in a profile with
 # `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
 # `reason = "our local cluster is disposable and managed by reviewed automation"`.
 [[rules.command.bash]]
@@ -267,8 +267,8 @@ except = "^[^|;&\\n]*\\b(?:apply|create)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$"
 reason = "kubectl command mutates Kubernetes cluster resources"
 verdict = "confirm"
 
-# Ticket 33: confirm rather than block — release mutations need a human target check.
-# Debatable (ticket 33): relax local `helm install` in a profile with
+# Confirm rather than block — release mutations need a human target check.
+# Debatable: relax local `helm install` in a profile with
 # `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
 # `reason = "our local release lifecycle is managed by reviewed automation"`.
 [[rules.command.bash]]
@@ -278,8 +278,8 @@ except = "^[^|;&\\n]*\\b(?:install|upgrade)\\b[^|;&\\n]*--dry-run[^|;&\\n]*$"
 reason = "Helm command mutates a release"
 verdict = "confirm"
 
-# Ticket 33: confirm rather than block — deleting Docker data warrants human review.
-# Debatable (ticket 33): relax local volume resets in a profile with
+# Confirm rather than block — deleting Docker data warrants human review.
+# Debatable: relax local volume resets in a profile with
 # `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
 # `reason = "our local volume reset is intentional during development"`.
 [[rules.command.bash]]
@@ -289,8 +289,8 @@ special = "docker_destructive"
 reason = "Docker command deletes system or volume data"
 verdict = "confirm"
 
-# Ticket 33: confirm rather than block — destructive SQL needs human review.
-# Debatable (ticket 33): relax local destructive SQL in a profile with
+# Confirm rather than block — destructive SQL needs human review.
+# Debatable: relax local destructive SQL in a profile with
 # `[[override]]`, `action = "relax"`, `verdict = "observe"`, and
 # `reason = "our local database reset is intentional during development"`.
 [[rules.command.bash]]
@@ -550,7 +550,7 @@ sub = "config"
 values = []
 safe_when_absent = false
 
-# Debatable (ticket 13): `bundle create` packages arbitrary repo history
+# Debatable: `bundle create` packages arbitrary repo history
 # into one portable file, a secondary exfil-adjacent surface — gated
 # defensively for how rarely it appears in an agentic session.
 [[rules.command.git.safe_first_arg]]
@@ -561,7 +561,7 @@ values = [
   ]
 safe_when_absent = false
 
-# Debatable (ticket 13): `worktree remove` can discard an inactive
+# Debatable: `worktree remove` can discard an inactive
 # worktree's uncommitted changes — narrow, but real.
 [[rules.command.git.safe_first_arg]]
 sub = "worktree"

@@ -1,5 +1,5 @@
 // The `hook-file` wiring codec (ADR-0006 § 6): doctor's "was the hook cut
-// by accident" detection, generalized off the pre-15a hardcoded Claude
+// by accident" detection, generalized off the former hardcoded Claude
 // Code settings.json reader — reads the JSON file named by this codec's
 // own convention (`<configDir>/settings.json`, Claude Code's own shape)
 // under the TARGET harness's account directory, checks that each of its
@@ -10,7 +10,7 @@
 // `--harness <id>` (a bare `bouncer run` under a non-default harness would
 // silently run with the DEFAULT harness's table instead, ADR-0006 § 9).
 // Matcher coverage, the canary entry, and the shadow/typo token checks are
-// moved here verbatim from the pre-15a src/adapter/doctor.ts.
+// moved here verbatim from src/adapter/doctor.ts as it was before `f69d37a`.
 
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -25,7 +25,7 @@ export type SettingsReadResult =
   | { readonly kind: 'ok'; readonly settings: RawHookEntry; }
   | { readonly kind: 'corrupt'; readonly detail: string; };
 
-// Review round 1 S-1/S-2/P-5: `doctor --harness codex` used to blame
+// `doctor --harness codex` used to blame
 // `settings.json` and a hardcoded default path even when a DIFFERENT
 // file — a different codec's own label, or the ONE source that actually
 // broke in a multi-source codec — was what was really read. Every
@@ -37,7 +37,7 @@ export interface WiringReadResult {
   readonly settings: SettingsReadResult;
   readonly label: string;
   readonly path: string;
-  // Review round 2 C-2: opaque per-codec raw source data, carried so
+  // Opaque per-codec raw source data, carried so
   // `WiringCodec.extraChecks` can reuse the SAME on-disk read `read()`
   // already did instead of re-fetching — one filesystem read per
   // source per doctor run, not two. hook-file's own read has nothing
@@ -58,7 +58,7 @@ export function settingsPathFor(harness: HarnessDeclaration): string {
   return join(configDirFor(harness), 'settings.json');
 }
 
-// Exported for codex-hooks.ts (ADR-0006 § 6, S-5): both codecs parse the
+// Exported for codex-hooks.ts (ADR-0006 § 6): both codecs parse the
 // same "JSON object or reject" shape (hooks.json, and config.toml's own
 // `[hooks]`/`[hooks.state]` tables after TOML parsing) — one function,
 // not two copies drifting apart.
@@ -306,8 +306,8 @@ function postToolEntryFor(settings: RawHookEntry, protocol: HarnessProtocol, har
 }
 
 // `label` names the file kind in the "cannot verify" corrupt message —
-// defaults to this codec's own "settings.json" (review round 1 S-1/S-2/
-// P-5: this used to hardcode "settings.json" even when a DIFFERENT
+// defaults to this codec's own "settings.json" (this used to
+// hardcode "settings.json" even when a DIFFERENT
 // codec's own label — codex-hooks' "hooks.json" or "config.toml [hooks]"
 // — was the one actually being checked, so a corrupt config.toml under
 // Codex named the wrong file). Every existing hook-file caller stays
@@ -322,7 +322,7 @@ export function checkWiring(
 ): DoctorCheck {
   const eventName = protocol.events[eventKind];
   const rule = WIRING_EVENT_RULES[eventKind];
-  // Review round 2 R2-1: `prompt`/`session_start` are optional on a
+  // `prompt`/`session_start` are optional on a
   // harness's own declaration now — the caller (doctor.ts's
   // runDoctorChecks) skips this event entirely when the harness doesn't
   // declare it, so this is unreachable in practice; kept as a real

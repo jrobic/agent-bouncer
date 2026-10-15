@@ -1,6 +1,6 @@
 // The tools-map selector engine (src/adapter/neutral-call.ts) — the seam
 // this file protects is (toolName, tool_input) -> NeutralCall, driven by a
-// `[harness.protocol.tools]` row instead of the pre-15a hardcoded readers
+// `[harness.protocol.tools]` row instead of the former hardcoded readers
 // (src/targets.ts's extractTargets/isGuardedToolName, src/adapter/
 // dispatch.ts's NATIVE_FILE_PATH_FIELD/writeSecretText). Composes a small
 // hand-built protocol locally, proving the extraction primitive itself is
@@ -146,7 +146,7 @@ describe('buildNeutralCall: cwd-relative path resolution', () => {
   });
 });
 
-// Review round 1 L-1 (lead): `~/.zsh_history:1-5`, `proj/secrets.pem:1-2`,
+// `~/.zsh_history:1-5`, `proj/secrets.pem:1-2`,
 // `proj/.envrc; proj/README.md`, and `archive.zip:inner/.env` all read as
 // `allow` against the raw string alone — every `$`-anchored path rule is
 // written against the LITERAL target, never a superstring carrying a
@@ -188,7 +188,7 @@ describe('expandPathCandidates', () => {
     expect(expandPathCandidates('archive.zip:inner/.env')).toEqual(['archive.zip:inner/.env', 'archive.zip']);
   });
 
-  // Review round 2 C-2: the "db.sqlite:table convention" cited above (and
+  // The "db.sqlite:table convention" cited above (and
   // in src/adapter/neutral-call.ts's own header comment) was only ever a
   // test NAME, never an assertion against the literal string — this is
   // the real one.
@@ -208,7 +208,7 @@ describe('expandPathCandidates', () => {
   });
 });
 
-describe('buildNeutralCall: path-list expansion applies to role="read" only (review round 1 L-1)', () => {
+describe('buildNeutralCall: path-list expansion applies to role="read" only', () => {
   test('a read-role path selector is expanded to the full candidate set', () => {
     const call = buildNeutralCall(PROTOCOL, 'Read', { file_path: '~/.zsh_history:1-5' }, null, 'test');
     expect(call?.paths).toEqual(['~/.zsh_history:1-5', '~/.zsh_history']);
@@ -225,7 +225,7 @@ describe('buildNeutralCall: path-list expansion applies to role="read" only (rev
   });
 });
 
-// Review round 4 R4-1: the inverse of readCommandsSelector's own parsing
+// The inverse of readCommandsSelector's own parsing
 // — check (src/cli-commands.ts) is the one caller, since it has no real
 // envelope, only a command string and the row it's dry-running against.
 // Each case here round-trips through buildNeutralCall + the SAME row's
@@ -275,12 +275,12 @@ describe('buildCommandInputBag: the inverse of a command selector', () => {
   });
 });
 
-describe('buildNeutralCall: codec drift (S-3)', () => {
+describe('buildNeutralCall: codec drift', () => {
   // A name `rules lint` accepted (a member of KNOWN_INPUT_CODECS) but the
   // runtime registry (src/adapter/codecs/input/registry.ts) does not
   // implement — the lint-time/runtime pair drifting apart, reachable in
   // practice only as a bug in this repo, never from a real declaration.
-  // Before the S-3 fix this failed CLOSED ("not judged") but SILENTLY;
+  // Before the stderr warn() was added this failed CLOSED ("not judged") but SILENTLY;
   // it must now also warn, matching doctor.ts's own wiring-drift branch.
   const DRIFTED_PROTOCOL: HarnessProtocol = {
     ...PROTOCOL,

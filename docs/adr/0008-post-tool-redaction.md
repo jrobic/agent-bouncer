@@ -8,7 +8,7 @@
 
 ### Current situation
 
-Tickets 57 and 58 (ADR-0007) refuse the commands that print a protected
+PRs #19 and #25 (ADR-0007) refuse the commands that print a protected
 environment variable and the writes that carry its value. Neither can stop a
 value that already sits in a tool result: a test that prints `process.env`, a
 log line, a configuration file the agent legitimately read. Once the value is in
@@ -22,13 +22,12 @@ a well-formed envelope naming any other event is silent. Its templates take
 JSON-encoded **string** placeholders (`${reason}`, `${context}`, `${rule}`,
 `${verdict}`, § 3).
 
-### Measured facts (ticket 59, Scope 0, 2026-10-13)
+### Measured facts (PR #30, before any code, 2026-10-13)
 
 A local fake model server stood in for the model API. The request body a
 harness sends is what the model sees, and every verdict below is read from it.
 The harnesses ran under a temporary `HOME` and temporary config dirs, with a
-made-up variable. The handlers were stand-ins doing the replacement in-process
-(evidence: ticket 59's report).
+made-up variable. The handlers were stand-ins doing the replacement in-process.
 
 1. **Claude Code 2.1.296.** A `PostToolUse` command hook with no matcher
    answering `hookSpecificOutput.updatedToolOutput` replaces what the model sees
@@ -68,7 +67,7 @@ made-up variable. The handlers were stand-ins doing the replacement in-process
 ### Problem
 
 Add the one hook that removes a protected value from what the model is shown,
-whatever printed it (decision F2, "1b"), on every harness whose protocol allows
+whatever printed it, on every harness whose protocol allows
 it, without giving the in-process shim policy and without opening a fail-open
 path that lint cannot see.
 
@@ -76,13 +75,13 @@ path that lint cannot see.
 
 - **Bouncer judges alone** (doctrine 2026-09-04; ADR-0006 § 7). The shim
   forwards and returns; it knows no name, value or pattern.
-- **One definition of a protected value**: ticket 58's detector, i.e. the
+- **One definition of a protected value**: PR #25's detector, i.e. the
   protected-name suffix list, the 8-character floor, and the plain, base64 and
   hex forms. A value never leaves the detector's closure, never becomes a
   `RegExp`, and never appears in a message.
 - **Shape or nothing**: under Claude Code a rewrite that breaks the built-in
   tool's shape is ignored, so it fails open.
-- **Latency**: p95 ≤ 50 ms per tool result on both harnesses (decision F4).
+- **Latency**: p95 ≤ 50 ms per tool result on both harnesses.
 
 ## Decision
 
@@ -133,13 +132,13 @@ value the selector returned (§ 4).
 
 ### 4. What is replaced, and how
 
-Each occurrence of the value of a protected variable — ticket 58's forms: plain,
+Each occurrence of the value of a protected variable — PR #25's forms: plain,
 base64 (standard and URL-safe, three alignments), hex (lower and upper) — is
-replaced by `[redacted: NAME]` (decision F2).
+replaced by `[redacted: NAME]`.
 
 - **Walk the received value, keep its shape.** Every key, array position and
   non-string value is kept; replacement happens inside string leaves only.
-- **Images are forwarded and returned untouched** (decision H5). An object
+- **Images are forwarded and returned untouched**. An object
   whose `type` is `"image"` — an image content block, a Claude Code Read
   image's `{type, file: {base64, …}}` — is not text: it travels to bouncer
   with the rest of the response (neither the shim nor the hook entry knows
@@ -162,7 +161,7 @@ replaced by `[redacted: NAME]` (decision F2).
     first.
   - Markers are spliced in a single pass over the original text and are never
     re-scanned: a marker cannot be matched again by a later needle.
-- **A base64 needle is the inner run of an encoded value** (ticket 58's
+- **A base64 needle is the inner run of an encoded value** (PR #25's
   three alignments): the characters that carry only the value's bits. Its
   occurrence is widened over the encoded value's PARTIAL edges only — one
   character on a side where the value's bits share a character with a
@@ -177,7 +176,7 @@ replaced by `[redacted: NAME]` (decision F2).
 - **Nothing found → silent**: no output, no rewrite, the response is shown as
   the harness has it. This is the common case.
 
-### 5. Policy: one switch (decisions H3 and H6)
+### 5. Policy: one switch
 
 Post-tool redaction is the env-value row's second use: baseline row
 `env-value` (`policy/write-secret.toml`, `special = "env_value"`) governs both.
@@ -185,7 +184,7 @@ Post-tool redaction is the env-value row's second use: baseline row
 A relaxed row means the operator chose not to be stopped by the guard, and a
 softer post-tool verdict has no meaning.
 
-`replace` governs **writes only** (decision H6). The row's `regex` / `except`
+`replace` governs **writes only**. The row's `regex` / `except`
 gate which written texts the guard looks at; redaction ignores them and always
 scans the whole output. It reads nothing of the row but its presence, its
 relax and its id (the audit entry's `rule_id`). Reason: an override written for
@@ -193,7 +192,7 @@ the write guard — narrowing which texts block a write — must not silently
 narrow what is hidden from the model. Everything else in the policy is
 irrelevant here.
 
-### 6. Failure: in-process only under Claude Code (decisions F5 and H1)
+### 6. Failure: in-process only under Claude Code
 
 - **Bouncer.** Two failure points, two paths, never silence:
   - Building the guard (reading the environment) or walking the response
@@ -224,7 +223,7 @@ irrelevant here.
   also leaves the original and omits the notice. Both are documented limits,
   not bugs; § 9 adds a name-only alert but does not redact the failed output.
 - **A withheld answer under Claude Code can still be ignored.** Measured
-  with the real withheld answer (Claude Code 2.1.296, review round 1): Bash,
+  with the real withheld answer (Claude Code 2.1.296): Bash,
   Read (its `filePath` withheld) and Grep in `content` mode accept it — the
   model sees the withheld text, never the value. Grep's default mode does
   not: its `mode: "files_with_matches"` leaf is longer than the floor, is
@@ -233,7 +232,7 @@ irrelevant here.
   constrains a string leaf of eight characters or more behaves the same —
   measured for Grep only. Same residual as above.
 
-### 7. All tools, one spawn per result (decisions F6 and F4, option A)
+### 7. All tools, one spawn per result
 
 There is no tool allow-list: any result can carry a protected value, including
 one from a future tool or MCP integration. Only a matcher intended to cover
@@ -243,11 +242,11 @@ tools unredacted.
 - **Claude Code**: one `PostToolUse` entry with no matcher. `doctor` reports a
   missing entry, or a matcher that does not cover every tool, as `[fail]
   wiring:PostToolUse`. The SessionStart notice lists it like every other
-  `wiring:*` failure, with no new tier (decision H2).
+  `wiring:*` failure, with no new tier.
 - **omp / pi**: the shim relays every `tool_result` to `bouncer run --harness
   pi-agent` through the same blocking `spawnSync` as `tool_call`. ADR-0006
   § 7's fixed rules gain the post-tool rule of § 6.
-- **The budget is p95 ≤ 50 ms per tool result**, measured by ticket 59 on both
+- **The budget is p95 ≤ 50 ms per tool result**, measured by PR #30 on both
   harnesses through the real shim and a real hook.
 
 ### 8. Audit log
@@ -274,7 +273,7 @@ Each post-tool redaction writes one verdict entry:
 - **Option B — Bouncer hands the shim the protected-name regex at
   `session_start`; the shim redacts in-process through `process.env`.** Zero
   spawns per result, but it gives the shim policy (names, forms, matching), the
-  exact thing ADR-0006 § 7 forbids, and a second implementation of ticket 58's
+  exact thing ADR-0006 § 7 forbids, and a second implementation of PR #25's
   detector to keep in lockstep. **Trigger to reopen:** the measured p95 per tool
   result exceeds 50 ms on either harness. It then needs an amendment to this ADR
   decided with the operator, never a silent change.
@@ -287,8 +286,7 @@ Each post-tool redaction writes one verdict entry:
 - **Use `decision: "block"` or `additionalContext` as a substitute for rewriting a tool result under Claude Code.** Both leave the original output in front of the model (hooks reference). Rejected as redaction; § 9 uses `additionalContext` only as an advisory failure alert.
 - **Rewrite `details` too (omp / pi).** `details` never reaches the model; it
   doubles the payload (pi's bash `details.truncation` repeats the content) and
-  its shape is per tool. Rejected; the on-disk residue is a limit (decision
-  H4).
+  its shape is per tool. Rejected; the on-disk residue is a limit.
 
 ## Consequences
 
@@ -319,7 +317,7 @@ Each post-tool redaction writes one verdict entry:
   captures the original output before the hook runs.
 - **Claude Code's failure path** (§ 6): a failed tool's output and any failure
   of the hook process reach the model unredacted.
-- **On-disk residue** (decision H4): Claude Code's `tool-results/*.txt` for
+- **On-disk residue**: Claude Code's `tool-results/*.txt` for
   large outputs, omp's session artifacts (`0.bash.log`), and omp/pi `details`
   in session files keep the original. They are outside the `session-transcripts`
   row. Reading them back through a tool is redacted again.
@@ -329,19 +327,19 @@ Each post-tool redaction writes one verdict entry:
 - **Only variables present in the hook's (or the shim-spawned process's)
   environment are known.**
 - **Split or transformed values** — concatenated, reversed, ROT13, re-encoded,
-  a different base64 alignment, a hash — evade, as for ticket 58.
-- **Images** and other non-text content are not matched (decision H5).
+  a different base64 alignment, a hash — evade, as for PR #25.
+- **Images** and other non-text content are not matched.
 
 ## References
 
 - ADR-0006 § 3 (declaration, placeholders), § 4 (lint), § 6 (codecs), § 7 (shim)
-- ADR-0007 (environment secrets net), ticket 58 (`src/env-value-rules.ts`)
+- ADR-0007 (environment secrets net), PR #25 (`src/env-value-rules.ts`)
 - Claude Code hooks reference: PostToolUse, PostToolUse decision control,
   PostToolUseFailure — https://code.claude.com/docs/en/hooks (checked
   2026-10-13)
 - `@earendil-works/pi-coding-agent` 0.84.1 `dist/core/extensions/types.d.ts`
   (`tool_result`, `ToolResultEventResult`)
-- Ticket 59 and its report (Scope 0 measurements, latency acceptance)
+- PR #30 (latency acceptance)
 
 ---
 
@@ -349,7 +347,7 @@ Each post-tool redaction writes one verdict entry:
 
 | Date | Action | By |
 |---|---|---|
-| 2026-10-13 | Created, Accepted (ticket 59, decisions F2–F6 and H1–H6). | Jonathan Robic |
+| 2026-10-13 | Created, Accepted (PR #30). | Jonathan Robic |
 | 2026-10-14 | Added the Claude Code `PostToolUseFailure` name-only alert and its `error`/`failure_context` protocol fields. | Jonathan Robic |
 
 ## 9. Amendment — Claude Code failed-tool name-only alert (2026-10-14)

@@ -3,9 +3,9 @@
 // KNOWN_INPUT_CODECS is this registry's LINT-TIME counterpart (proving a
 // declaration only ever names a real codec); the two are hand-kept in
 // lockstep, reviewed together, same discipline as KNOWN_WIRINGS/
-// src/adapter/codecs/wiring/registry.ts's own WIRING_CODECS pair (S-4:
-// one registry shape for every codec kind, not a bespoke pattern per
-// kind — 15c adds `hashline` and `shim-file` onto this same shape).
+// src/adapter/codecs/wiring/registry.ts's own WIRING_CODECS pair
+// (one registry shape for every codec kind, not a bespoke pattern per
+// kind — `hashline` and `shim-file` sit on this same shape).
 
 import { applyPatchCodec } from './apply-patch.ts';
 import { hashlineCodec } from './hashline.ts';
@@ -14,7 +14,7 @@ export type InputCodecResult = Readonly<{ paths: readonly string[]; text: string
 
 export type InputCodec = (ti: Record<string, unknown>, hookName: string) => InputCodecResult;
 
-// Exported for the S-3 parity test (tests/adapter-codec-registries.test.ts):
+// Exported for the registry parity test (tests/adapter-codec-registries.test.ts):
 // this runtime registry and src/policy/harness.ts's KNOWN_INPUT_CODECS
 // lint-time registry must name the same key set.
 export const INPUT_CODECS: Readonly<Record<string, InputCodec>> = {

@@ -28,7 +28,7 @@ const CLAUDE_CODE_HARNESS = BASELINE.rules.harness.find((h) => h.id === 'claude-
 const CLEAN_BUILD: BuildInfo = { sha: 'fixture', dirty: false, date: '2026-01-01T00:00Z' };
 const DIRTY_BUILD: BuildInfo = { sha: 'fixture', dirty: true, date: '2026-01-01T00:00Z' };
 
-// Review round 3 R3-1: a declared harness with no `wiring` codec — the
+// A declared harness with no `wiring` codec — the
 // `[warn]` case ("not checkable", never `[pass]`, never `[fail]`, `ok`
 // stays true). `events.session_start` is declared so buildSessionStartContext
 // has a real SessionStart form to check the calm-announce branch against.
@@ -76,7 +76,7 @@ function cleanLoadResult(overlayApplied = false): LoadResult {
     // (tests/adapter-policy-layers.test.ts covers that, against the real
     // loader) — doctor.ts's layerCountSuffix renders no suffix at all for
     // an empty `layers`, so `checkPolicy`'s message stays exactly what it
-    // was before ticket 20 here.
+    // was before layers existed.
     layers: [],
   };
 }
@@ -147,7 +147,7 @@ describe('runDoctorChecks: wiring', () => {
     expect(report.checks.find((c) => c.id === 'wiring:SessionStart')?.ok).toBe(false);
   });
 
-  // ADR-0008 § 7 / decision H2: the post-tool hook is a wiring check like
+  // ADR-0008 § 7: the post-tool hook is a wiring check like
   // the other three, and a missing one says what to paste.
   test('removing PostToolUse fails only that wiring check, naming the entry to paste with the PreToolUse binary', async () => {
     const { PostToolUse: _omit, ...rest } = HEALTHY_HOOKS;
@@ -180,7 +180,7 @@ describe('runDoctorChecks: wiring', () => {
     expect(failureEvent?.message).toContain('does not cover every tool');
   });
 
-  test('a PostToolUse matcher naming every declared tool still fails: an undeclared tool would go unredacted (decision F6)', async () => {
+  test('a PostToolUse matcher naming every declared tool still fails: an undeclared tool would go unredacted', async () => {
     const settingsPath = await scratchSettingsPath({
       ...HEALTHY_HOOKS,
       PostToolUse: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
@@ -225,7 +225,7 @@ describe('runDoctorChecks: wiring', () => {
     expect(report.checks.find((c) => c.id === 'wiring:PreToolUse')?.ok).toBe(false);
   });
 
-  test('a matcher covering only ONE real mcp-tool shape still fails (round-3 review: MCP false negative)', async () => {
+  test('a matcher covering only ONE real mcp-tool shape still fails (MCP false negative)', async () => {
     // A matcher tuned to context-mode's naming convention alone must not
     // silently pass a filesystem-server-shaped (or any other) MCP tool —
     // EXPECTED_PRETOOLUSE_TOOLS carries two differently-shaped real names
@@ -371,12 +371,12 @@ describe('runDoctorChecks: wiring', () => {
   });
 });
 
-// Ticket 08: `run --shadow` must count as valid wiring (pointsAtBouncer
+// `run --shadow` must count as valid wiring (pointsAtBouncer
 // only requires 'run' among the args, which --shadow doesn't remove), and
 // the manual checklist should say so — info, never a failure. After
 // cutover the flag drops and doctor goes back to saying nothing extra;
 // there is no separate "shadow expected" state to configure.
-describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
+describe('runDoctorChecks: shadow-mode wiring', () => {
   test('a hook command carrying --shadow still passes wiring — pointsAtBouncer already accepts it (arg "run" is present)', async () => {
     const settingsPath = await scratchSettingsPath({
       ...HEALTHY_HOOKS,
@@ -434,12 +434,12 @@ describe('runDoctorChecks: shadow-mode wiring (ticket 08)', () => {
   });
 });
 
-// Ticket 08 review round: a typo'd token in the live wiring (--shadwo
+// A typo'd token in the live wiring (--shadwo
 // instead of --shadow) still "points at bouncer" (pointsAtBouncer only
 // requires 'run'), so it would otherwise pass silently — the wiring check
 // must fail loudly instead, naming the unrecognized token, since this is
 // the one place (SessionStart) it's actually actionable.
-describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 review)', () => {
+describe('runDoctorChecks: unrecognized token in the wired command', () => {
   test('a hook command with an unrecognized token FAILS wiring, naming the token', async () => {
     const settingsPath = await scratchSettingsPath({
       ...HEALTHY_HOOKS,
@@ -473,7 +473,7 @@ describe('runDoctorChecks: unrecognized token in the wired command (ticket 08 re
   });
 });
 
-describe('runDoctorChecks: settings.json readability (round-3 review: corrupt vs. absent)', () => {
+describe('runDoctorChecks: settings.json readability (corrupt vs. absent)', () => {
   test('a missing settings.json is a healthy "settings" check — normal, unconfigured, not corrupt', async () => {
     const dir = tmpDir('bouncer-doctor-test-');
     const report = await runDoctorChecks(join(dir, 'does-not-exist.json'), cleanLoadResult(), CLAUDE_CODE_HARNESS);
@@ -566,7 +566,7 @@ describe('runDoctorChecks: log writability', () => {
   });
 
   test('an EXISTING but read-only log file fails the check even though its directory is writable '
-    + '(round-3 review: the append-time failure log.ts silently swallows)', async () => {
+    + '(the append-time failure log.ts silently swallows)', async () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
     const dir = tmpDir('bouncer-doctor-log-');
     const logsDir = join(dir, 'logs', 'hooks');
@@ -677,7 +677,7 @@ describe('formatDoctorChecklist: the manual, always-verbose form', () => {
     expect(text).toContain('[fail] wiring:SessionStart');
   });
 
-  test('review round 3 R3-1: a declared harness with no wiring codec shows [warn], not [pass], ok stays true', async () => {
+  test('a declared harness with no wiring codec shows [warn], not [pass], ok stays true', async () => {
     const report = await runDoctorChecks(undefined, cleanLoadResult(), NO_WIRING_HARNESS);
     const text = formatDoctorChecklist(report);
     expect(text).toContain('[warn] wiring — not checkable (declared harness)');
@@ -734,7 +734,7 @@ describe('buildSessionStartContext: silent when healthy, screams on anomaly, ann
     expect(context).toContain('curl-file-upload');
   });
 
-  test('review round 3 R3-1: a [warn] check with nothing else broken joins the calm announce, never the scream', async () => {
+  test('a [warn] check with nothing else broken joins the calm announce, never the scream', async () => {
     const report = await runDoctorChecks(undefined, cleanLoadResult(), NO_WIRING_HARNESS);
     const context = buildSessionStartContext(report);
     expect(context).not.toBeNull();

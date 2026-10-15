@@ -63,8 +63,8 @@ below; see [Install](install.md).
    `$CODEX_HOME/hooks.json` (and `$CODEX_HOME/config.toml`'s `[hooks]`
    table) by default — ONLY the account-level directory. A project-level
    `.codex/hooks.json` (Codex also loads hooks from the CURRENT project,
-   not only the account dir) is out of `doctor`'s reach entirely (ticket
-   15b non-goal): it is neither checked nor reported on, wired or not.
+   not only the account dir) is out of `doctor`'s reach entirely: it is
+   neither checked nor reported on, wired or not.
 
 3. Add or merge a `hooks.json` at `$CODEX_HOME/hooks.json` — every entry
    carries `--harness codex` (ADR-0006 § 9: a bare `bouncer run` would
@@ -116,8 +116,8 @@ below; see [Install](install.md).
    array-of-tables form works too — the two sources are additive, never a
    choice between them (a project wiring both is legal, if unusual).
 
-   Once wired, `hooks.json` itself becomes a protected write (review
-   round 1 L-1, `policy/harness/codex.toml`'s `codex-hooks` persistent
+   Once wired, `hooks.json` itself becomes a protected write
+   (`policy/harness/codex.toml`'s `codex-hooks` persistent
    row): editing or deleting it — directly, via a Bash redirect, or via
    `apply_patch` — asks for confirmation, the same protection Claude
    Code's own `hooks/` directory and Cursor's `hooks.json` already have.

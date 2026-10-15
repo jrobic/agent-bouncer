@@ -1,4 +1,4 @@
-// The env-value guard through run() (ticket 58): the protocol seam, the audit
+// The env-value guard through run(): the protocol seam, the audit
 // log, stdout/stderr, the baseline retry and the overlay overrides. Every name
 // and value is made up, and the environment the guard reads is handed to run()
 // as `options.env` — never the machine's (tests/setup.ts also drops the

@@ -33,7 +33,7 @@ reason = "Claude Code instructions persist across future sessions"
 
 # ADR-0006 § 3: the pipeline transport → input map → tools map → neutral
 # call → engine → output table → template, written so it reproduces the
-# pre-15a hardcoded Claude Code adapter at the byte level (proof:
+# former hardcoded Claude Code adapter at the byte level (proof:
 # fixtures/protocol/claude-code.json, tests/fixtures-protocol.test.ts).
 [harness.protocol]
 transport = "stdin-json"

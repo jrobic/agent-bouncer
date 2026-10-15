@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Shared per-harness capture/probe configuration (review round 1 S-7):
+// Shared per-harness capture/probe configuration:
 // scripts/capture-protocol.ts used to key a harness in five separate
 // structures (its own exec command, account-dir env var, wiring-file
 // name, `--harness` flag args, and the wiring-fixture bouncer command),
@@ -24,11 +24,11 @@ export interface HarnessCaptureRecord {
   readonly settingsFile: string;
   /** Extra tokens `run`/`doctor`/etc. need beyond the bare subcommand. */
   readonly flagArgs: readonly string[];
-  /** The wiring-fixture PreToolUse command a hooks/settings file should point at, given the (fake or real) bouncer binary path. Unused for `wiring: "shim"` (ticket 15c: the artifact IS the shim source, not a JSON entry pointing at one). */
+  /** The wiring-fixture PreToolUse command a hooks/settings file should point at, given the (fake or real) bouncer binary path. Unused for `wiring: "shim"` (the artifact IS the shim source, not a JSON entry pointing at one). */
   readonly wiringCommand: (bouncerPath: string) => string;
   /** The PreToolUse matcher regex covering every guarded tool this harness declares, derived from its own real protocol.tools — never hand-typed. Unused for `wiring: "shim"` (no per-event matcher concept). */
   readonly matcher: string;
-  /** `"settings"` (default shape, hook-file/codex-hooks): capture-protocol.ts writes `{hooks: settings}` and splices a canary. `"shim"` (ticket 15c, pi-agent): capture-protocol.ts writes the rendered shim source itself instead, no canary concept. */
+  /** `"settings"` (default shape, hook-file/codex-hooks): capture-protocol.ts writes `{hooks: settings}` and splices a canary. `"shim"` (pi-agent): capture-protocol.ts writes the rendered shim source itself instead, no canary concept. */
   readonly wiring: 'settings' | 'shim';
 }
 

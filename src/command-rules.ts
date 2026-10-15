@@ -2451,7 +2451,7 @@ function checkGitWith(cmd: string, line: CommandLine, git: CommandGitPolicy, lis
 // the permission decision — checkGit already returned null (allow) before a
 // caller has any reason to call this. Exists purely so the adapter's audit
 // log can record which conditional rules "silently earn their keep" and
-// which never fire (spec User Story 10), without checkGit itself growing a
+// which never fire, without checkGit itself growing a
 // third return shape that every existing caller and fixture would have to
 // account for.
 function classifyGitAllowWith(cmd: string, git: CommandGitPolicy): Verdict | null {

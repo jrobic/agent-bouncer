@@ -1,4 +1,4 @@
-// Audit: the proactive rule-tuning loop (ticket 10, spec User Stories 9-11).
+// Audit: the proactive rule-tuning loop.
 // Parses already-read JSONL log TEXT (see src/adapter/log.ts for the entry
 // shape this reads back) and an already-loaded RulesPolicy's git-conditional
 // tables, and produces:
@@ -35,7 +35,7 @@ export interface AuditEntry {
   readonly target: string;
   readonly truncated: boolean;
   readonly asLogged?: boolean;
-  // Ticket 08: present (always "shadow") only on an entry `run --shadow`
+  // Present (always "shadow") only on an entry `run --shadow`
   // produced — src/adapter/log.ts's LogMode. Absent on every entry logged
   // outside a shadow invocation; audit-diff.ts filters on this to compare
   // ONLY shadow-window entries against the TS generation's logs.

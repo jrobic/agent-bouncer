@@ -5,7 +5,7 @@
 // bytes the compiled binary reads off stdin; this runner turns that shape
 // into the neutral call through the SAME claude-code declaration
 // (`policy/harness/claude-code.toml`'s `[harness.protocol]`) `run()`
-// itself reads — ticket 15a's whole point: one tool-name -> engine-call
+// itself reads — ADR-0006's whole point: one tool-name -> engine-call
 // mapping, in the declaration, not two kept in sync by hand (one in code,
 // one here).
 //
@@ -15,7 +15,7 @@
 // that "stays unreachable", so no `check` field survives anywhere in the
 // fixture set.
 //
-// One optional input: `env` (ticket 58), the process environment the
+// One optional input: `env`, the process environment the
 // env-value guard reads protected values from — made-up names and values,
 // never the machine's. A case without it is judged with no environment.
 

@@ -100,7 +100,7 @@ describe('parseAuditArgs', () => {
     expect(result.error).toBeDefined();
   });
 
-  test('an unrecognized flag is an explicit error, never a silently-ignored no-op (round-3 review item 3)', () => {
+  test('an unrecognized flag is an explicit error, never a silently-ignored no-op', () => {
     for (const bad of [['--sugest'], ['--dayz'], ['positional-garbage']]) {
       const result = parseAuditArgs(bad);
       expect(result.options).toBeUndefined();
@@ -135,7 +135,7 @@ describe('runAudit: report mode', () => {
     expect(text).toContain('2x');
   });
 
-  test('pin (review round on ticket 08): a MIXED shadow+enforce log still clusters as one continuous history', async () => {
+  test('pin: a MIXED shadow+enforce log still clusters as one continuous history', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [
       verdictLine({ target: 'git push origin main', mode: 'shadow' }),
@@ -212,14 +212,14 @@ describe('runAudit: report mode', () => {
     expect(text).toContain('git-protected');
   });
 
-  test('a missing log file (ENOENT) is treated as empty, no warning line (round-3 review item 6)', async () => {
+  test('a missing log file (ENOENT) is treated as empty, no warning line', async () => {
     freshAccountDir();
     const { text } = await runAudit({ days: 30, suggest: false, diff: false });
     expect(text).not.toContain('warning:');
   });
 
   test('an EXISTING but unreadable log file surfaces an honest warning, not silent emptiness '
-    + '(round-3 review item 6: ENOENT ≠ EACCES/EISDIR)', async () => {
+    + '(ENOENT ≠ EACCES/EISDIR)', async () => {
     const dir = freshAccountDir();
     await writeLog(dir, [verdictLine({ target: 'git push origin main' })]);
     const logFile = join(dir, 'logs', 'hooks', 'bouncer.log');
@@ -444,13 +444,13 @@ describe('runAudit: --suggest mode', () => {
     ]);
     const { text: suggestText, ok: suggestOk } = await runAudit({ days: 30, suggest: true, diff: false, sessionsOnly: true });
     expect(suggestOk).toBe(true);
-    // git-protected friction ships commented out (round-3 review item 2) —
+    // git-protected friction ships commented out —
     // the literal substring still appears (inside the comment), the active
     // block does not.
     expect(suggestText).toContain('# [[relax]]');
 
     // Feed the suggestion straight into the account's overlay and re-lint —
-    // this is the "generate then lint" proof the ticket asks for.
+    // this is the "generate then lint" proof.
     await writeOverlay(dir, suggestText);
     const { text: lintText, ok: lintOk } = await runRulesLint();
     expect(lintOk).toBe(true);

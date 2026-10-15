@@ -1,6 +1,6 @@
-// The named-layers engine seam (ticket 20, ADR-0001): loadPolicyFromLayers
+// The named-layers engine seam (ADR-0001): loadPolicyFromLayers
 // receives layers in PRECEDENCE order (later wins) and owns cross-layer
-// precedence, provenance, and (ticket 21) PER-LAYER rejection — a fault
+// precedence, provenance, and PER-LAYER rejection — a fault
 // in one layer's files drops that layer alone, the other keeps running.
 // Every case here names an observed property at that boundary, not
 // internal structure — complements tests/policy-load-multifile.test.ts
@@ -240,7 +240,7 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
     expect(result.warnings.join(' ')).toContain('profile:policy.d/20-b.toml');
   });
 
-  test('two common files sharing a regex id rejects ONLY the common layer (ticket 21) — the clean profile file stays active', () => {
+  test('two common files sharing a regex id rejects ONLY the common layer — the clean profile file stays active', () => {
     const result = loadPolicyFromLayers([
       layer('common', [
         file('policy.d/10-a.toml', '[[rules.command.bash]]\nid = "dup"\nregex = "a"\nreason = "test"\n'),
@@ -313,7 +313,7 @@ describe('loadPolicyFromLayers: two files of the SAME layer sharing a target sti
   });
 });
 
-describe('loadPolicyFromLayers: per-layer rejection matrix (ticket 21, ADR-0001 § Rejection)', () => {
+describe('loadPolicyFromLayers: per-layer rejection matrix (ADR-0001 § Rejection)', () => {
   test('common broken, profile clean: the common layer drops, the profile rule stays effective', () => {
     const result = loadPolicyFromLayers([
       layer('common', [file('policy.toml', 'this is [not valid toml {{{')]),
@@ -384,7 +384,7 @@ describe('loadPolicyFromLayers: per-layer rejection matrix (ticket 21, ADR-0001 
   });
 });
 
-describe('loadPolicyFromLayers: an overlay id reusing a BASELINE id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+describe('loadPolicyFromLayers: an overlay id reusing a BASELINE id is rejected (ADR-0001 § Precedence)', () => {
   test('a baseline id in the common layer rejects common, the profile layer keeps running', () => {
     const result = loadPolicyFromLayers([
       layer('common', [file('policy.toml', '[[rules.command.bash]]\nid = "curl-file-upload"\nregex = "another-shape"\nreason = "test"\n')]),

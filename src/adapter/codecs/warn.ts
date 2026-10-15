@@ -1,4 +1,4 @@
-// Review round 1 S-9c: the identical `warn` helper existed three times
+// The identical `warn` helper existed three times
 // (src/adapter/neutral-call.ts, codecs/input/apply-patch.ts, codecs/input/
 // hashline.ts) — one stderr-diagnostic convention every codec and
 // selector reader shares (`[<hookName>] <message>`), extracted once so a

@@ -1,5 +1,5 @@
 // The `shim-file` wiring codec (src/adapter/codecs/wiring/shim-file.ts,
-// ADR-0006 § 6/7, ticket 15c) — exercised the same way tests/adapter-
+// ADR-0006 § 6/7) — exercised the same way tests/adapter-
 // doctor.test.ts exercises hook-file and tests/adapter-codecs-codex-hooks.
 // test.ts exercises codex-hooks: real scratch trees on disk, through
 // runDoctorChecks (never the codec's own internals directly), so this is
@@ -263,7 +263,7 @@ describe('shim-file wiring: policy and log checks are unaffected (ADR-0006 § 6:
   });
 });
 
-describe('shim-file wiring: doctor --print-canary (review round 1 S-4)', () => {
+describe('shim-file wiring: doctor --print-canary', () => {
   test('the "no canary entry" error names the ACTUAL harness id, not a literal "<id>" placeholder', async () => {
     const printed = await runPrintCanary(undefined, 'pi-agent');
     expect(printed.ok).toBe(false);
@@ -273,9 +273,9 @@ describe('shim-file wiring: doctor --print-canary (review round 1 S-4)', () => {
   });
 });
 
-// Ticket 56. omp resolves OMP_PROFILE / PI_PROFILE / `--profile` to
+// omp resolves OMP_PROFILE / PI_PROFILE / `--profile` to
 // `~/.omp/profiles/<name>/agent` and discovers extensions under THAT agent
-// directory only — measured live on omp 18.9.1 (see the 56 report): the
+// directory only — measured live on omp 18.9.1: the
 // printed shim installed in `~/.omp/agent/extensions` never loads in a
 // profiled session. A profile without its own copy is a session that runs
 // without bouncer, so `doctor --harness pi-agent` reports each profile it
@@ -330,7 +330,7 @@ const profileChecksOf = (report: DoctorReport) => report.checks.filter((c) => c.
 const installCommandFor = (name: string) =>
   `mkdir -p ~/.omp/profiles/${name}/agent/extensions && bouncer harness shim pi-agent > ~/.omp/profiles/${name}/agent/extensions/bouncer.ts`;
 
-describe('shim-file wiring: omp profiles (ticket 56)', () => {
+describe('shim-file wiring: omp profiles', () => {
   test('1 profile without the shim: [fail] naming the reprint command for that profile; the default directory result is unchanged', async () => {
     const { home } = await scratchOmpHome();
     const before = await doctorUnder(home);
@@ -387,7 +387,7 @@ describe('shim-file wiring: omp profiles (ticket 56)', () => {
     expect(after.ok).toBe(false);
   });
 
-  test('0 profiles, a profiles directory that is absent and then one that is empty: no profile line, the report is the one before this ticket', async () => {
+  test('0 profiles, a profiles directory that is absent and then one that is empty: no profile line, the report is the one before profile checks', async () => {
     const { home } = await scratchOmpHome();
     const absent = await doctorUnder(home);
     await mkdir(join(home, '.omp', 'profiles'), { recursive: true });

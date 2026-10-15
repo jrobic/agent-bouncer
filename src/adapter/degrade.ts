@@ -1,6 +1,6 @@
 // The abstract-verdict -> harness-action degradation (ADR-0006 § 3/4):
 // looks the verdict kind up in the harness's OWN declared output table
-// instead of a hardcoded Claude Code switch (the pre-15a
+// instead of a hardcoded Claude Code switch (the former
 // src/adapter/degradation.ts). Fail-closed by construction: `rules lint`
 // (src/policy/harness.ts) already proved `block` can only map to "deny",
 // `confirm` only to "deny"/"ask", `observe` only to "silent", `flag` only
@@ -14,7 +14,7 @@ import { isPreToolKind, type VerdictKind } from '../types.ts';
 // is PostToolUse-only (ADR-0008). `strictestOf` already throws on either,
 // through the same `isPreToolKind` test; this is defense in depth against the
 // same misrouting bug reaching this table through some OTHER path, exactly as
-// the pre-15a degradation table did.
+// the former degradation table did.
 export function degradePreToolUseVerdict(kind: VerdictKind, output: HarnessOutputTable): HarnessAction {
   if (!isPreToolKind(kind)) {
     throw new Error(

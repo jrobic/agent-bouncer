@@ -3,7 +3,7 @@
 // constant so all three can never drift apart.
 export const HOOK_NAME = 'bouncer';
 
-// Review round 1 S-4: the one v1-wiring default (ADR-0006 § 9) — every
+// The one v1-wiring default (ADR-0006 § 9) — every
 // subcommand that takes an optional `--harness <id>` falls back to this
 // when the flag is absent. A single exported constant so it can never
 // drift between src/adapter/run.ts and src/cli-commands.ts (it did,

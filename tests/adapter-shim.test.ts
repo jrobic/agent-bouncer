@@ -25,7 +25,7 @@ describe('renderShim', () => {
     expect(rendered).not.toContain('__BOUNCER_BIN__');
   });
 
-  // Review round 1 S-1: String.replace's second argument, given a
+  // String.replace's second argument, given a
   // string, interprets `$&`/`$'`/`` $` ``/`$n` as replacement patterns —
   // a bouncerPath containing one would have silently corrupted the
   // printed shim under the old `source.replace(PLACEHOLDER,

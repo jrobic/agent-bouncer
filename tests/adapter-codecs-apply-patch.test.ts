@@ -1,5 +1,5 @@
 // The `apply-patch` input codec (src/adapter/codecs/input/apply-patch.ts,
-// ADR-0006 § 6, ticket 15b) — Codex's `*** Begin Patch` … `*** End Patch`
+// ADR-0006 § 6) — Codex's `*** Begin Patch` … `*** End Patch`
 // grammar to `{paths, text}`. Each test names exactly which parsing
 // contract it proves; `parseApplyPatch` is exercised directly (raw patch
 // text in, no `tool_input` wrapper) so a grammar bug can't hide behind
@@ -150,7 +150,7 @@ test('an unrecognized directive line with nothing parsed before it is not judged
   expect(logs[0]).toContain('Rename File');
 });
 
-// Review round 1 S-9: an otherwise-valid patch whose body goes off the
+// An otherwise-valid patch whose body goes off the
 // rails PARTWAY THROUGH keeps everything parsed before the offending
 // line — judge what was seen, say what was not — rather than discarding
 // a real Add File path and its text over one bad trailing line.

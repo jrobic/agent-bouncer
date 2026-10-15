@@ -39,7 +39,7 @@ export interface DoctorCheck {
   // dirty executable.
   readonly warn?: 'unprovable' | 'build';
   // Set on a FAILING check that is about ANOTHER session than the one
-  // asking — another omp profile's wiring (ticket 56, codecs/wiring/
+  // asking — another omp profile's wiring (codecs/wiring/
   // shim-file.ts): the sentence the SessionStart notice prints for it, on a
   // line of its own. The check still fails (its checklist line is
   // unchanged, `bouncer doctor` still exits 1), but it never joins the
@@ -61,7 +61,7 @@ export interface DoctorReport {
   readonly ok: boolean;
 }
 
-// ADR-0006 § 5/9/7 (ticket 15c adds `shim=`): `harness <id> <provenance>
+// ADR-0006 § 5/9/7: `harness <id> <provenance>
 // transport=<t|none> confirm=<ask|deny|none> shim=<yes|no>
 // [ask_probe]` — the one line format every harness-naming surface
 // (`doctor`, `rules list`, `harness list`) shares. Provenance and its
@@ -90,7 +90,7 @@ export function harnessAnnouncementLine(harness: HarnessDeclaration, effectiveRu
 // baseline case announces nothing (ADR-0006 § 5: an overlay-touched
 // harness "is announced everywhere an override is", not every harness on
 // every invocation). Filtered against LoadResult.overlayHarnessIds
-// (review round 1 S-6) — the merge-time-authoritative list, never
+// — the merge-time-authoritative list, never
 // re-derived here by matching a harness id against a derived
 // protected-write row id.
 function overlayHarnessLinesOf(loaded: LoadResult): string[] {
@@ -200,7 +200,7 @@ async function checkLogWritability(harness: HarnessDeclaration): Promise<DoctorC
       // own write failure (console.error only, by design: a broken log
       // must never crash the hook), so that failure mode is otherwise
       // completely silent audit loss, exactly the class of fault this
-      // ticket exists to catch. Opening for append (and immediately
+      // check exists to catch. Opening for append (and immediately
       // closing, writing nothing) is the SAME open() a real appendFile()
       // call makes — the most direct proof available short of writing a
       // real entry, which doctor must not do on a healthy, log-less setup.
@@ -306,7 +306,7 @@ export function formatDoctorChecklist(report: DoctorReport): string {
  * ANOTHER session (`otherSession`: its own sentence, never the scream),
  * then calm blocks for override/relaxation state, unprovable wiring, and
  * a source or dirty binary. Each warning remains non-failing; it never
- * joins the scream. Story 19's "impossible to overlook, never silent"
+ * joins the scream. The "impossible to overlook, never silent" rule
  * applies even when nothing is actually broken. Layout is a contract:
  * every headline starts at column 0 and every detail line under it is
  * indented — the pi-agent shim folds the indented lines for display
