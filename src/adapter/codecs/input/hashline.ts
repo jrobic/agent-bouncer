@@ -1,4 +1,4 @@
-// The `hashline` input codec (ADR-0006 § 6, ticket 15c): omp's `edit`
+// The `hashline` input codec (ADR-0006 § 6): omp's `edit`
 // tool takes ONE patch string, not discrete `path`/`text` fields — a
 // field-map selector can name a key, never parse a grammar, so this is
 // a codec: named by `codec = "hashline"` on a tool row (src/policy/
@@ -9,10 +9,10 @@
 // sharing omp's extension HOOK api (ADR-0006 fact 5 covers `pi.on(...)`/
 // `ctx.ui.confirm`/etc., never the tool set itself, which omp is free to
 // replace): `{ path: string, edits: [{ oldText, newText }] }`
-// (`edit.d.ts:10-16`, review round 1 P-1) — no `input.input` string at
+// (`edit.d.ts:10-16`) — no `input.input` string at
 // all. This codec recognizes BOTH shapes; see `hashlineCodec` below.
 //
-// Grammar (confirmed live, firsthand: this ticket's own dev session runs
+// Grammar (confirmed live, firsthand: the codec author's own session runs
 // under omp/pi-agent, and its OWN `edit` tool is exactly this format —
 // not a secondhand doc reading): one or more `[PATH#TAG]` section
 // headers (`PATH` may be relative or absolute, `TAG` a 4-hex snapshot
@@ -95,8 +95,8 @@ export function parseHashline(raw: string, hookName: string): HashlineResult {
 }
 
 /**
- * Reads pi's OWN edit shape (`{ path, edits: [{ oldText, newText }] }`,
- * review round 1 P-1) directly off the raw input bag — `undefined` when
+ * Reads pi's OWN edit shape (`{ path, edits: [{ oldText, newText }] }`)
+ * directly off the raw input bag — `undefined` when
  * `path` is not a string or `edits` is not an array, so the caller can
  * fall through to "neither shape recognized" rather than guessing.
  * `oldText` is never read: only `newText` — the content actually
@@ -118,13 +118,13 @@ function parsePiEditShape(ti: Record<string, unknown>): HashlineResult | undefin
 /**
  * The `hashline` codec entry point buildNeutralCall reaches for a tool
  * row declaring `codec = "hashline"` — the `edit` tool's own patch shape
- * differs by binary (review round 1 P-1): omp sends one hashline patch
+ * differs by binary: omp sends one hashline patch
  * string under `input.input` (ADR-0006's own doc excerpt: "`edit`
  * `{input}`: hashline patch string"); pi 0.84.1 sends `{path, edits[]}`
  * instead (this file's own header comment, `edit.d.ts:10-16`). Tried in
  * that order — `input.input` a string wins outright; otherwise the pi
- * shape; neither recognized is NOT_JUDGED, now WITH a stderr line (P-1:
- * silently NOT_JUDGED here is exactly how an AWS key written through
+ * shape; neither recognized is NOT_JUDGED, now WITH a stderr line (a
+ * silent NOT_JUDGED here is exactly how an AWS key written through
  * pi's real `edit` tool passed unjudged during the dedicated test phase
  * — the omp-shaped check alone can never see a real pi payload at all).
  */

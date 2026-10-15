@@ -1,4 +1,4 @@
-// Shared scratch-settings fixtures for the doctor test seam (ticket 07) —
+// Shared scratch-settings fixtures for the doctor test seam —
 // tests/adapter-doctor.test.ts, tests/adapter-run-sessionstart.test.ts, and
 // tests/cli-commands-doctor.test.ts all built the same three literals
 // independently before this round; a prior review round flagged the drift
@@ -26,12 +26,12 @@ export const CANARY_COMMAND = buildCanaryCommand('/fake/checkout/dist/bouncer');
 // must not infer semantics from the incidental word "ping".
 export const PING_WORD_COMMAND = 'printf ping';
 
-// Ticket 08: shadow-mode wiring — same binary, same `run` arg
+// Shadow-mode wiring — same binary, same `run` arg
 // (pointsAtBouncer only requires 'run' among the args, so this already
 // counts as wired), with `--shadow` appended.
 export const BOUNCER_SHADOW_COMMAND = '/fake/checkout/dist/bouncer run --shadow';
 
-// Ticket 08 review round: a typo'd flag in the LIVE wiring — still
+// A typo'd flag in the LIVE wiring — still
 // "points at bouncer" (pointsAtBouncer only checks for 'run'), but the
 // wiring check should fail loudly on the unrecognized token.
 export const BOUNCER_TYPO_COMMAND = '/fake/checkout/dist/bouncer run --shadwo';
@@ -58,7 +58,7 @@ export const HEALTHY_HOOKS = {
   PostToolUseFailure: [{ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
 };
 
-// Ticket 15b: the same shared-fixture discipline, for codex-hooks
+// The same shared-fixture discipline, for codex-hooks
 // (ADR-0006 § 6) — tests/fixtures-protocol.test.ts's codex.json replay
 // reuses these rather than a second hand-typed copy.
 const CODEX_PROTOCOL = BASELINE.rules.harness.find((h) => h.id === 'codex')!.protocol!;

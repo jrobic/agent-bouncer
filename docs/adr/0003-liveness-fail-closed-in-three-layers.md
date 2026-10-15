@@ -124,7 +124,7 @@ configuration repository's shell config, not in this repository.
 
 Three layers, each covering what the one above cannot:
 
-1. **Canary (this repository, ticket 25, commit `903b052`)** — covers the
+1. **Canary (this repository, commit `903b052`)** — covers the
    session in progress against a binary that is missing, not executable,
    corrupted, replaced mid-session by a rebuild, or a Bun runtime that
    fails to start. Canonical entry, printed by `bouncer doctor
@@ -146,8 +146,8 @@ Three layers, each covering what the one above cannot:
    so in the check message.
 2. **Launcher (configuration repository)** — the `claude` shell function
    guarded by `bouncer doctor`; covers the next session against a wiped or
-   edited `hooks` block. `ask: Edit(~/.claude/settings.json)` (ticket 01)
-   covers the agent editing the wiring.
+   edited `hooks` block. `ask: Edit(~/.claude/settings.json)` covers the
+   agent editing the wiring.
 3. **Declarative layer, reduced (configuration repository)** —
    `Read(~/.ssh/**)`, `Read(~/.gnupg/**)`, `Read(~/.aws/**)` stay in
    `permissions.deny`; the 18 `Read(**/…)` globs go.
@@ -161,8 +161,8 @@ Claude Code's own "deny wins across parallel hooks" rule is what makes the
 two entries compose without either knowing about the other. `ping` shares
 `run`'s dispatcher construction so that "runnable" means what `run` means —
 with one deliberate divergence: an unreadable config directory exits 1 even
-though `run` would silently enforce the baseline, because the ticket wants
-that failure to surface (documented in `docs/reference/cli.md` § `ping`).
+though `run` would silently enforce the baseline, because that failure
+must surface (documented in `docs/reference/cli.md` § `ping`).
 
 ## Consequences
 
@@ -189,14 +189,14 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Canary entry removed or edited by the agent | Low | High | ticket 01's `ask` on `Edit(~/.claude/settings.json)`; layer 2 refuses the next launch; `doctor` names the missing entry |
+| Canary entry removed or edited by the agent | Low | High | the `ask` on `Edit(~/.claude/settings.json)`; layer 2 refuses the next launch; `doctor` names the missing entry |
 | Half-written binary during a reinstall denies every call for a moment | Medium, transient | Low | install atomically (`cp` to `bouncer.new`, `mv -f`), as the provenance memory prescribes — the deny is the intended behaviour, the window is the thing to shrink |
 | A hook timeout leaves the call to proceed | Unknown (undocumented) | Medium | outside any hook's reach; `ping` does the minimum; measured cost keeps both entries far under any plausible timeout |
-| `doctor` red on every session blamed on bouncer | High until layer 2 lands | Low | the check message names the fix (`--print-canary`); tracked as a configuration-repository follow-up of ticket 25 |
+| `doctor` red on every session blamed on bouncer | High until layer 2 lands | Low | the check message names the fix (`--print-canary`); tracked as a configuration-repository follow-up |
 
 ## Implementation plan
 
-### Phase 1 — this repository (ticket 25)
+### Phase 1 — this repository (commit `903b052`)
 - [x] `bouncer ping` through `withDispatcherLikeRun` (shared with `run`),
       plus the config-dir readability probe; exit 0/1, no stdin, no stdout.
 - [x] `src/adapter/canary.ts`: one builder for the canonical line, one
@@ -228,11 +228,12 @@ that failure to surface (documented in `docs/reference/cli.md` § `ping`).
 
 - `src/adapter/canary.ts`, `src/adapter/doctor.ts`, `src/cli-commands.ts`,
   `src/adapter/run.ts` (`withPolicyLikeRun`, named `withDispatcherLikeRun`
-  until ticket 59).
+  until PR #30).
 - `docs/reference/cli.md` § `ping`, § `doctor`;
   `docs/how-to/wire-into-claude-code.md` step 4.
-- Ticket 01 (settings hardening, `ask` on settings edits), ticket 07
-  (doctor + SessionStart scream), ticket 08 (shadow mode).
+- Settings hardening in the configuration repository (`ask` on settings
+  edits, in the `settings.json` permissions), commit `a512dda` (doctor +
+  SessionStart scream), commit `68b004b` (shadow mode).
 - Claude Code hooks reference (exit-code semantics, parallel hooks, deny
   wins), as read on 2026-09-04.
 

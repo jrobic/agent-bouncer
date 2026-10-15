@@ -10,22 +10,22 @@
 //
 // ONE pipeline, loadPolicyFromLayers (ADR-0001): named layers (today,
 // exactly two — "common" then "profile", precedence order), each a SET
-// of files, not one (ticket 12) — `policy.toml` (if present), then every
+// of files, not one — `policy.toml` (if present), then every
 // `policy.d/*.toml` file the adapter found, in lexicographic filename
 // order (src/adapter/policy.ts decides that order; this module just
 // processes whatever list it's given, in the order given). Two files of
 // the SAME layer targeting the same thing is a lint failure; the SAME
 // target across TWO layers is precedence — the later layer wins, the
 // earlier one's entry is dropped and the survivor carries `shadows`
-// naming it (see resolvePrecedence). Rejection is PER LAYER (ticket 21,
-// ADR-0001 § Rejection): a fault anywhere in a layer's file set rejects
+// naming it (see resolvePrecedence). Rejection is PER LAYER
+// (ADR-0001 § Rejection): a fault anywhere in a layer's file set rejects
 // THAT layer only — its files drop out, every other layer keeps running.
 // The one exception is a profile `[[override]]` whose target lived in a
 // common layer that just got rejected: it no longer resolves, so the
 // profile layer is rejected too, and the baseline runs alone — never a
 // partial profile (see loadPolicyFromLayers's retry loop). Both layers
 // gone (independently broken, or cascaded) is still "the baseline alone",
-// exactly as before ticket 21 — what changed is that a healthy layer next
+// exactly as before per-layer rejection — what changed is that a healthy layer next
 // to a broken one now stays live instead of falling with it.
 // loadPolicyFromOverlayFiles is this pipeline's one-layer degenerate
 // case (`loadPolicyFromLayers([{ name: 'profile', files }])`) — with
@@ -193,7 +193,7 @@ export interface LoadResult {
   readonly overlayFiles: readonly string[];
   readonly activeOverrides: readonly ActiveOverride[];
   readonly activeRelaxations: readonly ActiveRelaxation[];
-  // Review round 1 S-6: every harness id declared or extended by an
+  // Every harness id declared or extended by an
   // overlay (never a pure-baseline harness untouched by any layer),
   // computed ONCE at merge time from each harness's own configSources —
   // never re-derived downstream by string-matching a harness id against
@@ -767,7 +767,7 @@ interface MergedHarness extends HarnessDeclaration {
   readonly persistentSources: ReadonlyMap<string, readonly HarnessContribution[]>;
 }
 
-// Review round 1 S-6: the LoadResult.overlayHarnessIds source — a
+// The LoadResult.overlayHarnessIds source — a
 // harness untouched by any layer has configSources === ['baseline']
 // exactly; anything else (an overlay appended dir/env/persistent
 // entries, or declared the harness itself) makes it overlay-touched.
@@ -1096,7 +1096,7 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
 // (`byLayer.size > 1`) unreachable and its behavior degenerate into "same
 // key, two files → reject" (the property tests/policy-load.test.ts and
 // tests/policy-load-multifile.test.ts already pin, now under a `profile:`
-// qualified filename). Rejection is PER LAYER (ticket 21): a broken file
+// qualified filename). Rejection is PER LAYER (ADR-0001 § Rejection): a broken file
 // rejects ITS layer only — see loadPolicyFromLayers's retry loop, below
 // resolvePrecedence. What layering changes about conflicts is what "the
 // same target in two files" MEANS: within one layer it is still an
@@ -1120,7 +1120,7 @@ function extractFileEntries(layer: string, filename: string, parsed: ParsedFile[
 // value, and the survivor(s) carry `shadows` naming every earlier
 // layer's (one per layer, since same-layer duplicates were already
 // rejected above) file, joined — not just the first one, so a 3+-layer
-// deployment (a future adapter, ticket 15) still names every layer it
+// deployment (a future adapter, ADR-0006) still names every layer it
 // shadowed, not only the nearest.
 function resolvePrecedence<E extends { readonly filename: string; readonly layer: string; }>(
   entries: readonly E[],
@@ -1270,7 +1270,7 @@ function finalizeLayerInfo(base: readonly LayerInfo[], rejections: ReadonlyMap<s
 
 /**
  * One compose attempt over EXACTLY the layers given — the Phase 1/2/3
- * pipeline ticket 20 built (parse, layer-aware precedence, merge, lint),
+ * pipeline commit `bd6445a` built (parse, layer-aware precedence, merge, lint),
  * unchanged in substance. Throws PolicyRejected (never returns a
  * rejection) so loadPolicyFromLayers's retry loop can attribute the
  * failure to a layer and retry without it — this function itself has no
@@ -1535,7 +1535,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
  * naming the file(s) it replaced. Two files of the SAME layer sharing a
  * target is still an unconditional lint error (resolvePrecedence).
  *
- * Rejection is PER LAYER (ticket 21, ADR-0001 § Rejection): attemptCompose
+ * Rejection is PER LAYER (ADR-0001 § Rejection): attemptCompose
  * is retried with progressively fewer layers whenever it throws, each
  * retry dropping exactly the layer(s) groupIssuesByLayer attributes the
  * failure to — a broken common file drops common, keeps profile; a broken
@@ -1545,7 +1545,7 @@ function attemptCompose(layers: readonly NamedLayer[]): Omit<LoadResult, 'layers
  * the retry — that failure is attributed to the PROFILE file carrying the
  * override, so profile is rejected too, and the loop bottoms out at the
  * baseline alone. Two layers converge in at most two retries; a future
- * third layer (ticket 15) in at most three.
+ * third layer (ADR-0006) in at most three.
  *
  * `layers` on the returned LoadResult always names every ORIGINAL layer's
  * root (when it exists) and the files it was given, win or lose — a
@@ -1622,7 +1622,7 @@ export function loadPolicyFromOverlayFiles(files: readonly OverlayFile[]): LoadR
  * (adapter) path calls loadCurrentPolicy's own two-layer
  * loadPolicyFromLayers call directly. `null` and blank text are both "no
  * overlay file present" — baseline alone, silently (matches the
- * original, pre-ticket-12 behavior exactly).
+ * original, pre-`policy.d` behavior exactly).
  */
 export function loadPolicyFromOverlayText(overlayText: string | null): LoadResult {
   if (overlayText === null || overlayText.trim() === '') return loadPolicyFromOverlayFiles([]);

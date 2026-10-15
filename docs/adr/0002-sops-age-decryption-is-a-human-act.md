@@ -36,7 +36,7 @@ were not).
 
 ### Constraints
 
-- Universality bar (ticket 13): a baseline row must be inert for a consumer
+- Universality bar (commit `bb8b593`): a baseline row must be inert for a consumer
   who has no sops, no age, no `.aws` — never a false positive on an
   ordinary workstation.
 - `--dangerously-skip-permissions` turns every `confirm` into an effective
@@ -103,7 +103,7 @@ Parse the command like the git guard does and decide on argv.
 **Pros**: exact command-position detection, no false positive on prose
 (`brew install sops age`, `rg sops docs/`).
 
-**Cons**: a new engine mechanism for one tool; the ticket said "the
+**Cons**: a new engine mechanism for one tool, against the rule "the
 fixtures decide, not the mechanism". A regex anchored at command head —
 start of string or `;&|(`, then optional `VAR=value` assignments and the
 engine's benign wrappers (`rtk`, `command`, `exec`, `env`, `nice`, `time`,
@@ -115,7 +115,7 @@ every fixture, including the three false positives above as allows.
 ## Decision
 
 **Option 2.** The rows, as shipped in `policy/secret.toml` (commit
-`7b86e18`, ticket 24):
+`7b86e18`):
 
 - `sops-decrypt` (bash): the explicit forms `-d`, `--decrypt`, `decrypt`,
   `exec-env`, `exec-file`, `edit` anywhere after a `sops` word, plus the
@@ -123,8 +123,7 @@ every fixture, including the three false positives above as allows.
   Not matched: `-e`/`encrypt`, `set`, `unset`, `rotate`, `updatekeys`,
   `publish`, `filestatus`, `groups`, `--version`, `--help`, and prose
   (`echo sops`, `which sops`, `brew install sops age`, `rg sops docs/`).
-- `age-decrypt` (bash): `age`/`rage` with `-d`/`--decrypt`. `Debatable
-  (ticket 24)`.
+- `age-decrypt` (bash): `age`/`rage` with `-d`/`--decrypt`. `Debatable`.
 - `age-identity` (path): `(^|/)sops/age/[^/]+$|(^|/)age/keys\.txt$` —
   every default identity location plus the bare `age/keys.txt` convention;
   `crypto-key` already covers `*.agekey`.
@@ -170,17 +169,17 @@ doctrine, the override states the exception and its reason.
 
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Prose or install commands blocked by the implicit-edit form | Low | Low | anchored at command head; `brew install sops age`, `rg sops docs/`, quoted commit messages pinned as allow fixtures (review rounds 1–2b of ticket 24) |
-| A consumer who uses `age` for non-secret files is blocked | Medium | Low | `Debatable (ticket 24)` annotation; `[[override]] action = "relax"` |
+| Prose or install commands blocked by the implicit-edit form | Low | Low | anchored at command head; `brew install sops age`, `rg sops docs/`, quoted commit messages pinned as allow fixtures |
+| A consumer who uses `age` for non-secret files is blocked | Medium | Low | `Debatable` annotation; `[[override]] action = "relax"` |
 | Plaintext already in the agent's environment at launch | Low | High | out of scope by construction; launch discipline (start `claude` from a shell that has not loaded production) |
 | Decryption reached through a wrapper the regex does not list | Low | Medium | the explicit forms use `\bsops` (any prefix); only the implicit edit form is anchored — extend the wrapper list if a real one appears |
 
 ## Implementation plan
 
-- [x] Ticket 24 — four rows, fixtures both directions, digest lock, TOML
+- [x] Four rows, fixtures both directions, digest lock, TOML
       comments (doctrine, known limits, `debatable`), `docs/reference/policy.md`
-      (`rules.secret.bash` row, known limits), ticket-13 triage table
-      (universal ×3, debatable ×1). Commit `7b86e18`.
+      (`rules.secret.bash` row, known limits), the baseline universality
+      triage (universal ×3, debatable ×1). Commit `7b86e18`.
 - [x] Shipped in the grouped reinstall of 2026-09-04 (`903b052`).
 
 ## Success metrics
@@ -202,7 +201,7 @@ doctrine, the override states the exception and its reason.
   (`sops-*`, `age-*`, `aws-creds-*` cases, `knownLimit` on `--config`).
 - `docs/reference/policy.md` § The five regex tables, § Known limits,
   `docs/how-to/override-a-baseline-rule.md` (the `relax` form).
-- Ticket 13 (baseline universality bar).
+- Commit `bb8b593` (baseline universality bar).
 
 ---
 

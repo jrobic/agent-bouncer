@@ -69,7 +69,7 @@ async function main(): Promise<void> {
       console.error(`${HOOK_NAME}: ${harnessFlag.error}`);
       process.exit(1);
     }
-    // Ticket 08: `bouncer run --shadow` — visible and greppable in the
+    // `bouncer run --shadow` — visible and greppable in the
     // settings.json command string that invokes it (no magic env var).
     // Belt-and-suspenders on the "never emits, absolute" contract: run()
     // itself already returns SILENT on every path once shadow is set (see

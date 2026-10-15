@@ -20,7 +20,7 @@ afterEach(() => {
 
 async function freshAccountDir(prefix = 'bouncer-policy-protection-'): Promise<string> {
   const dir = tmpDir(prefix);
-  // The ticket-13 lesson: assert before use, never trust an unverified var.
+  // Lesson learned: assert before use, never trust an unverified var.
   process.env.CLAUDE_CONFIG_DIR = dir;
   if (!process.env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR.trim() === '') {
     throw new Error('CLAUDE_CONFIG_DIR failed to set — refusing to proceed (would fall through to live ~/.claude)');

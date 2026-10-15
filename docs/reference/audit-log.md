@@ -10,7 +10,7 @@ gets its own file; a different harness on the SAME account gets its own
 file too — nothing is ever shared or interleaved.
 
 Every line is one JSON object and carries a `harness` field (the target
-harness's own id — always present since ticket 15a; an entry without one
+harness's own id — always present since commit `f69d37a`; an entry without one
 predates ADR-0006). Three shapes share the file, distinguished by their
 OTHER fields (there's no second `kind` field common to all three — a
 verdict entry is recognized by having `rule_id`, `verdict`, and `family`
@@ -30,7 +30,7 @@ protected value in it.
 ```
 
 A harness whose `[harness.protocol.input]` declares an optional
-`permission` selector (review round 1 P-4 — Codex's own `permission_mode`
+`permission` selector (Codex's own `permission_mode`
 is the only one today) adds a `permission` field carrying that value
 verbatim, whenever the envelope actually sent one:
 
@@ -92,7 +92,7 @@ the original error is not retained in the log, so replay cannot re-judge it.
 Written once, as the FIRST line of a newly created or freshly rotated
 log file, when the policy that produced the entry about to follow it has
 at least one of: an active override, an active relaxation, OR (ADR-0006
-§ 5, ticket 15a) a harness this account's overlay declared or extended —
+§ 5) a harness this account's overlay declared or extended —
 `overlay_harnesses` below. Never written into an existing, non-empty
 file, and never written at all when none of the three is true — a
 healthy, unmodified baseline account never gets one, even one running a

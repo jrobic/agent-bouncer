@@ -1,4 +1,4 @@
-// Ticket 54 reconstructs direct NeutralCalls: no input selectors or codecs run,
+// Audit replay (PR #11) reconstructs direct NeutralCalls: no input selectors or codecs run,
 // and no tool is executed. Superset surfaces err toward still-friction; truncated,
 // write-secret, prompt, unknown-tool, and other-harness entries remain as logged.
 import type { HarnessProtocol, HarnessToolRow } from '../policy/schema.ts';

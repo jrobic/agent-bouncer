@@ -123,7 +123,7 @@ describe('loadCurrentPolicy(): harness overlays use a real temporary layer', () 
   });
 });
 
-describe('run(): Story 19 — the audit log opens with a header naming active overrides/relaxations', () => {
+describe('run(): the audit log opens with a header naming active overrides/relaxations', () => {
   test('the first log entry on a fresh account with an active override is the audit header', async () => {
     const accountDir = await accountWithOverlay(`
       [[override]]
@@ -144,7 +144,7 @@ describe('run(): Story 19 — the audit log opens with a header naming active ov
       { id: 'curl-file-upload', action: 'disable', reason: 'test: proving the audit header names this override' },
     ]);
     expect(lines[0].relaxations).toEqual([]);
-    // review round 1 S-2: snake_case, matching every other field in this
+    // snake_case, matching every other field in this
     // file (session_id, tool_name, rule_id) — no harness was declared or
     // extended by this overlay, so the list is empty even though the
     // header itself fires (the override alone is enough to trigger it).
@@ -191,7 +191,7 @@ describe('run(): a broken overlay keeps the baseline active and logs a loud warn
     const lines = logContent.trim().split('\n').map((l) => JSON.parse(l));
     const warning = lines.find((l) => l.kind === 'policy-warning');
     expect(warning).toBeDefined();
-    // Per-layer rejection (ticket 21): the message names the layer and
+    // Per-layer rejection (ADR-0001 § Rejection): the message names the layer and
     // file at fault, not a generic "falls back to baseline" — the
     // BEHAVIOR (baseline enforced) is what the deny verdict above already
     // proved.
@@ -214,7 +214,7 @@ describe('run(): a broken overlay keeps the baseline active and logs a loud warn
   });
 });
 
-describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)', () => {
+describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk', () => {
   async function freshAccountDir(): Promise<string> {
     const dir = tmpDir('bouncer-policy-d-e2e-');
     process.env.CLAUDE_CONFIG_DIR = dir;
@@ -236,7 +236,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
     const loaded = await loadCurrentPolicy('claude-code');
     expect(loaded.warnings).toEqual([]);
     expect(loaded.overlayApplied).toBe(true);
-    // Layer-qualified (ticket 20, ADR-0001): loadCurrentPolicy('claude-code') always
+    // Layer-qualified (ADR-0001): loadCurrentPolicy('claude-code') always
     // reads the account's own overlay as the "profile" layer now.
     expect(loaded.overlayFiles).toEqual(['profile:policy.d/10-npm.toml']);
     const entry = loaded.effectiveRules.find((r) => r.rule.id === 'block-npm-publish');
@@ -327,7 +327,7 @@ describe('loadCurrentPolicy(): policy.d/*.toml, real files on disk (ticket 12)',
   });
 });
 
-describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is never silently dropped', () => {
+describe('loadCurrentPolicy(): an unreadable policy.d file is never silently dropped', () => {
   async function freshAccountDir(): Promise<string> {
     const dir = tmpDir('bouncer-policy-review2-');
     process.env.CLAUDE_CONFIG_DIR = dir;
@@ -398,7 +398,7 @@ describe('loadCurrentPolicy(): review round 2 — an unreadable policy.d file is
   });
 });
 
-describe('loadCurrentPolicy(): review round 2 — a blank policy.toml is "no overlay", not an applied-but-empty one', () => {
+describe('loadCurrentPolicy(): a blank policy.toml is "no overlay", not an applied-but-empty one', () => {
   test('a whitespace-only policy.toml on disk gives overlayApplied: false (original single-file semantics)', async () => {
     const accountDir = tmpDir('bouncer-policy-blank-');
     await mkdir(join(accountDir, 'bouncer'), { recursive: true });

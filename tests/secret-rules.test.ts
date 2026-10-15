@@ -160,7 +160,7 @@ describe('secret-rules: PATH_RULES', () => {
     expect(checkPath('/home/user/.gitconfig')?.ruleId).toBe('gitconfig');
   });
 
-  // hook-log moved OUT of the baseline by ticket 13 (baseline universality
+  // hook-log moved OUT of the baseline by commit `bb8b593` (baseline universality
   // triage) — predecessor-tool/personal-migration artifact, not a
   // universal hazard. Its behavioral cases, including the "documented
   // gap: rotated .log.1 is not blocked" case and the legacy-naming
@@ -169,7 +169,7 @@ describe('secret-rules: PATH_RULES', () => {
   // directly.
 
   test('ruleId transcript-backup: .claude/transcripts/ is confirmed, not blocked outright', () => {
-    // Review round 2's arbitration: stays in the baseline (protects by
+    // Arbitrated: stays in the baseline (protects by
     // default) but at verdict "confirm" rather than "block" — a
     // legitimate read isn't stopped outright, just asked about. See the
     // `verdict = "confirm"` row in policy/secret.toml.
@@ -178,7 +178,7 @@ describe('secret-rules: PATH_RULES', () => {
     expect(hit?.verdict).toBe('confirm');
   });
 
-  // Ticket 14: the binary's OWN audit log — universal (every consumer has
+  // The binary's OWN audit log — universal (every consumer has
   // it), confirm not block (Jonathan's arbitration: same reasoning as
   // transcript-backup — `bouncer audit` is the sanctioned read path and
   // never goes through this guard at all; a direct ad hoc read is a
@@ -234,7 +234,7 @@ describe('secret-rules: PATH_RULES', () => {
       // verdict — silently upgrading a "confirm" rule (transcript-backup,
       // and now this one) to "block" the moment it was reached through a
       // Bash command instead of a Read/Grep tool call. Fixed alongside
-      // this ticket; see src/secret-rules.ts's checkSecretBash.
+      // this rule; see src/secret-rules.ts's checkSecretBash.
       const hit = checkSecretBash('cat logs/hooks/bouncer.log');
       expect(hit?.ruleId).toBe('bash-bouncer-audit-log');
       expect(hit?.verdict).toBe('confirm');
@@ -243,7 +243,7 @@ describe('secret-rules: PATH_RULES', () => {
 
   test('Bash: cat on a transcript-backup path also propagates confirm, not a hardcoded block', () => {
     // Same regression seam as bouncer-audit-log above, proven against the
-    // OTHER confirm-verdict rule already in the baseline (ticket 13).
+    // OTHER confirm-verdict rule already in the baseline.
     const hit = checkSecretBash('cat .claude/transcripts/foo.json');
     expect(hit?.ruleId).toBe('bash-transcript-backup');
     expect(hit?.verdict).toBe('confirm');
@@ -293,7 +293,7 @@ describe('secret-rules: PATH_RULES', () => {
     expect(checkSecretBash('gh auth token')).toMatchObject({ verdict: 'confirm', ruleId: 'credential-printer' });
   });
 
-  // Ticket 57 completed the row (same id, `confirm`): the short flag of
+  // PR #19 completed the row (same id, `confirm`): the short flag of
   // `auth status`, `glab config get token`, `git credential fill`, a docker
   // credential helper, an npm auth token, the AWS CLI's secret reads. The
   // original forms are listed again so a regression on either side shows.
@@ -804,7 +804,7 @@ describe('secret-rules: references to a protected variable', () => {
     expect(checkSecretBash(command)).toMatchObject({ verdict: 'confirm', ruleId: 'env-ref' });
   });
 
-  // Decision F1 (the name definition) and its examples live in
+  // The name definition and its examples live in
   // tests/protected-name-examples.ts, shared with the env-value detector's own
   // drift test: ONE definition (src/protected-names.ts) — the baseline rows
   // write `{{protected-name}}` and the loader fills it in, so the rows and

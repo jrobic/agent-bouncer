@@ -1,10 +1,10 @@
-// The multi-file overlay seam (ticket 12): `policy.toml` plus a
+// The multi-file overlay seam: `policy.toml` plus a
 // `policy.d/*.toml` directory, merged in file order — every behavioral
 // case here names an observed property at src/policy/load.ts's
 // loadPolicyFromOverlayFiles boundary, not internal structure. Written
 // before that function exists (TDD). Complements tests/policy-load.test.ts
 // (the pre-existing single-file seam, unchanged behavior via
-// loadPolicyFromOverlayText, which this ticket keeps as a thin wrapper).
+// loadPolicyFromOverlayText, which stays a thin wrapper).
 
 import { describe, expect, test } from 'bun:test';
 import { loadPolicyFromOverlayFiles, type OverlayFile } from '../src/policy/load.ts';
@@ -359,7 +359,7 @@ describe('loadPolicyFromOverlayFiles: cross-file [[override]]/[[relax]] conflict
   });
 });
 
-describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket 13, carried from 12)', () => {
+describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id', () => {
   test('the SAME regex rule id defined in two DIFFERENT overlay files is rejected, naming both files', () => {
     const files = [
       file(
@@ -466,7 +466,7 @@ describe('loadPolicyFromOverlayFiles: cross-file duplicate regex rule id (ticket
     expect(result.warnings.join(' ')).toContain('not globally unique');
   });
 
-  test('an overlay id colliding with a BASELINE id is rejected (ticket 22, ADR-0001 § Precedence)', () => {
+  test('an overlay id colliding with a BASELINE id is rejected (ADR-0001 § Precedence)', () => {
     // An overlay row at a baseline id never fires on its own terms
     // (first-match-wins always picks the baseline row first, so the
     // overlay row is dead weight), while an `[[override]]` naming that id

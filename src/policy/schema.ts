@@ -223,7 +223,7 @@ export interface HarnessTemplate {
   readonly exit?: number;
 }
 
-// Review round 2 R2-1: `prompt`/`session_start` are OPTIONAL — a harness
+// `prompt`/`session_start` are OPTIONAL — a harness
 // that never judges prompts (or has no doctor-facing SessionStart
 // surface) declares neither, rather than being forced to lie about
 // fields it has no envelope shape for. `src/policy/harness.ts`'s
@@ -237,8 +237,8 @@ export interface HarnessProtocolInput {
   readonly session: string;
   readonly prompt?: string;
   readonly cwd: string;
-  // Review round 1 P-4: optional — Codex's own envelope carries
-  // `permission_mode`, never read for a decision (the brief's own non-
+  // Optional — Codex's own envelope carries
+  // `permission_mode`, never read for a decision (a deliberate non-
   // goal), only LOGGED on every verdict entry for the call (src/adapter/
   // run.ts/log.ts). Absent on claude-code.toml, which sends no such
   // field at all.

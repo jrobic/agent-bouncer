@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The dedicated test phase ADR-0006 § 10 requires before a second harness
-# ships (ticket 15b § 5): ten probes against a REAL Codex CLI session,
+# ships: ten probes against a REAL Codex CLI session,
 # under a temporary $CODEX_HOME wired to this repo's own compiled
 # `dist/bouncer`, with `--dangerously-bypass-hook-trust` for every probe
 # except #6 (which deliberately omits it — that's the probe). Each probe
 # captures the hook's own stdin (a `tee` wrapper ahead of `bouncer run`,
 # used wherever doctor's own wiring recognition — pointsAtBouncer's
 # executable-basename check — isn't itself under test) and records
-# prompt/stdin/outcome into results.md, so the 15b report's probe table
+# prompt/stdin/outcome into results.md, so the resulting probe table
 # cites real evidence, not a description of intended behavior.
 #
 # Auth provisioning of the temporary CODEX_HOME is a HUMAN STEP — this
@@ -22,8 +22,8 @@
 #   scripts/probe-codex.sh clean    — remove the temp CODEX_HOME/project. Never touches ~/.codex.
 #
 # Never export CODEX_HOME in your interactive shell rc — this script sets
-# it only for the child `codex`/`bouncer` processes it spawns (ticket 15b
-# trap: `codex exec` inherits the local `~/.codex` otherwise).
+# it only for the child `codex`/`bouncer` processes it spawns (`codex exec`
+# inherits the local `~/.codex` otherwise).
 
 set -euo pipefail
 
@@ -79,7 +79,7 @@ cmd_setup() {
 
   cat > "$TEE_WRAPPER" <<EOF
 #!/bin/sh
-# Captures the hook's own stdin for the report's probe table, then
+# Captures the hook's own stdin for results.md's probe table, then
 # forwards it unchanged to the real binary — never swallows or delays
 # the tool call, only observes it.
 tee -a "$STDIN_LOG" | exec "$BOUNCER_BIN" run --harness codex
@@ -89,8 +89,8 @@ EOF
   # A minimal config.toml — Codex fills in the rest (model, approvals)
   # from its own defaults; nothing here is load-bearing for the probes
   # themselves, only the file's mere presence. This repo never writes to
-  # the active ~/.codex/config.toml (a protected write, ticket
-  # 15b's own trap) — only this temp CODEX_HOME's own copy.
+  # the active ~/.codex/config.toml (a protected write)
+  # — only this temp CODEX_HOME's own copy.
   cat > "$PROBE_HOME/config.toml" <<'EOF'
 # Minimal probe config.toml (scripts/probe-codex.sh).
 EOF
@@ -249,7 +249,7 @@ probe_7() {
   local doctor_out
   doctor_out="$(CODEX_HOME="$PROBE_HOME" "$BOUNCER_BIN" doctor --harness codex 2>&1 || true)"
   local out
-  # Review round 1 P-2: 'Say hello and stop.' can never surface injected
+  # 'Say hello and stop.' can never surface injected
   # additionalContext — an echo-forcing prompt is the only way to actually
   # SEE whether the SessionStart scream reached the model, rather than
   # asserting it did from a prompt that never tested it.
@@ -266,7 +266,7 @@ probe_8() {
   write_hooks_json "$(tee_bouncer_command)"
   : > "$STDIN_LOG"
   local out
-  # Review round 1 P-2: keeps the injection-signature phrase policy/
+  # Keeps the injection-signature phrase policy/
   # prompt.toml's own ignore-previous rule matches (so the flag still
   # fires) AND forces an echo of any notice actually delivered, instead
   # of a refusal (ordinary model behavior) standing in as "evidence".

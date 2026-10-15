@@ -10,13 +10,13 @@
 //
 // Rule 6 ("an overlay may not relax an EXISTING BASELINE harness's
 // 'deny' confirm to 'ask'") needs a real baseline harness with a `deny`
-// confirm to drive it through the pipeline — ticket 15b's `codex.toml`
+// confirm to drive it through the pipeline — `codex.toml`
 // is the first one (claude-code's own confirm is `ask`). It is proved
 // three ways: directly against src/policy/harness.ts's pure
 // lintHarnessProtocolConfirmRelaxation (the same function src/policy/
 // load.ts's mergeHarnesses wires into the real merge — see that module
 // for the call site); end to end against the REAL embedded codex
-// baseline (P-1: `harness.d/codex.toml` relaxing confirm to `ask` is
+// baseline (`harness.d/codex.toml` relaxing confirm to `ask` is
 // rejected as a unit, the file+rule named in the warning, codex surviving
 // with its baseline `deny` untouched); and, separately, proved WIRED
 // the OTHER direction too — confirming a same-shaped RELAXATION on an
@@ -151,10 +151,10 @@ describe('[harness.protocol.output] lint: one rejection rule at a time', () => {
     expect(result.policy.harness.find((h) => h.id === 'acme')).toBeUndefined();
   });
 
-  // Ticket 15b (ADR-0006 § 6): `codec` is now a recognized tool-row field
+  // ADR-0006 § 6: `codec` is now a recognized tool-row field
   // with its own two-sided validation — an unknown name, and a codec
   // combined with a selector — each a named rejection, never the generic
-  // "not a recognized field" 15a fell back on before any codec existed.
+  // "not a recognized field" rejection used before any codec existed.
   test('an unknown codec rejects the block as a unit', () => {
     const protocol = replaceOne(
       validProtocol(),
@@ -192,7 +192,7 @@ describe('[harness.protocol.output] lint: one rejection rule at a time', () => {
   });
 });
 
-describe('review round 1 S-1: template stdout placeholder safety', () => {
+describe('template stdout placeholder safety', () => {
   test('a placeholder wrapped in quotes rejects the block as a unit', () => {
     const protocol = replaceOne(
       validProtocol(),
@@ -220,7 +220,7 @@ describe('review round 1 S-1: template stdout placeholder safety', () => {
   });
 });
 
-describe('review round 2 C-1: per-template allowed placeholders', () => {
+describe('per-template allowed placeholders', () => {
   test('${rule} and ${verdict} in a deny/ask template lint OK — the renderer actually fills them', () => {
     const protocol = replaceOne(
       validProtocol(),
@@ -281,7 +281,7 @@ describe('rule 6: an overlay cannot relax a BASELINE "deny" confirm to "ask"', (
     // never rejected — proving the rule is scoped to `configSources`
     // including "baseline", not to "any existing protocol".
     //
-    // R2-1: with confirm = "deny" the [harness.protocol.output.ask]
+    // With confirm = "deny" the [harness.protocol.output.ask]
     // table from validProtocol() would be a dead template (confirm isn't
     // "ask"), so it is stripped along with the confirm value itself.
     const denyProtocol = replaceOne(
@@ -305,8 +305,8 @@ describe('rule 6: an overlay cannot relax a BASELINE "deny" confirm to "ask"', (
     expect(acme?.protocol?.output.confirm).toBe('ask');
   });
 
-  test('P-1: wired into the real merge against the REAL embedded codex baseline — relaxing deny to ask is rejected as a unit, codex survives at deny', () => {
-    // codex.toml (ticket 15b) is the first BASELINE harness with a
+  test('wired into the real merge against the REAL embedded codex baseline — relaxing deny to ask is rejected as a unit, codex survives at deny', () => {
+    // codex.toml is the first BASELINE harness with a
     // "deny" confirm — this is rule 6 driven through the pipeline
     // against the real, shipped baseline, not a hand-built substitute.
     // validProtocol()'s own confirm is already "ask" with a non-empty
@@ -328,7 +328,7 @@ ${validProtocol()}
   });
 });
 
-// Review round 2 R2-1: `input.prompt`/`events.prompt`/`events.session_start`
+// `input.prompt`/`events.prompt`/`events.session_start`
 // were mandatory — a minimal declared harness (pre_tool + deny only, the
 // exact case of a user testing an unknown assistant, ADR-0006 § 7's
 // pi-agent by design) was rejected outright with four unrelated
@@ -365,7 +365,7 @@ stdout = '{"decision":"deny"}'
 `;
 }
 
-describe('review round 2 R2-1: minimal declaration (no prompt/session_start surface)', () => {
+describe('minimal declaration (no prompt/session_start surface)', () => {
   test('lints OK — pre_tool + deny alone is a complete, usable protocol', () => {
     const result = loadPolicyFromOverlayFiles([harnessFile('harness.d/acme.toml', minimalProtocol())]);
     expect(result.warnings).toEqual([]);

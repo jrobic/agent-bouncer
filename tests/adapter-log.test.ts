@@ -129,7 +129,7 @@ describe('run(): target truncation', () => {
   });
 });
 
-describe('logVerdict: ticket 08 — the shadow "mode" field', () => {
+describe('logVerdict: the shadow "mode" field', () => {
   test('mode: "shadow" is passed through, tagged on the entry', async () => {
     const accountDir = tmpDir('bouncer-log-test-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;

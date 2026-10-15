@@ -165,7 +165,7 @@ export function lintEffectiveDialect(effective: readonly EffectiveRule[]): LintI
 // Every ruleId a [[override]] entry is allowed to name — the regex rules
 // only (the {id, regex, reason} tables). Git-conditional forms and plain
 // allowlists (safe_subcommands, read_prefixes, ...) have no per-entry id
-// and are out of scope for override targeting in this ticket.
+// and are out of scope for override targeting.
 export function resolvableRuleIds(rules: RawPolicyFile['rules']): ReadonlySet<string> {
   return new Set(allRegexRules(rules).map(([, rule]) => rule.id));
 }

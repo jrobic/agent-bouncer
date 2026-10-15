@@ -1,4 +1,4 @@
-// The `codex-hooks` wiring codec (ADR-0006 § 6, ticket 15b): doctor's
+// The `codex-hooks` wiring codec (ADR-0006 § 6): doctor's
 // "was the hook cut by accident" detection for Codex CLI. Reads TWO
 // additive sources under the target harness's account directory —
 // `<dir>/hooks.json` (this codec's own file, same JSON hook-entry shape
@@ -23,9 +23,9 @@
 //     plugin-provided file — not produced by this codec, which only ever
 //     writes user-level `hooks.json`/`config.toml`), or, for an entry
 //     read from config.toml's OWN `[hooks]` table, this codec's own
-//     `configTomlPathFor(harness)` (a working hypothesis — see the 15b
-//     report's trust-hash-rule section for how this was checked and
-//     what to verify first if it turns out wrong).
+//     `configTomlPathFor(harness)` (a working hypothesis, not confirmed
+//     live — if it turns out wrong, first check which `<source>` Codex
+//     itself writes into `[hooks.state]` for a config.toml hook).
 //   - `<event_snake>` — the event name in snake_case (`PreToolUse` ->
 //     `pre_tool_use`), verified against a real, populated
 //     `~/.codex/config.toml` on 2026-09-07.
@@ -36,8 +36,9 @@
 //     array.
 // `trusted_hash = "sha256:<64 hex>"` — the exact hashing rule (command
 // string only, the handler's own canonical JSON, or the whole matcher
-// group) is UNDETERMINED as of this module's writing; see the 15b
-// report. Until it is confirmed, this codec checks PRESENCE ONLY: every
+// group) is UNDETERMINED as of this module's writing: it was attempted
+// live via `/hooks` in an authenticated session and not determined.
+// Until it is confirmed, this codec checks PRESENCE ONLY: every
 // bouncer-pointing handler has SOME trust record with a non-empty
 // `trusted_hash`, never that the hash is CURRENT — a real limitation
 // (ADR-0006 § Consequences: "lint proves shape, never behavior" applies
@@ -104,10 +105,10 @@ function eventArray(hooksTable: RawHookEntry, event: string): unknown[] {
 }
 
 /**
- * Reads BOTH sources once — S-5: the ONE place either entry point below
+ * Reads BOTH sources once — the ONE place either entry point below
  * (readCodexHooksForDoctor, checkCodexTrust) touches the filesystem, so
  * they can never drift into two different reads of the same account.
- * Review round 2 C-2: the result is carried on `WiringReadResult.raw`
+ * The result is carried on `WiringReadResult.raw`
  * (readCodexHooksForDoctor, below) so `checkCodexTrust` can reuse it
  * from there instead of calling this a second time per `doctor` run —
  * not exported: codex-hooks.ts is the only module that ever creates or
@@ -169,14 +170,14 @@ export async function readCodexHooks(
   return (await readCodexHooksForDoctor(pathOverride, harness, protocol)).settings;
 }
 
-// Review round 1 S-1/S-2/P-5: doctor used to blame `hooksJsonPathFor()`
+// Doctor used to blame `hooksJsonPathFor()`
 // for EVERY corrupt/absent/ok state regardless of which source actually
 // produced it, and always said "settings.json" even for this codec's own
 // `hooks.json`/`config.toml [hooks]`. `corrupt` now names the ONE file
 // that broke; `absent` names both candidate paths (neither exists yet);
 // `ok` names exactly the file(s) that were actually read — `hooks.json`
 // alone, `config.toml [hooks]` alone, or both, never a file that was
-// never opened. Review round 2 C-2: every branch also carries the raw
+// never opened. Every branch also carries the raw
 // sources on `.raw`, so `checkCodexTrust` (below, via registry.ts's
 // `extraChecks`) never re-reads them.
 export async function readCodexHooksForDoctor(
@@ -276,7 +277,7 @@ function isTrusted(state: RawHookEntry, entry: TrustEntry): boolean {
  * Zero bouncer handlers at all (nothing wired yet) is `ok`, not a
  * failure — checkWiring's own checks already name that as a missing
  * primary entry; this check only ever screams about handlers that ARE
- * wired but not (yet, or no longer) trusted. Review round 2 C-2: pure
+ * wired but not (yet, or no longer) trusted. Pure
  * and synchronous — reads `result.raw`, the SAME sources
  * `readCodexHooksForDoctor` already read for this `doctor` run, rather
  * than touching the filesystem again.

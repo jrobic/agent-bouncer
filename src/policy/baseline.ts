@@ -1,9 +1,9 @@
 // The embedded baseline: twelve STATIC imports — one per rule family
 // (policy/command.toml, secret.toml, protected-write.toml, mcp-write.toml,
 // write-secret.toml, prompt.toml — split from one ~500-line
-// policy/baseline.toml for review/diff visibility, ticket 12) plus one per
+// policy/baseline.toml for review/diff visibility) plus one per
 // baseline harness declaration (policy/harness/<id>.toml, one `[[harness]]`
-// block each — split from the single policy/harness.toml, ticket 15a, so a
+// block each — split from the single policy/harness.toml, so a
 // harness declaration reviews and diffs like any other assistant-specific
 // file) — merged at build time into the same shape a single file used to
 // produce. `bun run scripts/build.ts` inlines every parsed TOML file into the

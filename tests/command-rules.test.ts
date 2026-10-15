@@ -519,7 +519,7 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
   });
 });
 
-// Ticket 13 (baseline universality triage): `pull`/`merge` `--ff-only`
+// Baseline universality triage: `pull`/`merge` `--ff-only`
 // safe-grammar entries moved out of the baseline — a fast-forward-only/
 // linear-history discipline is a personal git habit, not an objective
 // hazard. Neither sub is governed by ANY declarative table nor
@@ -529,7 +529,7 @@ describe('command-rules: conditional git forms decide on arguments (3 → 16)', 
 // example overlay (examples/personal-overlay.toml) restores the old
 // baseline behavior; see tests/personal-policy.test.ts for that half of
 // the story.
-describe('command-rules: git pull/git merge always ask in the trunk baseline (ticket 13)', () => {
+describe('command-rules: git pull/git merge always ask in the trunk baseline', () => {
   test('git pull --ff-only asks (no longer ratified — moved to the personal overlay)', () => {
     expect(checkGit('git pull --ff-only')?.ruleId).toBe('git-protected');
   });
@@ -1202,7 +1202,7 @@ describe('command-rules: shell line continuations are removed before tokenizatio
   });
 });
 
-// git pull/merge dropped from this test (ticket 13): both now ask
+// git pull/merge dropped from this test: both now ask
 // unconditionally regardless of any --ff-only marker (see the dedicated
 // "always ask in the trunk baseline" describe block above), so a case
 // proving "the shell comment didn't leak the marker through" would be
@@ -1223,7 +1223,7 @@ describe('command-rules: shell comments cannot inject read-only mode markers', (
 });
 
 // git pull/merge -m cases and the pull/merge `--` positional cases both
-// dropped from this file (ticket 13): with pull/merge asking
+// dropped from this file: with pull/merge asking
 // unconditionally in the trunk now, "the marker got consumed as a
 // message/positional instead of recognised as the mode flag" is no
 // longer distinguishable from "it asks regardless" — see
@@ -1391,7 +1391,7 @@ describe('command-rules: harness self-configuration', () => {
   });
 });
 
-// Ticket 41 round 1 (Standards F1): `chmod-root`/`chown-root` briefly let a
+// `chmod-root`/`chown-root` briefly let a
 // `-R`-bearing token satisfy BOTH the leading flag repetition and the
 // mandatory `-R` group, so an unbounded `(?:-\S+\s+)*` on both sides made
 // the match O(n^2) in the number of flag-shaped tokens. Past ~16000 of
@@ -1406,7 +1406,7 @@ describe('command-rules: harness self-configuration', () => {
 // maintenance hazard, so this is a behavioral + timing lock instead: a
 // 20000-token adversarial prefix (well past the ~16000-token threshold
 // that broke the unbounded regex) must still resolve, and fast.
-describe('command-rules: flag-repetition rows stay linear under adversarial padding (ticket 41 round 1)', () => {
+describe('command-rules: flag-repetition rows stay linear under adversarial padding', () => {
   test.each([
     ['chmod-root', 'chmod ' + '-R '.repeat(20000) + 'z ; chmod -R 777 /'],
     ['chmod-root', 'chmod ' + '--recursive '.repeat(20000) + 'z ; chmod -R 777 /'],

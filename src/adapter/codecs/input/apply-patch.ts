@@ -27,8 +27,8 @@
 // unparseable: no paths, no text, nothing to partially trust — the call
 // is judged on nothing, never a thrown error that could crash the hook
 // into reading as unguarded. A patch WITH a valid frame whose body hits
-// a line matching no recognized directive/hunk shape (review round 1
-// S-9) keeps every path and `+` text line already parsed before that
+// a line matching no recognized directive/hunk shape
+// keeps every path and `+` text line already parsed before that
 // line — judge what was seen, say what was not — rather than discarding
 // an otherwise-good prefix over one bad trailing line. Either way, one
 // stderr line names the failure so a human debugging a silent allow (or
@@ -116,7 +116,7 @@ export function parseApplyPatch(raw: string, hookName: string): ApplyPatchResult
       index += 1;
       continue;
     }
-    // Review round 1 S-9: keeps every path and `+` text line already
+    // Keeps every path and `+` text line already
     // parsed before this point — judge what was seen, say what was
     // not — rather than discarding a partially-good patch just because
     // its body goes off the rails partway through. Only a patch missing

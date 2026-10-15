@@ -1,5 +1,5 @@
-// `bouncer audit --diff` at the command-function level (ticket 08,
-// code-only scope): real bouncer.log + real TS guard-*.log files on disk
+// `bouncer audit --diff` at the command-function level:
+// real bouncer.log + real TS guard-*.log files on disk
 // under a throwaway CLAUDE_CONFIG_DIR, no subprocess spawned. Complements
 // tests/adapter-audit-diff.test.ts (the pure diffLogs/render logic).
 
@@ -69,7 +69,7 @@ function sectionOf(report: string, heading: string): string {
   return (end === -1 ? rest : rest.slice(0, end)).join('\n');
 }
 
-describe('parseAuditArgs: --diff / --ts-logs (ticket 08)', () => {
+describe('parseAuditArgs: --diff / --ts-logs', () => {
   test('--diff sets the diff flag', () => {
     expect(parseAuditArgs(['--diff'])).toEqual({ options: { days: 30, suggest: false, diff: true, harness: 'claude-code' } });
   });
@@ -197,7 +197,7 @@ describe('runAudit({ diff: true }): end to end against real files on disk', () =
     const section = sectionOf(text, 'matched, but verdicts differ');
     expect(section).toContain('transcript-backup');
     expect(section).toContain('[expected');
-    expect(section).toContain('ticket 13');
+    expect(section).toContain('commit bb8b593');
   });
 
   test('a plain (non-shadow) bouncer entry is ignored — the diff only compares the shadow window', async () => {

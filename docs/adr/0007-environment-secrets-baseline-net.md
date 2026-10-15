@@ -44,7 +44,7 @@ command text?
   see what a script the agent launches does with the environment it inherits.
 - Tests legitimately inherit the environment: a suite that connects to
   `app-db` needs `DB_PASSWORD`.
-- Universality bar (ticket 13): a baseline row has to be inert for a
+- Universality bar (commit `bb8b593`): a baseline row has to be inert for a
   consumer who has none of these variables, and a client-specific name does
   not belong in a public baseline.
 - A consumer who disagrees needs a one-row escape hatch (`[[override]]`).
@@ -134,9 +134,9 @@ name outside a configuration file. It is not built: ordinary application code
 reads `process.env.DB_PASSWORD` all the time, and the rule would confirm most
 edits to code that handles configuration.
 
-The planned follow-up detects the *value* instead of the name: ticket 58
+The planned follow-up detects the *value* instead of the name: PR #25
 blocks a `Write` or `Edit` whose content contains a protected value, and
-ticket 59 redacts a value from tool output. ADR-0008 will record that
+PR #30 redacts a value from tool output. ADR-0008 will record that
 decision; it is not written yet.
 
 Rules out:
@@ -160,7 +160,7 @@ Rules out:
 
 - **Friction, measured.** On 2026-10-13, 7,571 distinct Bash commands from
   omp sessions were replayed through the full dispatch against the new
-  baseline (ticket 57). The verdict changed for 52 of them (0.69 %). Two
+  baseline (PR #19). The verdict changed for 52 of them (0.69 %). Two
   were true false positives, and both are documented known limits in
   [policy.md § Known limits](../reference/policy.md#known-limits). The
   `docker inspect` confirmations are the main source of friction; they are
@@ -168,7 +168,7 @@ Rules out:
 - **Text only.** A variable name built at run time by `eval` or a decoded
   command, a language or tool outside the recognised forms, and a script that
   prints its inherited environment all pass. The list is in policy.md § Known
-  limits. Value-based detection (tickets 58 and 59) is planned to narrow it.
+  limits. Value-based detection (PRs #25 and #30) is planned to narrow it.
 - **New ids.** An overlay row that reuses one of the new baseline ids is
   rejected at load.
 
@@ -189,7 +189,7 @@ Rules out:
 - [How-to: keep environment secrets away from agents](../how-to/keep-env-secrets-away-from-agents.md).
 - [ADR-0002](0002-sops-age-decryption-is-a-human-act.md) (the production
   secret case and the `exec-env` doctrine).
-- Ticket 57 (this decision, PR #19); tickets 58 and 59 (planned).
+- PR #19 (this decision); PRs #25 and #30 (planned).
 
 ---
 
@@ -197,4 +197,4 @@ Rules out:
 
 | Date | Action | By |
 |---|---|---|
-| 2026-10-13 | Created, Accepted. Shipped in 1.8.0 (ticket 57, PR #19). | Jonathan Robic |
+| 2026-10-13 | Created, Accepted. Shipped in 1.8.0 (PR #19). | Jonathan Robic |

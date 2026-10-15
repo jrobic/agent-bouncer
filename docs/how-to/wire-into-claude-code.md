@@ -277,7 +277,7 @@ cannot deny, ask, or scream on top of a chain that's already enforcing.
 3. Read the divergence report: `bouncer audit --diff` (add `--ts-logs
    <dir>` if the TS logs live under a different account config dir than
    bouncer's own). Every divergence is either tagged `[expected]`
-   (already pre-triaged, cited by ticket) or genuinely new and needs a
+   (already pre-triaged, cited by commit) or genuinely new and needs a
    look — see `docs/reference/cli.md`'s `audit --diff` section for the
    full output shape and what each divergence kind means.
 4. At cutover: drop `--shadow` from the five primary command strings (and
@@ -285,7 +285,7 @@ cannot deny, ask, or scream on top of a chain that's already enforcing.
    the `(shadow mode)` suffix disappears from the primary wiring line; the
    canary stays unchanged.
 
-**Blind spot to keep in mind (measured, ticket 05's live demo):** a tool
+**Blind spot to keep in mind (measured live, 2026-08-16):** a tool
 call denied by `settings.json`'s own `permissions` block short-circuits
 BEFORE either guard chain's `PreToolUse` hooks ever run — neither bouncer
 NOR the TS generation sees it, on either side. A `--diff` report reading

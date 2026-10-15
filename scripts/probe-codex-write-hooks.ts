@@ -23,7 +23,7 @@ if (probeHome === undefined || preToolUseCommand === undefined || canaryCommand 
 }
 const includeUserPromptSubmit = includeUserPromptSubmitArg !== 'no';
 const hooksPath = join(probeHome, 'hooks.json');
-// Review round 1 S-7: was an independent hand-typed copy of the matcher
+// Was an independent hand-typed copy of the matcher
 // regex — now the SAME derivation scripts/capture-protocol.ts uses,
 // imported rather than retyped.
 const MATCHER = harnessCaptureFor('codex').matcher;

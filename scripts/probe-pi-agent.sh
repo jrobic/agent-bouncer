@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The dedicated test phase ADR-0006 § 10 requires before pi-agent ships
-# (ticket 15c § 5, § 7): the SAME printed shim, unmodified, run under BOTH
+# — the SAME printed shim, unmodified, run under BOTH
 # `pi` 0.84.1 and `omp` 18.1.10 (omp is a layer on pi-agent, oh-my-zsh-to-
 # zsh — ADR-0006 fact 5), against this repo's own compiled `dist/bouncer`,
 # under a temporary $PI_CODING_AGENT_DIR. Eleven probes, two columns each
@@ -21,11 +21,11 @@
 # same way the shim spawn tests already do). `bouncer_only` runs exactly
 # those three, unattended, no auth needed.
 #
-# THIS SESSION'S OWN OMP MUST NEVER LOAD THIS SHIM (ticket 15c's own
-# trap): every `pi`/`omp` invocation below sets $PI_CODING_AGENT_DIR only
+# THIS SESSION'S OWN OMP MUST NEVER LOAD THIS SHIM:
+# every `pi`/`omp` invocation below sets $PI_CODING_AGENT_DIR only
 # for that ONE child process (`env VAR=… pi …`), never exported into this
 # script's (or the calling shell's) own environment — a shim that blocks
-# this session's own `bash` tool would end the session mid-ticket.
+# this session's own `bash` tool would end the session mid-task.
 #
 # Usage:
 #   scripts/probe-pi-agent.sh setup        — build the binary, wire a temp
@@ -60,7 +60,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # AGENT_DIR/config.yml"` correctly blocked — bash's own witness
 # substitution masked the naming gap that broke the native write path).
 PROBE_HOME="${PROBE_HOME:-${TMPDIR:-/tmp}/bouncer-pi-agent-probe/.pi/agent}"
-# Review round 1 S-6: named distinctly from `BOUNCER_BIN` (the shim's OWN
+# Named distinctly from `BOUNCER_BIN` (the shim's OWN
 # documented runtime override env var, `pi-agent.shim.ts`'s `const
 # BOUNCER = process.env.BOUNCER_BIN ?? …` — set deliberately, per
 # child process, by probes 2 and 7 below to point pi/omp at a DIFFERENT
@@ -119,7 +119,7 @@ cmd_setup() {
   log "auth available — ready for '$0 probes'."
 }
 
-# Review round 1 S-5/P-6: a real byte comparison, never an assumed,
+# A real byte comparison, never an assumed,
 # hand-typed "identical" sentence — `compare` prints the values (or a
 # DIVERGENT block naming both) and returns exit 1 on mismatch; the
 # caller (never a `$(...)` subshell around the WHOLE call, which would
@@ -168,7 +168,7 @@ record() {
 # Runs one prompt under a given binary (`pi` or `omp`), headless (`-p`),
 # isolated from every OTHER extension the active profile might load
 # (`--no-extensions -e <shim>`), with $PI_CODING_AGENT_DIR set for THIS
-# CHILD PROCESS ONLY (ticket 15c's own trap — never export it into this
+# CHILD PROCESS ONLY (never export it into this
 # script's own shell).
 run_headless() {
   local binary="$1" prompt="$2"
@@ -216,7 +216,7 @@ probe_2() {
   log "  env PI_CODING_AGENT_DIR='$PROBE_HOME' BOUNCER_BIN='$ROOT/dist/bouncer-ask-probe' pi --no-extensions -e '$SHIM_PATH'"
   log "  env PI_CODING_AGENT_DIR='$PROBE_HOME' BOUNCER_BIN='$ROOT/dist/bouncer-ask-probe' omp --no-extensions -e '$SHIM_PATH'"
   log ""
-  log "In each: ask the agent to run 'git branch -D no-such-branch-zzz'; DECLINE the prompt once, ACCEPT it once (two runs); record whether a real confirm dialog appeared, its outcome, and whether the log gained one confirm entry with harness:\"pi-agent\". Also watch the session's OPENING banner for a bouncer/doctor notice — the shim delivers it two ways (ctx.ui.notify toast; a before_agent_start message, review round 1 S-2/P-4): note which one(s) actually render in THIS pane, and check the session's own saved transcript afterward for a customType:\"bouncer-doctor\" entry if you can — that is the hard proof of which path fired, not just what you saw on screen."
+  log "In each: ask the agent to run 'git branch -D no-such-branch-zzz'; DECLINE the prompt once, ACCEPT it once (two runs); record whether a real confirm dialog appeared, its outcome, and whether the log gained one confirm entry with harness:\"pi-agent\". Also watch the session's OPENING banner for a bouncer/doctor notice — the shim delivers it two ways (ctx.ui.notify toast; a before_agent_start message): note which one(s) actually render in THIS pane, and check the session's own saved transcript afterward for a customType:\"bouncer-doctor\" entry if you can — that is the hard proof of which path fired, not just what you saw on screen."
 }
 
 probe_3() {
@@ -260,14 +260,14 @@ probe_7() {
   local pi_out omp_out
   pi_out="$(env PI_CODING_AGENT_DIR="$PROBE_HOME" BOUNCER_BIN=/nonexistent/bouncer pi -p "${GUARD_TEST_PREFACE}Run this exact shell command: echo probe-7-marker" --no-extensions -e "$SHIM_PATH" 2>&1 || true)"
   omp_out="$(env PI_CODING_AGENT_DIR="$PROBE_HOME" BOUNCER_BIN=/nonexistent/bouncer omp -p "${GUARD_TEST_PREFACE}Run this exact shell command: echo probe-7-marker" --no-extensions -e "$SHIM_PATH" 2>&1 || true)"
-  # The ticket's own "1ms timeout" sub-case is the shim's FIXED 2000ms
+  # The "1ms timeout" sub-case is the shim's FIXED 2000ms
   # timeout inverted (ADR-0006 § 7: the timeout is a fixed rule, not a
   # per-harness knob) — tests/adapter-pi-agent-shim.test.ts already
   # proves the real 2000ms timeout directly against the compiled binary
   # (a slow fake "bouncer" exceeding it, no live pi/omp needed for that
   # half); this probe covers the OTHER sub-case (bouncer missing) live,
   # under both binaries, headless.
-  # Review round 1 S-5/P-6: normalize away the model's own prose (which
+  # Normalize away the model's own prose (which
   # legitimately differs by provider/model) before comparing — only the
   # deterministic core, whether bouncer's own "failing closed" reason
   # reached the model at all, is a fact both columns must agree on.
@@ -290,7 +290,7 @@ probe_8() {
 }
 
 # Probes 9-11 need NO live pi/omp session — pure `dist/bouncer` CLI
-# facts, invoked twice each (review round 1 S-5/P-6: a real, computed
+# facts, invoked twice each (a real, computed
 # `compare` — proving the deterministic core is genuinely repeatable —
 # replaces the hand-typed "identical" sentence this used to hardcode).
 probe_9() {
@@ -343,7 +343,7 @@ probe_11() {
   record 11 "run --harness nope (unusable harness id, exit 2 path)" "n/a — run only, no pi/omp needed" "$run_a" "identical — same binary, same exit-2 contract regardless of harness" "$comparison"
 }
 
-# Review round 1 S-5/P-6: a nonzero exit whenever `compare` found a real
+# A nonzero exit whenever `compare` found a real
 # divergence among the deterministic probes — never silently absorbed
 # into "results written", which used to be the ONLY signal either
 # subcommand gave regardless of what the comparisons actually found.

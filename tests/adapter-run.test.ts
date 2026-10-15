@@ -167,15 +167,14 @@ describe('run: UserPromptSubmit, the prompt family', () => {
   });
 });
 
-// Ticket 08 (shadow mode, code-only scope — the live traffic run and the
-// cutover phase): `run --shadow` evaluates
+// `run --shadow` evaluates
 // everything exactly as normal — same dispatch, same logging — but must
 // NEVER write anything to stdout, on ANY event shape (deny, ask,
 // UserPromptSubmit's flag/additionalContext, SessionStart's scream), and
 // every entry it DOES log carries `mode: "shadow"`. Absolute: zero
 // influence on the session, by contract — the TS guards stay the real
 // enforcement chain for the whole shadow window.
-describe('run: shadow mode (ticket 08) — never emits, always logs with mode:"shadow"', () => {
+describe('run: shadow mode — never emits, always logs with mode:"shadow"', () => {
   test('a block-worthy command produces no stdout in shadow, but logs verdict:"block" mode:"shadow"', async () => {
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
@@ -260,12 +259,12 @@ describe('run: shadow mode (ticket 08) — never emits, always logs with mode:"s
   });
 });
 
-// Review round on ticket 08: an unrecognized run() token (e.g. a typo'd
+// An unrecognized run() token (e.g. a typo'd
 // `--shadwo`) must NEVER disarm enforcement — the safe direction — but
 // must not vanish silently either, since a live typo desyncing "I meant
-// shadow" from "I am enforcing" is exactly the drift this ticket exists
+// shadow" from "I am enforcing" is exactly the drift this guard exists
 // to catch.
-describe('run: unrecognized tokens (ticket 08 review) — enforce stays on, the mistake is logged', () => {
+describe('run: unrecognized tokens — enforce stays on, the mistake is logged', () => {
   test('a typo\'d token ("--shadwo") never activates shadow — the block-worthy command still denies on stdout', async () => {
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
@@ -305,7 +304,7 @@ describe('run: unrecognized tokens (ticket 08 review) — enforce stays on, the 
   });
 });
 
-// Review round 1 S-3: `on_malformed` was mandatory, typed, and documented,
+// `on_malformed` was mandatory, typed, and documented,
 // but read nowhere — run() always fell through to silence regardless of
 // what a harness declared. Fixture parity for Claude Code itself (whose
 // own `on_malformed = "allow"`) is already covered by "run: fail-open on
@@ -313,7 +312,7 @@ describe('run: unrecognized tokens (ticket 08 review) — enforce stays on, the 
 // block proves the OTHER value actually renders, by replacing claude-
 // code's protocol wholesale in a temp overlay (ADR-0006 § 5: an existing
 // baseline id MAY replace its protocol — never merged field by field).
-describe('run: on_malformed honored (review round 1 S-3)', () => {
+describe('run: on_malformed honored', () => {
   const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
   afterEach(() => {
@@ -355,7 +354,7 @@ describe('run: on_malformed honored (review round 1 S-3)', () => {
       observe = "silent"
       flag = "context"
       on_malformed = "${onMalformed}"
-      ask_probe = "test probe, review round 1 S-3 coverage"
+      ask_probe = "test probe, on_malformed coverage"
 
       [harness.protocol.output.deny]
       stdout = '{"decision":"deny","reason":\${reason},"rule":\${rule}}'
@@ -436,13 +435,13 @@ describe('run: on_malformed honored (review round 1 S-3)', () => {
   });
 });
 
-// Review round 2 C-1: run.ts's OWN normal verdict path (runPreToolUse,
-// not the malformed-envelope path S-3 above already covers) must supply
+// run.ts's OWN normal verdict path (runPreToolUse,
+// not the malformed-envelope path the tests above already cover) must supply
 // `rule`/`verdict` too — reproduces the reviewer's exact "toy" harness
 // scenario (a deny template naming both) against a REAL Bash block
 // verdict, proving run() actually fills them, not just that render.ts
 // CAN when handed them by hand (tests/adapter-render.test.ts).
-describe('run: ${rule}/${verdict} actually supplied for a real verdict (review round 2 C-1)', () => {
+describe('run: ${rule}/${verdict} actually supplied for a real verdict', () => {
   const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
   afterEach(() => {
@@ -500,13 +499,13 @@ describe('run: ${rule}/${verdict} actually supplied for a real verdict (review r
   });
 });
 
-// Review round 1 P-4: `permission` is the one OPTIONAL `[harness.protocol.
+// `permission` is the one OPTIONAL `[harness.protocol.
 // input]` selector with no engine-side reader at all — codex.toml
 // declares `permission = "permission_mode"`, logged verbatim on every
-// verdict entry for that call, never read for a decision (grep proves it
-// in the 15b report). claude-code.toml declares no such field, so its own
+// verdict entry for that call, never read for a decision (a grep of
+// the codebase proves it). claude-code.toml declares no such field, so its own
 // entries never carry the key at all — not even `null`.
-describe('run: permission logged verbatim when a harness declares input.permission (review round 1 P-4)', () => {
+describe('run: permission logged verbatim when a harness declares input.permission', () => {
   const ORIGINAL_HOME = process.env.HOME;
   const ORIGINAL_CODEX_HOME = process.env.CODEX_HOME;
 

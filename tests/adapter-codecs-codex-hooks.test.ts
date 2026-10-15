@@ -1,5 +1,5 @@
 // The `codex-hooks` wiring codec (src/adapter/codecs/wiring/codex-hooks.ts,
-// ADR-0006 § 6, ticket 15b) — exercised the same way tests/adapter-doctor.
+// ADR-0006 § 6) — exercised the same way tests/adapter-doctor.
 // test.ts exercises hook-file: real scratch `$CODEX_HOME` trees on disk,
 // through runDoctorChecks (never the codec's own internals directly), so
 // this is a proof of what `bouncer doctor --harness codex` actually
@@ -92,7 +92,7 @@ describe('codex-hooks wiring: healthy hooks.json alone', () => {
       const report = await runDoctorChecks(undefined, cleanLoadResult(), CODEX_HARNESS);
       expect(report.checks.find((c) => c.id === 'settings')).toMatchObject({
         ok: true,
-        // Review round 1 S-1/S-2/P-5: only hooks.json exists in this
+        // Only hooks.json exists in this
         // scratch tree — the label must name exactly that, never the
         // config.toml [hooks] it never read.
         message: `hooks.json parsed (${join(codexHome, 'hooks.json')})`,
@@ -126,7 +126,7 @@ describe('codex-hooks wiring: [hooks] in config.toml only', () => {
       const report = await runDoctorChecks(undefined, cleanLoadResult(), CODEX_HARNESS);
       expect(report.checks.find((c) => c.id === 'settings')).toMatchObject({
         ok: true,
-        // S-1/S-2/P-5: hooks.json is absent here — the label must name
+        // hooks.json is absent here — the label must name
         // only config.toml [hooks], never a file that was never read.
         message: `config.toml [hooks] parsed (${configTomlPath})`,
       });
@@ -167,7 +167,7 @@ describe('codex-hooks wiring: both sources present (merged, additive)', () => {
       const hooksJsonPath = join(codexHome, 'hooks.json');
       expect(report.checks.find((c) => c.id === 'settings')).toMatchObject({
         ok: true,
-        // S-1/S-2/P-5: BOTH sources are present here — the label names
+        // BOTH sources are present here — the label names
         // both, in read order, not a hardcoded single-file default.
         message: `hooks.json + config.toml [hooks] parsed (${hooksJsonPath}, ${configTomlPath})`,
       });
@@ -312,7 +312,7 @@ describe('codex-hooks wiring: neither source present', () => {
   });
 });
 
-describe('codex-hooks wiring: corrupt hooks.json (S-8)', () => {
+describe('codex-hooks wiring: corrupt hooks.json', () => {
   test('malformed hooks.json fails "settings" naming ITSELF, not config.toml', async () => {
     const codexHome = scratchCodexHome();
     try {
@@ -337,7 +337,7 @@ describe('codex-hooks wiring: corrupt hooks.json (S-8)', () => {
   });
 });
 
-describe('codex-hooks wiring: corrupt config.toml (S-8)', () => {
+describe('codex-hooks wiring: corrupt config.toml', () => {
   test('malformed config.toml fails "settings" naming ITSELF, not hooks.json — even with a healthy hooks.json present', async () => {
     const codexHome = scratchCodexHome();
     try {
@@ -360,7 +360,7 @@ describe('codex-hooks wiring: corrupt config.toml (S-8)', () => {
   });
 });
 
-describe('codex-hooks: formatCodexCanonicalCanaryEntry (S-8)', () => {
+describe('codex-hooks: formatCodexCanonicalCanaryEntry', () => {
   test('a healthy hooks.json produces a real canary entry', async () => {
     const codexHome = scratchCodexHome();
     try {

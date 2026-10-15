@@ -28,7 +28,7 @@ describe('readAndRun: an unreadable stdin fails open (by contract)', () => {
   });
 });
 
-describe('readAndRun: ticket 08 — the { shadow: true } option main() builds from --shadow', () => {
+describe('readAndRun: the { shadow: true } option main() builds from --shadow', () => {
   test('the same deny-worthy envelope produces no stdout when shadow is threaded through', async () => {
     const envelope = JSON.stringify({
       hook_event_name: 'PreToolUse',
@@ -40,7 +40,7 @@ describe('readAndRun: ticket 08 — the { shadow: true } option main() builds fr
   });
 });
 
-describe('readAndRun: ticket 08 review — { unrecognizedTokens } main() builds from a typo\'d flag', () => {
+describe('readAndRun: { unrecognizedTokens } main() builds from a typo\'d flag', () => {
   test('with a typo\'d token and shadow left false, the deny-worthy envelope still denies on stdout', async () => {
     // Mirrors main()'s own split: `rest.includes('--shadow')` stays false
     // for "--shadwo", so `shadow` is false and `unrecognizedTokens` carries

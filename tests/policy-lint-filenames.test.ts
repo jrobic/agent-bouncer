@@ -1,4 +1,4 @@
-// Review round 2 on ticket 12, standards item 4: lintOverrides,
+// lintOverrides,
 // lintGitConditionalRelaxation, and lintEffectiveDialect used to receive
 // their entries with no filename attached, so a warning about (say) an
 // [[override]] with no reason named the rule but never the file — a user

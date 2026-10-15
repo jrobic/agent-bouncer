@@ -100,7 +100,7 @@ bouncer run [--harness <id>] < envelope.json
   the default `claude-code`. Missing its value, or immediately followed
   by another flag, is a usage error (exits 1) — the next flag is never
   silently swallowed as if it were the id.
-- `--shadow` — observe-only mode (ticket 08). Evaluates every event
+- `--shadow` — observe-only mode (commit `68b004b`). Evaluates every event
   exactly as normal (same dispatch, same policy, same logging) but NEVER
   writes to stdout, on any event shape: no deny, no ask, no
   `additionalContext`, no `SessionStart` scream. Absolute — zero
@@ -133,7 +133,7 @@ replaced by `bouncer: post-tool check failed — output withheld` (a `type`
 discriminator, image data and strings under 8 characters are kept) — never
 silence; if even that cannot be rendered, `run` exits 2.
 
-**Malformed-envelope contract (ADR-0006 § 4, review round 1 S-3):** empty
+**Malformed-envelope contract (ADR-0006 § 4):** empty
 stdin or invalid JSON is governed by the TARGET harness's own declared
 `on_malformed` — `"allow"` (Claude Code's contract, unchanged) produces
 no output, silent; `"deny"` renders that harness's own `deny` template
@@ -227,11 +227,11 @@ Dry-runs a Bash-shaped command string against the effective policy
 same `PreToolUse` dispatch `run` uses, so a command that also trips the
 secret family is reported faithfully, not command-family-only.
 Dispatched through the harness's OWN first `[harness.protocol.tools]`
-row whose `role = "command"`, in declaration order (review round 3
-R3-2) — never a hardcoded `"Bash"` name, so this works identically for
+row whose `role = "command"`, in declaration order — never
+a hardcoded `"Bash"` name, so this works identically for
 claude-code's `Bash` and a future harness's differently-named command
-tool (pi-agent's `bash`, 15c). The command string is placed at THAT
-row's own `command` selector (review round 4 R4-1) — a plain key, a
+tool (pi-agent's `bash`). The command string is placed at THAT
+row's own `command` selector — a plain key, a
 selector containing a literal dot (a flat key, not nested traversal —
 `neutral-call.ts` never splits a selector on `.`), or a `[]` array
 selector (wrapped in a one-element array, as an object under the
@@ -286,7 +286,7 @@ usable protocol (`--harness <id>` naming one that is undeclared, or
 declared without `[harness.protocol]`) fails with an explicit error line
 instead of a verdict — same for a harness whose protocol declares no
 `role = "command"` tool row at all (`bouncer: harness "<id>" declares no
-"role = \"command\"" tool row to check against`, review round 3 R3-2).
+"role = \"command\"" tool row to check against`).
 
 A rejected overlay prepends `warning: <message>` lines before the
 verdict line.
@@ -449,7 +449,7 @@ bouncer doctor [--settings <path>] [--print-canary] [--harness <id>]
   `<configDir>/settings.json`. Missing its value, or immediately
   followed by another flag, is a usage error (exits 1) — the next flag
   is never silently swallowed as if it were the path. Under
-  `--harness pi-agent` (`shim-file` wiring, ADR-0006 § 6/7, ticket 15c)
+  `--harness pi-agent` (`shim-file` wiring, ADR-0006 § 6/7)
   this same flag overrides the expected SHIM path instead
   (`<dir>/extensions/bouncer.ts` by default) — there is no
   `settings.json` for an in-process harness; the flag name stays
@@ -502,7 +502,7 @@ overrides: none active
 [fail] wiring:PostToolUse — PostToolUse hook is missing or does not point at bouncer — tool output reaches the model unredacted; add this entry to hooks.PostToolUse in settings.json (no matcher: every tool): {"hooks":[{"type":"command","command":"/path/to/dist/bouncer run"}]}
 ```
 
-**`codex-hooks` wiring (ticket 15b, ADR-0006 § 6):** `--harness codex`
+**`codex-hooks` wiring (ADR-0006 § 6):** `--harness codex`
 reads `$CODEX_HOME/hooks.json` AND `config.toml`'s own `[hooks]` table
 (additive — both loaded), plus one check no other wiring codec has:
 `wiring:trust`, Codex's own hash-trust ledger (`/hooks` in the TUI). An
@@ -521,7 +521,7 @@ wiring that otherwise looks complete can still leave a session unguarded:
 overrides: none active
 ```
 
-**`shim-file` wiring (ticket 15c, ADR-0006 § 6/7):** `--harness pi-agent`
+**`shim-file` wiring (ADR-0006 § 6/7):** `--harness pi-agent`
 checks `$PI_CODING_AGENT_DIR/extensions/bouncer.ts` — the printed shim,
 an in-process harness's own extension, never a stdin-JSON hook file. No
 `settings` check, no per-event `wiring:*` lines, no canary (the shim
@@ -561,7 +561,7 @@ does not exist)" line instead:
 [fail] wiring:binary — /opt/homebrew/Cellar/bouncer/1.6.0/bin/bouncer is a versioned Homebrew Cellar path — the next `brew upgrade` removes it and every tool call then fails closed; reprint it with `bouncer harness shim pi-agent --bin /opt/homebrew/bin/bouncer`
 ```
 
-**omp profiles (ticket 56):** omp runs a profile (`OMP_PROFILE`,
+**omp profiles (PR #15):** omp runs a profile (`OMP_PROFILE`,
 `PI_PROFILE`, `--profile`) with its own agent directory,
 `~/.omp/profiles/<name>/agent`, and loads no extension from `~/.omp/agent`
 there (measured on omp 18.9.1): a profile without the shim is a session
@@ -630,9 +630,9 @@ be checked, they may run without Bouncer: ~/.omp/profiles is unreadable
 `settings`/`wiring:*` checks collapse into ONE, tagged `[warn]` — never
 `[pass]` (that would claim the wiring was actually verified, which it
 wasn't) and never `[fail]` (nothing is broken; `ok` stays true, exit 0)
-— deliberately visible rather than silently green (review round 3
-R3-1). `--harness opencode`/`gemini-cli`/`cursor` (no
-`[harness.protocol]` at all yet — later tickets' job) fail outright
+— deliberately visible rather than silently green.
+`--harness opencode`/`gemini-cli`/`cursor` (no
+`[harness.protocol]` at all yet) fail outright
 before doctor even runs (see `run`'s exit-2 contract above); an
 overlay-declared harness WITH a protocol but no `wiring` reads:
 
@@ -697,7 +697,7 @@ guard — fails `policy` too, until the link is removed:
 override/relaxation alone does not fail the exit code — it's sovereign,
 reasoned use, not a defect.
 
-**Shadow-aware wiring (ticket 08):** a hook command carrying `--shadow`
+**Shadow-aware wiring (commit `68b004b`):** a hook command carrying `--shadow`
 (e.g. `/path/to/bouncer run --shadow`) still counts as valid wiring — the
 `pass` line for that event says so, `... is correctly wired (shadow
 mode)`, informational only, never a `fail`. After cutover the flag drops
@@ -718,7 +718,7 @@ There is no replay flag: ordinary `audit` and `audit --suggest` replay;
 `--diff` remains a separate, mutually exclusive mode and never replays.
 `--sessions-only` removes CLI-originated entries before replay and
 aggregation; it remains opt-in so a complete audit can retain direct checks
-and `run < file` probes. `--diff` (ticket 08) compares bouncer's `--shadow`
+and `run < file` probes. `--diff` (commit `68b004b`) compares bouncer's `--shadow`
 log entries against the TS generation's own guard logs over the same window.
 
 ```sh
@@ -777,13 +777,13 @@ bouncer audit --diff — last 30 day(s)
 TS: 480 event(s) (0 line(s) ignored) — bouncer shadow: 502 entries — matched: 470
 
 Correlation is heuristic: (target, tool, timestamp within ±2s) — there is no shared id between bouncer and the TS generation, so this is best-effort pairing, not a guarantee.
-Known blind spot (measured, ticket 05's live demo): a call denied by settings.json's own `permissions` layer never reaches either guard chain's hooks — invisible to BOTH sides. "0 divergence" only covers traffic that REACHES the hooks, not traffic permissions already stopped.
+Known blind spot (measured live, 2026-08-16): a call denied by settings.json's own `permissions` layer never reaches either guard chain's hooks — invisible to BOTH sides. "0 divergence" only covers traffic that REACHES the hooks, not traffic permissions already stopped.
 
 ## TS denied/asked, bouncer would allow
 (none)
 
 ## bouncer would deny/ask, TS allowed
-- ts=(none) bouncer=git-protected fired 3x on shape "git pull --ff-only" (last: 2026-08-17T09:00:00.000Z) [expected: pull-merge-ff-only-ask — ticket 13 (baseline universality triage)]
+- ts=(none) bouncer=git-protected fired 3x on shape "git pull --ff-only" (last: 2026-08-17T09:00:00.000Z) [expected: pull-merge-ff-only-ask — commit bb8b593 (baseline universality triage)]
     e.g. git pull --ff-only
 
 ## matched, but verdicts differ
@@ -796,9 +796,9 @@ entries — matched: P`) is what the cutover criterion (≥500 guarded calls,
 counts, `K` is how many raw TS log lines didn't parse as a verdict line
 (a schema drift worth investigating if it's not near zero). Every cluster
 names rule ids from BOTH sides (`ts=...`/`bouncer=...`, `(none)` when
-that side has nothing to name). `[expected: <id> — <ticket ref>]` marks a
+that side has nothing to name). `[expected: <id> — <public anchor>]` marks a
 divergence shape already pre-triaged (three families, coded as a
-constant referencing the ticket — see `src/adapter/audit-diff.ts`'s
+constant citing its commit — see `src/adapter/audit-diff.ts`'s
 `EXPECTED_DIVERGENCES`, deliberately narrow: a bare `git pull` with no
 `--ff-only`, or a bouncer rule firing on a NON-read access to a
 `guard-*.log` path, are real, UNTAGGED divergences, not absorbed into a
@@ -838,14 +838,14 @@ harness acme overlay [common:harness.d/acme.toml] transport=stdin-json confirm=d
 ```
 
 `transport=none`/`confirm=none` names a baseline harness with no
-`[harness.protocol]` yet (`opencode`, `gemini-cli`, `cursor` as of this
-ticket) — `--harness <id>` on `run`/`check`/`doctor`/`audit` fails closed
+`[harness.protocol]` yet (`opencode`, `gemini-cli`, `cursor`
+currently) — `--harness <id>` on `run`/`check`/`doctor`/`audit` fails closed
 for it (see `run`'s exit-2 contract above). `codex`'s own `confirm=deny`
 (never `ask_probe=`, since `ask_probe` is only mandatory when `confirm =
-"ask"`) is a measured, baseline fact (ADR-0006 § 4 rule 6, ticket 15b) —
+"ask"`) is a measured, baseline fact (ADR-0006 § 4 rule 6) —
 no overlay may relax it back to `ask`; pi-agent's own `confirm=ask` is a
 different measured fact: a live probe of the shim's numbered `ctx.ui.select`
-dialog (`1. Allow` / `2. Block`, ticket 55) under both `pi` and `omp`
+dialog (`1. Allow` / `2. Block`, PR #14) under both `pi` and `omp`
 confirmed 2026-10-11 that accept runs and decline blocks, while the digit
 keys and the default highlight differ per binary (omp: `1`/`2` select
 instantly and Block is highlighted, so a stray Enter blocks; pi: digits do
@@ -856,7 +856,7 @@ on the extension bus (an observability signal, not policy: it changes no
 verdict) so Herdr reports the agent `blocked` while the dialog is up.
 Known limit: vibe-island listens to omp's `tool_approval_*` events, not to
 `herdr:blocked`, so it stays blind to a Bouncer ask. `shim=yes`
-(ADR-0006 § 7, ticket 15c): this harness is IN-PROCESS — `harness shim <id>`
+(ADR-0006 § 7): this harness is IN-PROCESS — `harness shim <id>`
 below prints a real embedded extension for it; `shim=no` covers both a
 stdin-json hook harness (nothing to print) and an in-process harness
 with no embedded shim yet (opencode).
@@ -870,8 +870,8 @@ an overlay-touched harness with (one source, `src/adapter/doctor.ts`'s
 
 ## `harness shim <id>`
 
-Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7,
-ticket 15c: pi-agent and omp — they share one printed file) — the dumb,
+Prints the embedded shim source for an IN-PROCESS harness (ADR-0006 § 7:
+pi-agent and omp — they share one printed file) — the dumb,
 policy-free extension that forwards the harness's own tool-call,
 session-start and tool-result events (ADR-0008: every `tool_result`, before
 the model sees it) to `bouncer run --harness <id>` and returns bouncer's stdout

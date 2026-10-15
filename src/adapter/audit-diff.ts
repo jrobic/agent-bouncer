@@ -1,8 +1,8 @@
-// Ticket 08 (shadow mode, code-only scope): `bouncer audit --diff`'s pure
+// `bouncer audit --diff`'s pure
 // core — parses the TS generation's own JSONL log lines, correlates them
 // against bouncer's shadow-mode entries (src/adapter/audit.ts's
 // AuditEntry, filtered to `mode: "shadow"`), and classifies divergences
-// into the three kinds decision 4 defines. No filesystem (src/cli-commands.ts's
+// into the three `DiffDivergenceKind`s. No filesystem (src/cli-commands.ts's
 // runAudit reads the log files and calls into this module); this module
 // only ever sees strings and already-parsed entries, same discipline as
 // audit.ts itself.
@@ -20,7 +20,7 @@
 // ±2s), stated explicitly in the rendered report so a reader never
 // mistakes a heuristic pairing for a guaranteed one.
 //
-// KNOWN BLIND SPOT (measured, ticket 05's live demo, 2026-08-16): a tool
+// KNOWN BLIND SPOT (measured live, 2026-08-16): a tool
 // call denied by settings.json's OWN `permissions` layer short-circuits
 // BEFORE either guard chain's PreToolUse hooks ever run — neither bouncer
 // NOR the TS generation ever sees it, on either side. A "0 divergence"
@@ -48,10 +48,9 @@ export interface ParsedTsLog {
   // A line that is blank is not counted (nothing was ever there to parse)
   // — this counts only lines that FAILED to parse as JSON, or parsed but
   // don't carry the {rule_id, timestamp, decision: deny|ask} shape
-  // isTsVerdictLine checks. Reported in the diff header (item 3, review
-  // round on ticket 08) so a reader can tell "12 events, 0 ignored" apart
-  // from "12 events, 400 ignored" — the second is a schema drift worth
-  // investigating, not a healthy quiet log.
+  // isTsVerdictLine checks. Reported in the diff header so a reader can
+  // tell "12 events, 0 ignored" apart from "12 events, 400 ignored" — the
+  // second is a schema drift worth investigating, not a healthy quiet log.
   readonly ignoredLineCount: number;
 }
 
@@ -122,7 +121,7 @@ export const TS_GUARD_LOG_FILES: readonly string[] = [
 ];
 
 // Two DISTINCT constants, deliberately not one reused for both jobs
-// (review round on ticket 08: a single constant serving both the TS-side
+// (a single constant serving both the TS-side
 // grouping gap AND the TS↔bouncer correlation window was flagged as
 // double-duty, easy to accidentally tune one and silently affect the
 // other). Both happen to be 2000ms today — that is a coincidence of the
@@ -166,7 +165,7 @@ function buildTsEvent(entries: readonly TsLogEntry[]): TsEvent {
 // (gap-based: sorted, a new event starts whenever the gap since the
 // previous entry in the same group exceeds TS_EVENT_GAP_MS) before
 // correlating collapses them back into the ONE combined event severity-max
-// dispatch (ticket 05) is meant to match — the strictest decision (deny >
+// dispatch is meant to match — the strictest decision (deny >
 // ask) among the group, every contributing rule id kept.
 //
 // Gap-based, NOT a fixed time bucket (`Math.floor(t / window)`): a fixed
@@ -190,7 +189,7 @@ function groupIntoTsEvents(entries: readonly TsLogEntry[]): TsEvent[] {
   for (const e of entries) {
     // JSON-encoded, not space-joined: `target` is an arbitrary shell
     // command or path and can itself contain spaces — a plain join risks
-    // exactly the lossy-key collision ticket 12's review caught in
+    // exactly the lossy-key collision a review once caught in
     // src/policy/load.ts's resolvePrecedence (`${list} ${value}`).
     const key = JSON.stringify([e.toolName, e.target]);
     const group = byTarget.get(key) ?? [];
@@ -254,7 +253,7 @@ function sameSemanticVerdict(tsDecision: 'deny' | 'ask', bouncerVerdict: Verdict
 const NON_SILENT_BOUNCER_VERDICTS: ReadonlySet<VerdictKind> = new Set(['block', 'confirm']);
 
 // The volumes a cutover decision needs (the criterion is ≥500 GUARDED
-// calls, ≥7 days, zero untriaged divergence — see the ticket) plus the
+// calls, ≥7 days, zero untriaged divergence) plus the
 // matched count that makes "how much of this traffic actually correlated"
 // legible at a glance. Reported in the diff header (renderDiffReport), not
 // buried in a count the reader has to derive by re-adding cluster counts.
@@ -369,16 +368,16 @@ export function diffWindowedLogs(
   };
 }
 
-// ─── pre-triaged "expected" families (ticket 08 § "Divergences attendues") ───
+// ─── pre-triaged "expected" families ───
 
 export interface ExpectedDivergenceFamily {
   readonly id: string;
-  readonly ticketRef: string;
+  readonly publicAnchor: string;
   readonly description: string;
   readonly matches: (d: DiffDivergence) => boolean;
 }
 
-// Three families, not four: severity-max combined dispatch (ticket 05) is
+// Three families, not four: severity-max combined dispatch is
 // explicitly a parity CLAIM TO MEASURE, not a known divergence — nothing
 // to tag [expected], only a test proving no divergence occurs (see
 // "severity-max parity" in tests/adapter-audit-diff.test.ts).
@@ -392,10 +391,10 @@ const READ_SHAPED_TOOLS: ReadonlySet<string> = new Set(['Read', 'Grep', 'Glob'])
 export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
   {
     id: 'pull-merge-ff-only-ask',
-    ticketRef: 'ticket 13 (baseline universality triage)',
+    publicAnchor: 'commit bb8b593 (baseline universality triage)',
     description: 'git pull/merge --ff-only now ask unconditionally in the trunk (ff-only safety moved to the '
       + 'personal overlay) — the TS generation allowed this specific form silently. A BARE pull/merge (no '
-      + '--ff-only at all) is a DIFFERENT, untagged divergence — ticket 13 hardened that too, but it deserves '
+      + '--ff-only at all) is a DIFFERENT, untagged divergence — the baseline universality triage hardened that too, but it deserves '
       + 'its own explicit triage, not a loose match riding in on this family\'s name.',
     matches: (d) =>
       d.kind === 'ts-allowed'
@@ -405,7 +404,7 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
   },
   {
     id: 'guard-log-reads',
-    ticketRef: 'ticket 13 (baseline universality triage)',
+    publicAnchor: 'commit bb8b593 (baseline universality triage)',
     description: 'READS of the predecessor TS guards\' own log files (hook-log) via a read-shaped tool — expected '
       + 'specifically when the personal overlay is not installed for this diff run; install '
       + 'examples/personal-overlay.toml to close it. A bouncer rule firing on a NON-read access to the same '
@@ -425,7 +424,7 @@ export const EXPECTED_DIVERGENCES: readonly ExpectedDivergenceFamily[] = [
   },
   {
     id: 'transcripts-deny-to-confirm',
-    ticketRef: 'ticket 13 (baseline universality triage, review round 2 arbitration)',
+    publicAnchor: 'commit bb8b593 (baseline universality triage)',
     description: 'transcript-backup softened from block to confirm, EXACTLY that direction — a legitimate direct '
       + 'read is asked about, not stopped outright. The reverse (bouncer weaker than confirm, or TS at "ask" '
       + 'instead of "deny") is never this family — a real divergence a loose match would otherwise hide.',
@@ -528,7 +527,7 @@ const SECTIONS: readonly [DiffDivergenceKind, string][] = [
  * renderReport (audit.ts): three sections, one per divergence kind, each
  * cluster naming rule ids from BOTH sides, a count, and — when the shape
  * matches a pre-triaged family — an `[expected: ...]` tag citing the
- * ticket. The tag is informational, never a filter: every divergence still
+ * commit. The tag is informational, never a filter: every divergence still
  * appears, tagged or not, so the reviewer triage step this supports
  * always sees the full picture.
  */
@@ -545,7 +544,7 @@ export function renderDiffReport(clusters: readonly DiffCluster[], options: Diff
       + 'and the TS generation, so this is best-effort pairing, not a guarantee.',
   );
   lines.push(
-    'Known blind spot (measured, ticket 05\'s live demo): a call denied by settings.json\'s own `permissions` '
+    'Known blind spot (measured live, 2026-08-16): a call denied by settings.json\'s own `permissions` '
       + 'layer never reaches either guard chain\'s hooks — invisible to BOTH sides. "0 divergence" only covers '
       + 'traffic that REACHES the hooks, not traffic permissions already stopped.',
   );
@@ -559,7 +558,7 @@ export function renderDiffReport(clusters: readonly DiffCluster[], options: Diff
       continue;
     }
     for (const c of inSection) {
-      const expectedTag = c.expected !== null ? ` [expected: ${c.expected.id} — ${c.expected.ticketRef}]` : '';
+      const expectedTag = c.expected !== null ? ` [expected: ${c.expected.id} — ${c.expected.publicAnchor}]` : '';
       lines.push(
         `- ts=${tsRuleIdsLabel(c.tsRuleIds)} bouncer=${c.bouncerRuleId ?? '(none)'} `
           + `fired ${c.count}x on shape "${c.shape}" (last: ${c.lastSeen})${expectedTag}`,

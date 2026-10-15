@@ -1,6 +1,6 @@
 // One protocol case per abstract-verdict -> harness-action mapping,
 // against a hand-built HarnessOutputTable — protocol-agnostic (the
-// pre-15a src/adapter/degradation.ts hardcoded Claude Code's own table;
+// former src/adapter/degradation.ts hardcoded Claude Code's own table;
 // this proves the pure lookup itself, not any one harness's data). See
 // tests/fixtures-protocol.test.ts for proof the REAL claude-code
 // declaration produces the same actions end to end.

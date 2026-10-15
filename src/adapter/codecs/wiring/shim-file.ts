@@ -1,11 +1,11 @@
-// The `shim-file` wiring codec (ADR-0006 § 6/7, ticket 15c): doctor's
+// The `shim-file` wiring codec (ADR-0006 § 6/7): doctor's
 // "was the printed shim cut, drifted, or never installed" detection for
 // an in-process harness (pi-agent, omp). Unlike hook-file/codex-hooks,
 // there is no per-event settings shape to read here — pi-agent/omp never
 // write stdin themselves, the ONE installed shim relays every event the
 // declaration names uniformly, so there is no separate "PreToolUse
 // wired"/"canary" concept to check per event; two checks instead, plus
-// one `wiring:shim` per omp profile (ticket 56, below):
+// one `wiring:shim` per omp profile (below):
 //
 // - `wiring:shim` — the installed `<dir>/extensions/bouncer.ts` exists
 //   and is byte-identical to what `bouncer harness shim <id>` prints
@@ -13,7 +13,7 @@
 //   ALREADY carries (never this doctor process's own `process.execPath`
 //   — a doctor run from a different checkout must never claim drift
 //   solely because its own binary happens to live somewhere else; compare
-//   AFTER substitution, per the ticket's own contract).
+//   AFTER substitution, by contract).
 // - `wiring:binary` — that baked `BOUNCER` path resolves to an
 //   executable file (the one thing the shim itself cannot verify at
 //   spawn time without literally trying, which is exactly what its own
@@ -75,7 +75,7 @@ export function extractBouncerPath(shimContent: string): string | undefined {
 // `bouncer doctor` manually. The three FAILURE messages that CAN reach
 // a SessionStart scream (`absent`, the two "not a real shim" cases, and
 // `drift`) instead name the fixed, harness-neutral relative label
-// (`extensions/bouncer.ts`, matching this ticket's own exact expected
+// (`extensions/bouncer.ts`, matching the exact expected
 // wording) — a resolved scratch-account path there would make
 // `fixtures/protocol/pi-agent.json`'s own captured SessionStart-broken
 // case unreproducible byte for byte (a fresh temp dir every capture).
@@ -151,7 +151,7 @@ export async function checkShimBinary(result: ShimReadResult, harnessId: string)
   return { id, ok: true, message: `${bouncerPath} is executable` };
 }
 
-// Ticket 56 — omp profiles.
+// omp profiles.
 //
 // omp's profile layout, measured on omp 18.9.1 (docs/how-to/wire-into-pi-
 // agent.md § omp profiles): a profile `<name>` has its OWN agent directory,

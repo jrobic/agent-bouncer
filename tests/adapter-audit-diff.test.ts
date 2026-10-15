@@ -1,4 +1,4 @@
-// Pure audit-diff logic (ticket 08, code-only scope): parsing the TS
+// Pure audit-diff logic: parsing the TS
 // generation's own log lines (command-guard.log etc — schema read from a
 // prior guard's shared `logDeny` function, read-only reference),
 // correlating them against bouncer's shadow-mode log entries, and
@@ -234,7 +234,7 @@ describe('diffLogs: verdict-divergence (matched, different verdicts)', () => {
   });
 
   test('a matched pair with DIFFERENT rule ids on each side but the SAME verdict bucket is zero divergence '
-    + '(ticket 06 disambiguation: device-redirect split into device-redirect-shell/tee, etc.)', () => {
+    + '(disambiguation: device-redirect split into device-redirect-shell/tee, etc.)', () => {
     const divergences = divergencesOf(
       [tsEntry({ decision: 'deny', ruleId: 'device-redirect', target: '> /dev/sda1' })],
       [bouncerEntry({ verdict: 'block', ruleId: 'device-redirect-shell', target: '> /dev/sda1' })],
@@ -245,7 +245,7 @@ describe('diffLogs: verdict-divergence (matched, different verdicts)', () => {
   });
 });
 
-describe('diffLogs: TS event grouping is GAP-BASED, not a fixed time bucket (review round on ticket 08)', () => {
+describe('diffLogs: TS event grouping is GAP-BASED, not a fixed time bucket', () => {
   test('two TS lines 1999ms apart, straddling where a Math.floor(t/2000) bucket boundary WOULD fall, still collapse into one event', () => {
     // A fixed-bucket scheme (`Math.floor(t / 2000)`) puts 12:00:01.999 and
     // 12:00:02.001 in DIFFERENT buckets (1999 and 2001) despite being 2ms
@@ -280,7 +280,7 @@ describe('diffLogs: TS event grouping is GAP-BASED, not a fixed time bucket (rev
   });
 });
 
-describe('diffLogs: severity-max parity (ticket 05) — a combined multi-family match is NOT a divergence', () => {
+describe('diffLogs: severity-max parity — a combined multi-family match is NOT a divergence', () => {
   test('two TS hook files denying/asking the SAME real call at the same moment collapse into ONE event, matching bouncer\'s single combined verdict', () => {
     // git config credential.helper store: command family asks (confirm),
     // secret family denies (block) — bouncer keeps the strictest (block).
@@ -311,7 +311,7 @@ describe('diffLogs: severity-max parity (ticket 05) — a combined multi-family 
   });
 });
 
-describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergences attendues") — tightened predicates', () => {
+describe('EXPECTED_DIVERGENCES: the pre-triaged families — tightened predicates', () => {
   test('has exactly the three tag-as-expected families', () => {
     expect(EXPECTED_DIVERGENCES.map((f) => f.id).toSorted()).toEqual([
       'guard-log-reads',
@@ -320,9 +320,9 @@ describe('EXPECTED_DIVERGENCES: the pre-triaged families (ticket 08 § "Divergen
     ]);
   });
 
-  test('every family cites a ticket reference', () => {
+  test('every family cites a public anchor', () => {
     for (const family of EXPECTED_DIVERGENCES) {
-      expect(family.ticketRef.length).toBeGreaterThan(0);
+      expect(family.publicAnchor.length).toBeGreaterThan(0);
     }
   });
 
@@ -482,7 +482,7 @@ describe('clusterDivergences + renderDiffReport', () => {
     expect(report.toLowerCase()).toContain('none');
   });
 
-  test('an [expected] tag appears on a pre-triaged cluster, naming the ticket reference', () => {
+  test('an [expected] tag appears on a pre-triaged cluster, naming the public anchor', () => {
     const d: DiffDivergence = {
       kind: 'verdict-divergence',
       tsRuleIds: ['transcript-backup'],
@@ -495,7 +495,7 @@ describe('clusterDivergences + renderDiffReport', () => {
     };
     const report = renderDiffReport(clusterDivergences([d]), { days: 30, ...REPORT_OPTIONS_STUB });
     expect(report).toContain('[expected');
-    expect(report).toContain('ticket 13');
+    expect(report).toContain('commit bb8b593');
   });
 
   test('the report states the correlation heuristic explicitly', () => {
@@ -503,7 +503,7 @@ describe('clusterDivergences + renderDiffReport', () => {
     expect(report.toLowerCase()).toContain('heuristic');
   });
 
-  test('the report states the settings.json permissions blind spot explicitly (review round on ticket 08)', () => {
+  test('the report states the settings.json permissions blind spot explicitly', () => {
     const report = renderDiffReport([], { days: 30, ...REPORT_OPTIONS_STUB });
     expect(report.toLowerCase()).toContain('permissions');
     expect(report.toLowerCase()).toContain('invisible');

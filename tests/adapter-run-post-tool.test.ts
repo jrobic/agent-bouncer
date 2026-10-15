@@ -1,4 +1,4 @@
-// Post-tool redaction through run() (ticket 59, ADR-0008): every tool's output,
+// Post-tool redaction through run() (ADR-0008): every tool's output,
 // before the model sees it, with the value of a protected environment variable
 // replaced by `[redacted: NAME]` in the response's OWN shape. Every name and
 // value is made up, and the environment is handed to run() as `options.env` —
@@ -142,7 +142,7 @@ function updatedToolOutput(stdout: string | null): unknown {
   return hookSpecificOutput.updatedToolOutput;
 }
 
-// Each tool's real response shape (measured live, ticket 59 Scope 0), built
+// Each tool's real response shape (measured live, 2026-10-13), built
 // around one text: the input carries a spelling of the value, the expected
 // output the marker — so "same keys and value types" is the shape itself.
 const RESPONSES: Readonly<Record<string, (text: string) => unknown>> = {
@@ -286,7 +286,7 @@ describe('post-tool redaction and failed-output alerts: Claude Code', () => {
     expect(updatedToolOutput(stdout)).toEqual(RESPONSES.Bash!('[redacted: OUTER_TOKEN] and [redacted: INNER_TOKEN]'));
   });
 
-  test('image data is left alone (decision H5): an image block in an MCP result is returned untouched', async () => {
+  test('image data is left alone: an image block in an MCP result is returned untouched', async () => {
     const image = { type: 'image', data: b64(VALUE), mimeType: 'image/png' };
     const { stdout } = await run(postToolUse('mcp__probe__leak', [{ type: 'text', text: VALUE }, image]), { env: ENV });
     expect(updatedToolOutput(stdout)).toEqual([{ type: 'text', text: MARKER }, image]);
@@ -342,7 +342,7 @@ describe('post-tool redaction: pi-agent tool_result', () => {
   });
 });
 
-describe('post-tool redaction: a failure never falls through to silence (decision F5)', () => {
+describe('post-tool redaction: a failure never falls through to silence', () => {
   const stderrLines: string[] = [];
   const spies: { mockRestore: () => void; }[] = [];
 
@@ -534,7 +534,7 @@ describe('post-tool redaction: a failure never falls through to silence (decisio
   });
 });
 
-describe('post-tool redaction: one switch, the env-value row (decisions H3, H6)', () => {
+describe('post-tool redaction: one switch, the env-value row', () => {
   async function overlay(toml: string): Promise<void> {
     const dir = join(accountDir, '.claude', 'bouncer');
     await mkdir(dir, { recursive: true });
@@ -557,7 +557,7 @@ describe('post-tool redaction: one switch, the env-value row (decisions H3, H6)'
     expect(await readLog()).toBe('');
   });
 
-  test('[[override]] replace governs writes only: an output its regex does not match is still redacted (H6)', async () => {
+  test('[[override]] replace governs writes only: an output its regex does not match is still redacted', async () => {
     await overlay('[[override]]\nrule = "env-value"\naction = "replace"\nregex = "^only-this$"\nreason = "only one text"\n');
     const { stdout } = await run(envelope, { env: ENV });
     expect(updatedToolOutput(stdout)).toEqual(RESPONSES.Bash!(MARKER));

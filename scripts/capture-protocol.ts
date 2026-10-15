@@ -12,9 +12,9 @@
 //
 // Usage: `bun run scripts/capture-protocol.ts [--harness <id>] [out-path]`
 // — defaults to `--harness claude-code`, `fixtures/protocol/claude-code.json`
-// (ticket 15a's original invocation, unchanged). `BOUNCER_BIN` (a
+// (the original invocation, unchanged). `BOUNCER_BIN` (a
 // space-separated command, e.g. `bun run src/cli.ts` for a SOURCE capture
-// — ticket 15b, ADR-0006 § 10: codex.json is captured against the source
+// — ADR-0006 § 10: codex.json is captured against the source
 // binary, since the installed one predates codex.toml) overrides the
 // per-harness default executable; unset, claude-code defaults to the
 // installed binary (`~/.local/bin/bouncer`, matching the original
@@ -25,8 +25,7 @@
 // executable that is intended to produce the committed fixture.
 //
 // Kept in the repo (not thrown away) as the reproducible recipe for a
-// future re-capture against a newer binary — see the 15a/15b report for
-// how to re-run it.
+// future re-capture against a newer binary (usage above).
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,7 +47,7 @@ function parseArgv(argv: readonly string[]): { readonly harness: string; readonl
 
 const { harness: HARNESS_ID, outPath: OUT_PATH } = parseArgv(process.argv.slice(2));
 
-// Review round 1 S-7: one shared record (scripts/harness-capture-config.ts)
+// One shared record (scripts/harness-capture-config.ts)
 // replaces this file's own five separate per-harness structures — exec
 // command, account-dir env var, wiring-file name, `--harness` flag args,
 // and the wiring-fixture bouncer command — plus the PreToolUse matcher
@@ -70,12 +69,12 @@ const HARNESS_FLAG_ARGS = CAPTURE.flagArgs;
 const WIRING_BOUNCER_PATH = '/fake/checkout/dist/bouncer';
 const WIRING_BOUNCER_COMMAND = CAPTURE.wiringCommand(WIRING_BOUNCER_PATH);
 
-// Review round 2 C-3: `expandPathCandidates` (ticket 15c review round 1
-// L-1) runs for every role="read" row on EVERY harness — a harness-
+// `expandPathCandidates` (`src/adapter/neutral-call.ts`)
+// runs for every role="read" row on EVERY harness — a harness-
 // neutral property of the role, not a pi-agent-only fix — so Claude
 // Code's own `Read`/`Grep` rows are affected too. The installed binary
 // this file's OTHER cases record from predates that fix; these two
-// cases use the SOURCE cli instead, same reasoning ticket 15b already
+// cases use the SOURCE cli instead, same reasoning already
 // established for codex.json (`harness-capture-config.ts`'s own
 // `pi-agent`/`codex` records).
 const SOURCE_EXEC: readonly string[] = ['bun', 'run', join(PROJECT_ROOT, 'src', 'cli.ts')];
@@ -88,10 +87,10 @@ interface Case {
   // before invocation, so the SessionStart doctor cases can probe real
   // wiring.
   readonly settings?: unknown;
-  // Review round 2 C-3: overrides EXEC_CMD for this ONE case — claude-
+  // Overrides EXEC_CMD for this ONE case — claude-
   // code's own default capture target is the INSTALLED binary (matching
-  // the ticket 15a recipe), but `expandPathCandidates` (ticket 15c
-  // review round 1 L-1) is source-only as of this capture; a case
+  // the original recipe), but `expandPathCandidates`
+  // is source-only as of this capture; a case
   // proving ITS behavior must run against source while every other
   // claude-code case keeps recording the installed binary's own
   // byte-identical output.
@@ -290,7 +289,7 @@ function claudeCodeCases(): Case[] {
     { id: 'missing-hook-event-name-silent', argv: [], stdin: json({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }) },
     { id: 'shadow-deny-silent', argv: ['--shadow'], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
     { id: 'shadow-typo-normal-enforce', argv: ['--shadwo'], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
-    // Review round 2 C-3: NOT byte-identical to the installed binary
+    // NOT byte-identical to the installed binary
     // (`9ee2286`) — `expandPathCandidates` is source-only as of this
     // capture. `execOverride: SOURCE_EXEC` records these two against
     // source instead; every other case above still records the
@@ -315,7 +314,7 @@ function patch(...lines: readonly string[]): string {
   return ['*** Begin Patch', ...lines, '*** End Patch'].join('\n');
 }
 
-// ADR-0006 § 10 / ticket 15b: every case here uses a form that DIFFERS
+// ADR-0006 § 10: every case here uses a form that DIFFERS
 // from Claude Code's own fixture set where Codex differs — apply_patch
 // with a relative path resolved against `cwd`, a real `mcp__` server
 // name distinct from claude-code.json's, and a Bash command carrying
@@ -323,7 +322,7 @@ function patch(...lines: readonly string[]): string {
 function codexCases(): Case[] {
   return [
     { id: 'rm-rf-root-deny', argv: [], stdin: preToolUse('Bash', { command: 'rm -rf /' }) },
-    // Ported-from-15a acceptance case (P-3, ADR-0006 § 4 rule 6): a
+    // Acceptance case ported from `f69d37a` (ADR-0006 § 4 rule 6): a
     // confirm-class command runs the REAL degraded-to-deny path end to
     // end, not just the lint rule in isolation.
     {
@@ -369,7 +368,7 @@ function codexCases(): Case[] {
       argv: [],
       stdin: preToolUse('apply_patch', { command: patch('*** Delete File: AGENTS.md') }, { cwd: '/Users/capture/.codex' }),
     },
-    // Review round 1 L-1: hooks.json is bouncer's OWN wiring for Codex —
+    // hooks.json is bouncer's OWN wiring for Codex —
     // an apply_patch deleting it (relative path, resolved against cwd)
     // must deny, the same protection rm/echo already get via the Bash
     // family (see fixtures/harness.json's codex-hooks-* cases).
@@ -383,7 +382,7 @@ function codexCases(): Case[] {
       argv: [],
       stdin: preToolUse('apply_patch', { command: '*** Begin Patch\n*** Add File: x.ts\n+content' }, { cwd: '/Users/capture/project' }),
     },
-    // Review round 1 S-9: the parsed PREFIX (an AWS key in an Add File
+    // The parsed PREFIX (an AWS key in an Add File
     // section) is still judged and denied, even though the body then
     // hits an unrecognized directive line — proves partial judging
     // actually enforces on what it saw, not a silent pass-through the
@@ -458,7 +457,7 @@ function codexCases(): Case[] {
   ];
 }
 
-// ADR-0006 § 7/10, ticket 15c: the shim's OWN event object shape
+// ADR-0006 § 7/10: the shim's OWN event object shape
 // (`{event, toolName, input, session, cwd}`, never a real hook envelope
 // field name — the declaration describes what the SHIM sends, not what
 // pi-agent/omp's own extension API looks like on the wire). `session`
@@ -474,7 +473,7 @@ function piAgentSessionStart(): string {
 }
 
 // `[PATH#TAG]` + `+` rows only (never `-`/context/CUT, ADR-0006 § 6) —
-// confirmed live and firsthand (this ticket's own dev session's `edit`
+// confirmed live and firsthand (the codec author's own omp session's `edit`
 // tool is exactly this grammar). Two sections here, mirroring codex's
 // own apply-patch move-writes-two-paths reasoning: `paths` genuinely
 // plural for a hashline payload too.
@@ -482,11 +481,11 @@ function hashline(...lines: readonly string[]): string {
   return lines.join('\n');
 }
 
-// ADR-0006 § 7/10, ticket 15c: pi-agent/omp are IN-PROCESS harnesses —
+// ADR-0006 § 7/10: pi-agent/omp are IN-PROCESS harnesses —
 // every case here uses the shim's own object shape, never a real hook
 // envelope. `confirm = "ask"` (flipped from the shipped-baseline `deny`
 // once probe 2's interactive half was confirmed live on BOTH binaries —
-// see `pi-agent.toml`'s own dated comment and the 15c report) — a
+// see `pi-agent.toml`'s own dated comment) — a
 // confirm-class command below therefore renders the `ask` template.
 function piAgentCases(): Case[] {
   return [
@@ -522,8 +521,8 @@ function piAgentCases(): Case[] {
       argv: [],
       stdin: piAgentToolCall('edit', { input: 'PUT 1.=1:\n+no section header at all\n' }),
     },
-    // Review round 2 C-4: pi's OWN edit shape (review round 1 P-1,
-    // `edit.d.ts:10-16`) — `{path, edits: [{oldText, newText}]}`, no
+    // pi's OWN edit shape
+    // (`edit.d.ts:10-16`) — `{path, edits: [{oldText, newText}]}`, no
     // `input.input` string at all — was unit-tested but never had a
     // protocol case of its own.
     {
@@ -536,12 +535,12 @@ function piAgentCases(): Case[] {
     },
     { id: 'grep-ssh-dir', argv: [], stdin: piAgentToolCall('grep', { path: '~/.ssh', pattern: 'id_rsa' }) },
     { id: 'glob-ssh-dir', argv: [], stdin: piAgentToolCall('glob', { path: '~/.ssh' }) },
-    // Review round 2 C-4: pi's OWN find/ls rows (review round 1 P-2) —
+    // pi's OWN find/ls rows —
     // never had a protocol case either; `requiredCaseIds` mirrored the
     // gap.
     { id: 'find-ssh-dir', argv: [], stdin: piAgentToolCall('find', { path: '~/.ssh', pattern: 'id_rsa' }) },
     { id: 'ls-ssh-dir', argv: [], stdin: piAgentToolCall('ls', { path: '~/.ssh' }) },
-    // Review round 1 L-1: neither form defeats the fix — `:1-5` still
+    // Neither form defeats the fix — `:1-5` still
     // matches `shell-history` (ask) via its own stripped candidate, and
     // the `;`-list still matches (deny — `aws-creds`, on the `~/.aws`
     // segment) rather than defeating protection by being read as one
@@ -555,7 +554,7 @@ function piAgentCases(): Case[] {
     { id: 'sessionstart-broken-shim-scream', argv: [], stdin: piAgentSessionStart(), settings: { shimHealthy: false } },
     { id: 'empty-stdin-malformed', argv: [], stdin: '' },
     { id: 'invalid-json-malformed', argv: [], stdin: '{not valid json' },
-    // Ticket 59 (ADR-0008): `tool_result` is the declared post-tool event
+    // ADR-0008: `tool_result` is the declared post-tool event
     // now, so the unjudged-event case names an event pi-agent declares none
     // of (pi's own `tool_execution_end`).
     { id: 'unknown-event-silent', argv: [], stdin: json({ event: 'tool_execution_end', toolName: 'bash', input: { command: 'echo hi' } }) },
@@ -624,14 +623,14 @@ interface Recorded {
   readonly id: string;
   readonly argv: readonly string[];
   readonly stdin: string;
-  // Only on a case that carries one (ticket 59): every other record keeps
-  // its pre-59 bytes.
+  // Only on a case that carries one: every other record keeps
+  // its bytes from before PR #30.
   readonly env?: Readonly<Record<string, string>>;
   readonly expected: { readonly stdout: string | null; readonly exit: number; };
 }
 
 // The environment every spawned bouncer gets: this process's own, minus every
-// variable with a protected name (ticket 58). `bouncer run` hands its
+// variable with a protected name. `bouncer run` hands its
 // environment to the env-value guard, so a capture run from a shell that has
 // credentials exported must not depend on them — or carry them into a child —
 // and a recapture must give the same bytes on any machine.
@@ -681,7 +680,7 @@ function main(): void {
   // a settings/hooks file carrying only the primary PreToolUse entry, ask
   // `doctor --print-canary`, then splice the returned canary hook into
   // both SessionStart settings fixtures before capturing them for real.
-  // ADR-0006 § 6/7, ticket 15c: `shim-file` wiring (pi-agent) has NO
+  // ADR-0006 § 6/7: `shim-file` wiring (pi-agent) has NO
   // canary concept at all (the printed shim already fails closed on its
   // own liveness) — this whole derivation is skipped for it, and its
   // own SessionStart cases install the shim directly, in the loop below.
@@ -760,7 +759,7 @@ function main(): void {
         }
       }
     } else {
-      // `wiring: "shim"` (pi-agent, ticket 15c): the installed artifact
+      // `wiring: "shim"` (pi-agent): the installed artifact
       // IS the rendered shim source, keyed off `bouncerPath` alone — no
       // JSON hook entry, no canary splice, no trust ledger. `shimHealthy:
       // false` leaves the file absent entirely (doctor's own "missing"

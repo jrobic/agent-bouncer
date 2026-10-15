@@ -1,7 +1,7 @@
 // Harness declarations are policy data shared by the embedded baseline and
 // overlays. This module owns their leaf shape, dialect, witness, and local
 // uniqueness validation so neither source can drift — including, since
-// ticket 15a (ADR-0006), the optional `[harness.protocol]` table: the
+// ADR-0006, the optional `[harness.protocol]` table: the
 // transport/input-map/tools-map/output-table/templates a generic adapter
 // pipeline (src/adapter/run.ts) reads instead of hardcoding Claude Code.
 
@@ -119,7 +119,7 @@ function parsePersistent(value: unknown, label: string): HarnessParseResult<read
 // ─── `[harness.protocol]` (ADR-0006 § 3/4) ────────────────────────────────
 
 const KNOWN_TRANSPORTS: Readonly<Record<string, true>> = { 'stdin-json': true };
-// Exported for the S-3 parity test (tests/adapter-codec-registries.test.ts):
+// Exported for the registry parity test (tests/adapter-codec-registries.test.ts):
 // this lint-time registry and the runtime one src/adapter/codecs/wiring/
 // registry.ts's WIRING_CODECS builds must name the same key set, or a
 // declaration that lints clean could still find nothing to dispatch to
@@ -133,7 +133,7 @@ export const KNOWN_WIRINGS: Readonly<Record<string, true>> = { 'hook-file': true
 // registries — this lint-time one and the runtime one buildNeutralCall
 // reads (src/adapter/neutral-call.ts) — must name the same set or a
 // declaration that lints clean could still fail to dispatch at runtime.
-// Exported for the S-3 parity test, same reason as KNOWN_WIRINGS above.
+// Exported for the registry parity test, same reason as KNOWN_WIRINGS above.
 export const KNOWN_INPUT_CODECS: Readonly<Record<string, true>> = { 'apply-patch': true, 'hashline': true };
 const KNOWN_ROLES: Readonly<Record<HarnessRole, true>> = { command: true, read: true, write: true, fetch: true, mcp: true };
 const TOOL_ROW_SELECTOR_KEYS = ['command', 'path', 'pattern', 'text', 'url', 'urls'] as const;
@@ -157,7 +157,7 @@ function requireNonEmptyString(raw: object, key: string, label: string, issues: 
   return value;
 }
 
-// Review round 2 R2-1: absence is legal here (unlike requireNonEmptyString
+// Absence is legal here (unlike requireNonEmptyString
 // above) — only a PRESENT-but-invalid value is an issue. Used for the
 // optional prompt, session-start, post-tool, and post-tool-failure selectors
 // and events; each optional event surface is linted against its input and
@@ -247,7 +247,7 @@ function parseToolRow(raw: unknown, toolName: string, label: string): HarnessPar
     selectors[key] = value;
   }
 
-  // ADR-0006 § 6 / ticket 15b: a `codec` row parses the raw input bag
+  // ADR-0006 § 6: a `codec` row parses the raw input bag
   // itself (Codex's `apply_patch` patch text, unreachable through a
   // field-map selector) — mutually exclusive with every selector key: a
   // row naming both would leave it ambiguous whether the codec or the
@@ -330,7 +330,7 @@ function parseOutputTable(raw: unknown, label: string): HarnessParseResult<Harne
   };
 }
 
-// Review round 1 S-1: render.ts JSON-encodes a placeholder's VALUE
+// render.ts JSON-encodes a placeholder's VALUE
 // (quotes included), so `"${reason}"` in a harness's own TOML double-
 // quotes at render time — invalid JSON the harness cannot parse, and a
 // silent fail-open the harness author never sees. Two independent belts,
@@ -343,7 +343,7 @@ function parseOutputTable(raw: unknown, label: string): HarnessParseResult<Harne
 // this rule exists for (the author meant it inside a JSON string and
 // wrote a JSON string manually around a value that IS one already).
 // Captures the placeholder's own name so the message names the ACTUAL
-// mistake (review round 2 C-3 — this used to hardcode "${reason}" no
+// mistake (this used to hardcode "${reason}" no
 // matter which placeholder was actually quoted).
 const QUOTED_PLACEHOLDER = /"\$\{(\w+)\}|\$\{(\w+)\}"/;
 
@@ -358,7 +358,7 @@ const QUOTED_PLACEHOLDER = /"\$\{(\w+)\}|\$\{(\w+)\}"/;
 const TEMPLATE_PLACEHOLDER = /\$\{(\w+)\}/g;
 const PROBE_VALUE = '"\\\n}';
 
-// Belt 3 (review round 2 C-1) — src/adapter/render.ts fills EXACTLY these
+// Belt 3 — src/adapter/render.ts fills EXACTLY these
 // placeholder names, never more: `deny`/`ask` templates get `reason`,
 // `rule` (the bare ruleId), and `verdict`; `context`, `session_start`, and
 // `failure_context` get `context`; `redact` gets `response`. Belt 2 above
@@ -455,8 +455,8 @@ function parseTemplate(raw: unknown, key: HarnessTemplateKey, label: string): Ha
 // its flat fields from, read a second time for its per-action subtables.
 // Only the actions the output table actually maps a verdict to (minus
 // "silent", which renders nothing) are required. `session_start` is
-// required exactly when `events.session_start` is declared (review round
-// 2 R2-1 — this was unconditional before, forcing every harness to carry
+// required exactly when `events.session_start` is declared (this
+// was unconditional before, forcing every harness to carry
 // a SessionStart doctor announcement even one with no such surface). A
 // raw table present for an action the output table does NOT route to it —
 // an `ask` table when `confirm` isn't `"ask"`, a `context` table when
@@ -636,7 +636,7 @@ export function parseHarnessProtocol(raw: unknown, label: string): HarnessParseR
 // ADR-0006 § 4 rule 6: "an overlay moves a BASELINE harness's confirm from
 // deny to ask (a baseline deny is a measured fact, fact 3 for Codex)".
 // Pure and context-free by design (the caller supplies both sides) so it
-// can be unit-tested directly — codex (ticket 15b) is the first baseline
+// can be unit-tested directly — codex is the first baseline
 // harness with a "deny" protocol.output.confirm, so this rule is now
 // exercised end-to-end too (tests/policy-harness-protocol.test.ts's own
 // "rule 6" describe block, against the real embedded BASELINE); src/

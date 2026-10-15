@@ -44,9 +44,9 @@ common layer itself, and the per-profile symlinks disappear.
 - Only the *policy* is shared. Audit logs stay per profile
   (`src/adapter/log-path.ts` is untouched): the per-account config dir
   exists so a client seat's trail never interleaves with the personal one.
-- Universality bar (ticket 13): a workstation without a common layer is a
+- Universality bar (commit `bb8b593`): a workstation without a common layer is a
   normal deployment, never a warning.
-- Multi-harness (ticket 15): the common layer must live somewhere no
+- Multi-harness (ADR-0006): the common layer must live somewhere no
   harness owns; the profile layer is whatever the calling harness's adapter
   resolves. `bouncer` never enumerates profiles — one invocation, one
   harness, one profile.
@@ -188,8 +188,8 @@ was taken each time.
 
 - **Sealed rules** (a common rule no lower layer may disable or relax).
   Both layers are files the user owns; an agent wanting to disarm a rule
-  must edit one of them, and since ticket 19 that edit asks. A seal earns
-  its place only with a layer the user does not own — the per-project
+  must edit one of them, and since commit `974705c` that edit asks. A seal
+  earns its place only with a layer the user does not own — the per-project
   layer, excluded here.
 - **Per-project layer**, **`[[revoke]]`**, **provenance UX pass** —
   deferred.
@@ -205,7 +205,7 @@ was taken each time.
 - A broken profile file no longer drops the common layer's hardening, and
   vice versa.
 - Every rule names its layer and file; a shadowed entry says so.
-- The same common root serves every future adapter (ticket 15) unchanged.
+- The same common root serves every future adapter (ADR-0006) unchanged.
 
 ### Negative
 
@@ -223,10 +223,10 @@ was taken each time.
 | Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
 | Common root deleted or `~/.agents` link broken → relaxes and `hook-log` vanish silently | Medium | Medium | `common: absent` in every output; an operator-level configuration check greps `overlay:`; the interim per-profile symlink, since removed, had the same failure mode, and the native read makes it rarer |
-| Precedence hides a common hardening behind a profile relax | Low | High | `shadows common:` provenance on every such entry; ticket 19's `bouncer-policy` asks on every edit of either layer; sealed rules when a non-owned layer exists |
+| Precedence hides a common hardening behind a profile relax | Low | High | `shadows common:` provenance on every such entry; `bouncer-policy` (commit `974705c`) asks on every edit of either layer; sealed rules when a non-owned layer exists |
 | Double load during migration reads as "profile shadows everything" | High, transient | Low | realpath guard: profile layer skipped, doctor fails until the link is removed |
 | Partial rejection leaves an inconsistent set (profile override of a dropped common rule) | Low | Medium | override resolution runs after the common layer is settled; unresolvable → profile layer rejected → baseline (fail-closed) |
-| Baseline-id lint rule breaks an existing overlay | Low | Low | verified 2026-09-03: no common file reuses a baseline id (`hook-log` left the baseline at ticket 13) |
+| Baseline-id lint rule breaks an existing overlay | Low | Low | verified 2026-09-03: no common file reuses a baseline id (`hook-log` left the baseline at commit `bb8b593`) |
 
 ## Implementation plan
 
@@ -254,7 +254,7 @@ Implementation work was split into tickets after the design pass.
       `CLAUDE_CONFIG_DIR`, the symlinked-profile migration case.
 
 ### Phase 3 — ship (lead, announced step by step)
-- [x] Rebuild grouped with ticket 16; reinstall `~/.local/bin/bouncer`
+- [x] Rebuild grouped with commit `0be62cf`; reinstall `~/.local/bin/bouncer`
       (backup `bouncer.<sha>.bak`).
 - [x] Both profiles: remove the `policy.d` link (an absent local `policy.d`
       is an empty layer); purge `policy.d.pre-mount.bak/` and
@@ -281,8 +281,9 @@ Implementation work was split into tickets after the design pass.
 - `src/adapter/policy.ts`, `src/adapter/log-path.ts`, `src/policy/load.ts`.
 - `docs/reference/policy.md` § Merge order, § Cross-file conflicts,
   § Provenance.
-- Tickets 12 (policy file layout), 13 (baseline universality), 15
-  (multi-harness adapters), 19 (policy self-protection).
+- Commits `0234ec6` (policy file layout), `bb8b593` (baseline
+  universality) and `974705c` (policy self-protection); ADR-0006
+  (multi-harness adapters).
 - Deferred: per-project layer, sealed rules, `[[revoke]]`, and provenance UX
   pass.
 

@@ -1,4 +1,4 @@
-// Embedded printed shims (ADR-0006 § 7, ticket 15c): the dumb, policy-
+// Embedded printed shims (ADR-0006 § 7): the dumb, policy-
 // free extension `bouncer harness shim <id>` prints for an in-process
 // harness (pi-agent — `omp` shares the same printed file, ADR-0006 fact
 // 5). One harness id maps to its own raw shim source; `bun build
@@ -53,7 +53,7 @@ export function hasShim(harnessId: string): boolean {
 export function renderShim(harnessId: string, bouncerPath: string): string | undefined {
   const source = SHIM_SOURCES[harnessId];
   if (source === undefined) return undefined;
-  // Review round 1 S-1: `String.replace`'s SECOND argument, when a
+  // `String.replace`'s SECOND argument, when a
   // string, interprets `$&`/`` $` ``/`$'`/`$n` as replacement patterns —
   // a `bouncerPath` containing one of those sequences (a real, if
   // unusual, absolute path) would corrupt the printed shim. A function

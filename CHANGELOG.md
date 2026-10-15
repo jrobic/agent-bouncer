@@ -41,6 +41,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `branch` entry must add `-C` to keep force-copy protected. An overlay that
   omits it would allow `git branch -C` to overwrite an existing branch.
 
+- `bouncer audit --diff` output: an `[expected: …]` tag now cites the public
+  commit of its triage (`commit bb8b593 (baseline universality triage)`)
+  instead of an internal ticket number, and the blind-spot line reads
+  `Known blind spot (measured live, 2026-08-16)`. In `src/adapter/audit-diff.ts`,
+  the `ExpectedDivergenceFamily.ticketRef` field is renamed `publicAnchor`.
+  Classification and the reported divergences are unchanged.
+
 ### Security
 
 - **Environment dumps are refused behind command wrappers and inside every

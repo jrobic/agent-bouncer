@@ -40,7 +40,7 @@ Two facts about a configuration repository shape the design:
   paths through `realpath`, so the engine sees the configuration-repository
   target — a path no baseline regex written for `.claude/settings.json`
   matches. The Bash token scan is synchronous and resolves nothing.
-- Ticket 19 put `bouncer`'s own policy files in `secret.path` with verdict
+- Commit `974705c` put `bouncer`'s own policy files in `secret.path` with verdict
   `confirm` (`bouncer-policy`, `(^|/)bouncer/(policy\.toml|policy\.d)(/|$)`),
   so reading the installed policy asks too. Every development session reads
   `policy/*.toml`; `bouncer rules list` prints the
@@ -56,14 +56,14 @@ step.
 
 ### Constraints
 
-- Baseline universality (ticket 13): a baseline row must be true for any
+- Baseline universality (commit `bb8b593`): a baseline row must be true for any
   Claude Code user; operator-specific paths go to the overlay.
 - Per-tool argument policy lives in engine code with fixtures, not in the
-  policy file (ticket 26, `SEARCH_PATTERN_ARGUMENT_POLICIES`); the policy
+  policy file (commit `36baef7`, `SEARCH_PATTERN_ARGUMENT_POLICIES`); the policy
   file carries rows, `[[override]]` carries local exceptions.
 - Fail-closed: an unrecognised form is never a silent allow (ADR-0003
-  doctrine, ticket 34 wording).
-- The two-readings idiom (ticket 28): when a token can be read two ways,
+  doctrine).
+- The two-readings idiom (commit `0e2da41`): when a token can be read two ways,
   evaluate both, strictest wins.
 - `bouncer` never emits `allow`; the verdict vocabulary is `block |
   confirm | observe` (`src/types.ts`), surfacing as deny/ask.
@@ -114,7 +114,7 @@ naming the file is either a write or rare enough to ask.
 ### D — Where the known-readers list lives
 
 **D1: declared in the policy (`[rules.protected_write.readers]`).**
-Rejected: a second convention beside ticket 26's "per-tool policy = code
+Rejected: a second convention beside commit `36baef7`'s "per-tool policy = code
 + fixtures"; and a local exception already has a home in `[[override]] …
 except`.
 
@@ -160,7 +160,7 @@ set` write `.claude.json`/`settings.json` without naming a path.
 hole while the CLI stays open is the "sandbox cannot close `.claude.json`
 because the harness writes it" story again, one layer up.
 
-**G2: command rows in ticket 35.** Chosen: a `harness-self-config` row
+**G2: command rows in commit `d5e2e54`.** Chosen: a `harness-self-config` row
 set in `rules.command.bash`, `confirm`; the ADR names it as a condition
 of the mechanism's completeness.
 
@@ -196,8 +196,9 @@ re-explore what the session closed. Direct ADR.
      and `git` for `diff show log blame status ls-files cat-file grep`
      only. `yq`, `code`, `vim`, `python`, `claude` and every other head
      fall to the fallback on purpose.
-   - Token scan reuses ticket 26's pattern-argument masking and ticket
-     27's prose/heredoc exclusion; `BASH_PATH_TOKEN` is not widened.
+   - Token scan reuses commit `36baef7`'s pattern-argument masking and
+     commit `c4013c5`'s prose/heredoc exclusion; `BASH_PATH_TOKEN` is not
+     widened.
 
 3. **Two readings** per path, raw and canonical (`canonicalizePath`,
    which already resolves the parent of a not-yet-existing file),
@@ -239,7 +240,7 @@ re-explore what the session closed. Direct ADR.
 
 7. **Interplay.** Strictest-wins with `secret.path` when both match
    (`direnv allow .envrc`: `secret` blocks, `protected_write` is
-   irrelevant); with `persistence-scheduler` (ticket 32) both confirm, one
+   irrelevant); with `persistence-scheduler` (commit `4a923e6`) both confirm, one
    prompt.
 
 ### Justification
@@ -250,7 +251,7 @@ agent reads to work — so the guard has to be direction-aware, and since
 "secret" and "must not be tampered with" are different questions with
 different default answers, they are different tables. The write side on
 Bash is where the engine work is: the tokenizer already carries offsets
-and segments (ticket 29), so redirect and operand extraction is a reading
+and segments, so redirect and operand extraction is a reading
 of that structure, not a new parser; and because the list of protected
 files is short, a fail-closed fallback on "this command names the file
 and is not a known reader" costs a bounded number of prompts while
@@ -292,7 +293,7 @@ for the visible one; evaluating both lets the baseline stay universal.
 
 ## Implementation plan
 
-### Phase 1 — this repository (ticket 35, one dev session, gate mode)
+### Phase 1 — this repository (commit `d5e2e54`, one dev session, gate mode)
 - [ ] `src/protected-write-rules.ts`: row loading, `checkPath` with two
       readings, `checkBashWrites` (structural extraction on the existing
       tokenizer + fallback with the readers set); dispatch wiring for the
@@ -304,7 +305,7 @@ for the visible one; evaluating both lets the baseline stay universal.
       `verdict` field validated as for the other tables.
 - [ ] `fixtures/protected-write.json` both directions and every form
       above; `tests/guards-digest.test.ts` lock; `tests/completeness.test.ts`
-      entries; the ticket-13 triage table amended.
+      entries; the baseline universality triage amended.
 - [ ] `docs/reference/policy.md` ("The six regex tables", the fallback
       and readers, Known limits), `docs/reference/cli.md` if `rules list`
       output changes.
@@ -338,8 +339,9 @@ for the visible one; evaluating both lets the baseline stay universal.
   (`tokenizeShellSegments`, `consumeCommandPrefixes`).
 - ADR-0001 (layers, rules public by construction), ADR-0002 (why `block`
   is reserved for acts that are human-only), ADR-0003 (fail-closed
-  doctrine); tickets 13 (baseline universality), 19 (`bouncer-policy`
-  row), 26/27/28 (token readings), 32 (`persistence-scheduler`).
+  doctrine); commits `bb8b593` (baseline universality), `974705c`
+  (`bouncer-policy` row), `36baef7`/`c4013c5`/`0e2da41` (token readings),
+  `4a923e6` (`persistence-scheduler`).
 
 ---
 
@@ -347,5 +349,5 @@ for the visible one; evaluating both lets the baseline stay universal.
 
 | Date | Action | By |
 |---|---|---|
-| 2026-09-04 | Created, Accepted — two grilling rounds, fourteen decisions; Phase 1 is ticket 35 | Jonathan Robic |
-| 2026-09-07 | Ticket 36: the one-day audit step names `--sessions-only` | Jonathan Robic |
+| 2026-09-04 | Created, Accepted — two grilling rounds, fourteen decisions; Phase 1 is commit `d5e2e54` | Jonathan Robic |
+| 2026-09-07 | Commit `a0c18cb`: the one-day audit step names `--sessions-only` | Jonathan Robic |

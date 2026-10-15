@@ -1,8 +1,8 @@
-// Env-value guard (ticket 58, decision F2 / 1a): text about to be written that
+// Env-value guard: text about to be written that
 // carries the VALUE of a protected environment variable. It is `write_secret`
 // with the exact value instead of a regex — it catches the secret an agent
 // copies into a file after a test or a script printed it, whatever printed it.
-// Its second use (ticket 59, ADR-0008, decision F2 / 1b): every tool's output,
+// Its second use (ADR-0008): every tool's output,
 // before the model sees it — the same values, replaced by `[redacted: NAME]`.
 // Its third use (ADR-0008 § 9): a failed Claude Code tool's error gets scanned
 // and, on a hit, adds a name-only alert without changing the output.
@@ -21,7 +21,7 @@
 //
 // ─── What counts ─────────────────────────────────────────────────────
 // A variable whose NAME is protected (src/protected-names.ts — the one shared
-// definition, ticket 57's suffix list) and whose value is at least
+// definition, its suffix list) and whose value is at least
 // MIN_ENV_VALUE_LENGTH characters long (the floor against noise: `TOKEN=true`).
 // Three forms of the value are looked for:
 //   - plain:   the value itself;
@@ -344,7 +344,7 @@ const GATE: SpecialHandlers = {
 export interface EnvValueGuard {
   /** Writes are checked for protected values; matching path names are withheld. */
   readonly check: CheckEnvValue;
-  /** Ticket 59 (ADR-0008): a tool's output text → the same text, values replaced. */
+  /** ADR-0008: a tool's output text → the same text, values replaced. */
   readonly redact: RedactEnvValues;
   /** Finds protected names in failed-tool output without copying the text. */
   readonly find: FindEnvValues;

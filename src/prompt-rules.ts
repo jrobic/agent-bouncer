@@ -1,7 +1,7 @@
 // Prompt-injection detection. Pure — no Bun/Node APIs, no harness protocol
 // shapes (`buildContextOutput`-equivalent assembly moved to
-// src/adapter/render.ts's assembleFlagContext in ticket 05, then made
-// harness-generic in ticket 15a). The rule table is policy data
+// src/adapter/render.ts's assembleFlagContext in `f743c1b`, then made
+// harness-generic in `f69d37a`). The rule table is policy data
 // (policy/prompt.toml, `[[rules.prompt]]` — the base64-blob signature is
 // now a plain 7th entry in that same table rather than a module constant
 // evaluated apart from it); this module owns only the scanning algorithm.

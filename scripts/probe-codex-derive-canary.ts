@@ -15,7 +15,7 @@ if (probeHome === undefined || bouncerBin === undefined) {
   console.error('usage: probe-codex-derive-canary.ts <probeHome> <bouncerBin>');
   process.exit(1);
 }
-// Review round 1 S-7: was an independent hand-typed copy of the matcher
+// Was an independent hand-typed copy of the matcher
 // regex — now the SAME derivation scripts/capture-protocol.ts uses,
 // imported rather than retyped.
 const matcher = harnessCaptureFor('codex').matcher;

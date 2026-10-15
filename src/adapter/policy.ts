@@ -9,7 +9,7 @@
 // adapter module that owns the `node:fs` reads.
 //
 // Two roots (ADR-0001 § Layers and discovery), same shape each: the
-// single `policy.toml` (unchanged since ticket 06), then every
+// single `policy.toml` (unchanged since `ba10c06`), then every
 // `policy.d/*.toml` file, in lexicographic FILENAME order — a conf.d-style
 // split for personal rules by theme (`10-npm.toml`, `20-client-x.toml`).
 // Ordering itself is decided HERE (this is the one place with `readdir`),
@@ -24,10 +24,10 @@
 // failure (permission denied, a broken symlink, a directory entry, a
 // TOCTOU race where it vanished between readdir and readFile — even
 // ENOENT) is reported as a `readError`, which src/policy/load.ts rejects
-// that file's whole LAYER over (ticket 21), naming the file. A file
+// that file's whole LAYER over (ADR-0001 § Rejection), naming the file. A file
 // readdir proved present has no license to silently vanish.
 //
-// Migration guard (ADR-0001 § Rejection, ticket 21): this module also owns
+// Migration guard (ADR-0001 § Rejection): this module also owns
 // the one realpath check that has nothing to do with a broken file — the
 // interim per-profile symlink that used to make the common layer reachable
 // before this native read existed. See migrationGuardWarning below.
@@ -75,7 +75,7 @@ function errorCode(err: unknown): string | undefined {
 
 // `optional: true` is the root `policy.toml` contract — genuinely absent
 // (ENOENT) or blank is "no overlay file", silently (matches the original,
-// pre-ticket-12 single-file behavior exactly). `optional: false` is every
+// pre-`policy.d` single-file behavior exactly). `optional: false` is every
 // `policy.d/*.toml` entry — readdir already proved it exists, so it never
 // resolves to `null`; every failure, ENOENT included, comes back as a
 // `readError` for load.ts to reject the whole set over, naming this file.
@@ -216,7 +216,7 @@ async function migrationGuardWarning(commonRootPath: string, profileRootPath: st
  * normal, unconfigured case, not a failure. A `policy.d/*.toml` or
  * `harness.d/*.toml` entry that exists per `readdir` but fails to read is
  * NOT dropped silently — it flows through as a `readError` that
- * src/policy/load.ts rejects that file's layer over (ticket 21), naming
+ * src/policy/load.ts rejects that file's layer over (ADR-0001 § Rejection), naming
  * the file.
  *
  * `harnessId` unknown to the baseline AND the common layer resolves no

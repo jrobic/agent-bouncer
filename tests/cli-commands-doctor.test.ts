@@ -1,8 +1,8 @@
-// `bouncer doctor` — the manual, always-verbose CLI form (ticket 07).
+// `bouncer doctor` — the manual, always-verbose CLI form.
 // Tested at the command-function level (src/cli-commands.ts's runDoctor),
 // same discipline as tests/cli-commands.test.ts for check/rules. Kept in
 // its own file (not appended to cli-commands.test.ts) to stay out of the
-// way of parallel work on the same source files (ticket 10 / `audit`).
+// way of parallel work on the same source files (`audit`).
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -43,7 +43,7 @@ describe('parseDoctorArgs: the pure argv-tail parsing cli.ts delegates to', () =
   });
 
   test('--settings immediately followed by another flag is an error, not a silently swallowed value '
-    + '(round-3 review: --other-flag must never become the "path")', () => {
+    + '(--other-flag must never become the "path")', () => {
     const result = parseDoctorArgs(['--settings', '--other-flag']);
     expect(result.settingsPath).toBeUndefined();
     expect(result.error).toBeDefined();
@@ -189,7 +189,7 @@ describe('runDoctor: the manual checklist, always printed', () => {
 });
 
 describe('runDoctor: `ok` is exactly the exit-code contract cli.ts relies on '
-  + '(`process.exit(ok ? 0 : 1)`, round-3 review item 10)', () => {
+  + '(`process.exit(ok ? 0 : 1)`)', () => {
   test('a healthy checklist maps to ok=true (cli.ts would exit 0)', async () => {
     freshAccountDir();
     const scratchDir = tmpDir('bouncer-doctor-settings-');

@@ -1,5 +1,5 @@
-// SessionStart end to end through run() — the hook mode of doctor (ticket
-// 07): a real stdin envelope, a real scratch settings.json under
+// SessionStart end to end through run() — the hook mode of doctor:
+// a real stdin envelope, a real scratch settings.json under
 // CLAUDE_CONFIG_DIR, and the real policy load. Complements
 // tests/adapter-doctor.test.ts (the pure check logic) by proving the
 // wiring actually reaches the protocol: silent stdout when healthy,
@@ -36,7 +36,7 @@ async function accountWithSettings(hooks: unknown): Promise<string> {
 
 const SESSION_START_ENVELOPE = JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'sess-1' });
 
-describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
+describe('run(): SessionStart, the doctor hook', () => {
   test('a fully wired source run announces the binary warning', async () => {
     await accountWithSettings(HEALTHY_HOOKS);
     const { stdout } = await run(SESSION_START_ENVELOPE);
@@ -143,7 +143,7 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
     expect(context).not.toContain('WIRING/POLICY PROBLEM'); // nothing is actually broken
   });
 
-  // ADR-0008 / decision H2: no new tier — a missing PostToolUse entry joins
+  // ADR-0008: no new tier — a missing PostToolUse entry joins
   // the scream like every other wiring:* failure, entry to paste included.
   test('a missing PostToolUse entry reaches the SessionStart scream like any other wiring failure', async () => {
     const { PostToolUse: _omit, ...withoutPostToolUse } = HEALTHY_HOOKS;
@@ -167,10 +167,10 @@ describe('run(): SessionStart, the doctor hook (ticket 07)', () => {
   });
 });
 
-// Ticket 08: shadow mode never screams on stdout, even for a genuinely
+// Shadow mode never screams on stdout, even for a genuinely
 // broken wiring — but the would-be scream is not lost, it goes to the log
 // (mode: "shadow") so shadow wiring health is verifiable without stdout.
-describe('run: SessionStart in shadow mode (ticket 08) — never screams, logs what it would have said', () => {
+describe('run: SessionStart in shadow mode — never screams, logs what it would have said', () => {
   test('a broken wiring would normally scream; in shadow it stays silent AND logs the would-be message', async () => {
     const accountDir = await accountWithSettings({});
     const { stdout } = await run(SESSION_START_ENVELOPE, { shadow: true });
@@ -219,7 +219,7 @@ describe('runSessionStart: a throwing doctor check is caught, logged, and never 
     layers: [], // irrelevant here — this test is about the throwing-check catch path, not layer provenance
   };
 
-  test('the catch path logs a policy-warning entry instead of failing silently (round-3 review)', async () => {
+  test('the catch path logs a policy-warning entry instead of failing silently', async () => {
     const accountDir = tmpDir('bouncer-sessionstart-crash-');
     process.env.CLAUDE_CONFIG_DIR = accountDir;
 

@@ -1,4 +1,4 @@
-// Ticket 54 replay is direct reconstruction: no selectors or codecs run, and
+// Audit replay (PR #11) is direct reconstruction: no selectors or codecs run, and
 // no tool is executed. Superset surfaces err toward still-friction; named
 // exclusions stay as logged instead of inventing a replayable payload.
 import { describe, expect, test } from 'bun:test';

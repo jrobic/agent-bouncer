@@ -11,9 +11,9 @@ import { BASELINE } from '../src/policy/baseline.ts';
 import type { AskFlagsRule, SafeFirstArgRule, SafeFlagsRule, SafeGrammarRule } from '../src/policy/schema.ts';
 
 // ─────────────────────────────────────────────────────────────────────────
-// REPOINTED (ticket 06): every rule table this file locks used to be a TS
+// REPOINTED (commit `ba10c06`): every rule table this file locks used to be a TS
 // array literal or a TS if-chain; they are now policy/*.toml data (one
-// file per family since ticket 12), loaded through src/policy/baseline.ts.
+// file per family since `0234ec6`), loaded through src/policy/baseline.ts.
 // The repointing touches WHERE each
 // digest reads from, never the digest DISCIPLINE: this is still a tripwire
 // that names the mutated entry at its own index, never a hash, and the
@@ -28,7 +28,7 @@ import type { AskFlagsRule, SafeFirstArgRule, SafeFlagsRule, SafeGrammarRule } f
 //     digested exactly like the four regex tables below.
 //   • The git conditional chain (formerly 15 `if (sub === …)` blocks
 //     scraped out of command-rules.ts, covering 16 subcommands; 15 today —
-//     ticket 13 removed pull/merge, ticket 61 added init) is now DATA for
+//     `bb8b593` removed pull/merge, PR #23 added init) is now DATA for
 //     13 of them — ask_flags (4), safe_first_arg (7), safe_grammar (1),
 //     safe_flags (1), digested directly — plus the two named engine
 //     escapes (checkout, restore), whose behaviour is asserted the same
@@ -273,7 +273,7 @@ const EXPECTED_SECRET_DIGEST: readonly string[] = [
 
 // policy/write-secret.toml `rules.write_secret` — an identity control for the
 // first 8 entries (no signature added, removed, or widened by the port), plus
-// ticket 58's ninth row: `env-value`, recognised by the engine
+// PR #25's ninth row: `env-value`, recognised by the engine
 // (`special = "env_value"`, src/env-value-rules.ts) and never by its regex,
 // which only gates which texts the guard looks at. The row's `special` is not
 // part of the digest text: it is pinned by behaviour instead — the guard only
@@ -602,14 +602,14 @@ describe('guards-digest: tamper lock — the git-config-exec allow-lists', () =>
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// The 15-subcommand conditional matrix — UNCHANGED from before ticket 06,
-// other than ticket 13 removing `pull`/`merge` (16 → 14): both moved out
+// The 15-subcommand conditional matrix — UNCHANGED from before `ba10c06`,
+// other than `bb8b593` removing `pull`/`merge` (16 → 14): both moved out
 // of the baseline entirely (their `--ff-only` safe form was a personal git
 // habit, not a hazard) and now ask UNCONDITIONALLY, with no reading-safe
 // form left to pair into this matrix's {reading, mutating} shape — see
 // tests/command-rules.test.ts's dedicated "always ask in the trunk
-// baseline" block instead — and ticket 61 adding `init` (14 → 15), the
-// first subcommand governed by `safe_flags`. Ticket 64 changes checkout's
+// baseline" block instead — and PR #23 adding `init` (14 → 15), the
+// first subcommand governed by `safe_flags`. PR #32 changes checkout's
 // mutating case from `git checkout -f` to `git checkout --our f` to cover
 // long-option-prefix matching. It is a pure BEHAVIOURAL lock (calls checkGit
 // with real commands), so it does not care whether
@@ -692,8 +692,8 @@ describe('guards-digest: tamper lock — every branch of the config read alterna
 // covered by the matrix above, so this section's own job is narrower:
 // prove the declarative tables plus those two names together account for
 // EXACTLY the 15 subcommands, with no gap and no double-coverage. (16 →
-// 14, ticket 13: `pull`/`merge` moved out of safe_grammar entirely, see
-// that section's own note; 14 → 15, ticket 61: `init` joined through the
+// 14, `bb8b593`: `pull`/`merge` moved out of safe_grammar entirely, see
+// that section's own note; 14 → 15, PR #23: `init` joined through the
 // new safe_flags table.)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -736,7 +736,7 @@ const EXPECTED_SAFE_FIRST_ARG_DIGEST: readonly string[] = [
   '6 worktree values=[list] invert=false safe_when_absent=false',
 ];
 
-// Ticket 13: `pull`/`merge` removed (fast-forward-only was a personal git
+// `pull`/`merge` removed (fast-forward-only was a personal git
 // habit, not a hazard — see policy/command.toml's own comment at the old
 // location; the personal overlay restores both, see
 // tests/personal-policy.test.ts). `apply` is now the sole entry.
@@ -744,7 +744,7 @@ const EXPECTED_SAFE_GRAMMAR_DIGEST: readonly string[] = [
   '0 apply sequences=[["--check"],["--check","*"]]',
 ];
 
-// Ticket 61: `init` is the sole entry — the quiet and initial-branch
+// `init` is the sole entry — the quiet and initial-branch
 // options, at most one directory. Anything else (--bare, --template,
 // --separate-git-dir, --shared, --object-format, --ref-format, grouped or
 // glued short options, `--`) keeps `git-protected`.

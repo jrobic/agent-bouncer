@@ -10,19 +10,19 @@
 
 import { type EnvValueFinding, MIN_ENV_VALUE_LENGTH, type RedactEnvValues } from '../env-value-rules.ts';
 
-/** The text that stands in for a string leaf of a response bouncer could not check (decision F5). */
+/** The text that stands in for a string leaf of a response bouncer could not check. */
 export const POST_TOOL_WITHHELD = 'bouncer: post-tool check failed — output withheld';
 
 export interface RedactedResponse {
   /** The response in its own shape — rewritten when `found` is set, the received one otherwise. */
   readonly response: unknown;
-  /** Present exactly when something was replaced: the variables (in the order first found) and the id of the env-value row that governs the redaction (decisions H3, H6). Never a value. */
+  /** Present exactly when something was replaced: the variables (in the order first found) and the id of the env-value row that governs the redaction. Never a value. */
   readonly found?: EnvValueFinding;
 }
 
 // The ONE walk both answers use. Rebuilds `node` in its own shape and passes
 // every string leaf, with the key it sits under (none for an array element),
-// through `leaf`. Image data is not text (decision H5): an object whose `type`
+// through `leaf`. Image data is not text: an object whose `type`
 // is `"image"` is kept whole — an image content block (`{type, data,
 // mimeType}`, MCP and omp/pi) and a Claude Code Read of an image (`{type:
 // "image", file: {base64, …}}`) alike.

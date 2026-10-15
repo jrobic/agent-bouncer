@@ -115,7 +115,7 @@ describe('completeness: every effective rule carries a behavioural case', () => 
   });
 
   test('prompt rules', () => {
-    // base64-blob is a plain 7th entry of rules.prompt now (ticket 06 — it
+    // base64-blob is a plain 7th entry of rules.prompt now (since `ba10c06` — it
     // used to be a module constant evaluated apart from the table), so no
     // extra id needs to be added on this side.
     expectRuleIdsToMatch(

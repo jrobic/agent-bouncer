@@ -4,12 +4,12 @@
 // the same renderer for failed-output context. Every other module in this
 // adapter deals in abstract HarnessAction/Verdict vocabulary; a template
 // string is TOML data, never a second Claude-Code-shaped stdout builder
-// (the pre-15a src/adapter/envelopes.ts).
+// (the former src/adapter/envelopes.ts).
 
 import type { HarnessAction, HarnessProtocol, HarnessTemplate } from '../policy/schema.ts';
 import type { Verdict } from '../types.ts';
 
-// Moved verbatim from the pre-15a src/adapter/envelopes.ts's
+// Moved verbatim from the former src/adapter/envelopes.ts's
 // buildContextOutput — the assembled `${context}` value for a
 // UserPromptSubmit hit list, harness-neutral prose (never mentions any
 // one harness by name).

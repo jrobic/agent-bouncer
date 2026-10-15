@@ -1,8 +1,8 @@
-// Ticket 13, decision carried from ticket 12's review: src/policy/baseline.ts
+// src/policy/baseline.ts
 // merges six family files by shallow spread — a family file contributing a
 // STRAY extra key (or the WRONG key entirely) under [rules] would silently
 // spread into the merged RulesPolicy with no compile-time signal (the
-// Pick<RulesPolicy, 'command'> casts, ticket 12, only catch a
+// Pick<RulesPolicy, 'command'> casts only catch a
 // MISSING family — an extra/wrong key sails through the `as unknown as`
 // cast unexamined). assertExactlyOneFamily is the runtime guard: each
 // family file must contribute EXACTLY its one expected key under [rules],
