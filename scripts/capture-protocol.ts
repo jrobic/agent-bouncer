@@ -96,14 +96,13 @@ interface Case {
   // claude-code case keeps recording the installed binary's own
   // byte-identical output.
   readonly execOverride?: readonly string[];
-  // Ticket 59 (ADR-0008): the made-up environment the post-tool cases hand
-  // the spawned bouncer — merged over captureEnv's own (which drops every
-  // protected name), recorded with the case so the replay hands run() the
-  // same record. Never a real credential.
+  // A made-up environment is passed only to the post-tool cases — merged
+  // over captureEnv's own (which drops every protected name), recorded with
+  // each case so replay hands run() the same record. Never a real credential.
   readonly env?: Readonly<Record<string, string>>;
 }
 
-// One made-up protected variable for the post-tool cases (ticket 59).
+// One made-up protected variable shared by the post-tool cases.
 const POST_TOOL_VALUE = 'Zq7-made-up-0042';
 const POST_TOOL_ENV: Readonly<Record<string, string>> = { FAKE_API_TOKEN: POST_TOOL_VALUE };
 
@@ -114,6 +113,16 @@ function postToolUse(toolName: string, toolResponse: unknown): string {
     tool_name: toolName,
     tool_input: {},
     tool_response: toolResponse,
+  });
+}
+
+function postToolFailure(toolName: string, error: string): string {
+  return json({
+    hook_event_name: 'PostToolUseFailure',
+    session_id: 'capture-session',
+    tool_name: toolName,
+    tool_input: { command: 'fake command' },
+    error,
   });
 }
 
@@ -193,6 +202,7 @@ function claudeCodeCases(): Case[] {
           UserPromptSubmit: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
           SessionStart: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
           PostToolUse: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
+          PostToolUseFailure: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
         },
       },
     },
@@ -206,15 +216,14 @@ function claudeCodeCases(): Case[] {
           // UserPromptSubmit deliberately absent — the "missing hook" case.
           SessionStart: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
           PostToolUse: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
+          PostToolUseFailure: [{ hooks: [{ type: 'command', command: WIRING_BOUNCER_COMMAND }] }],
         },
       },
     },
     { id: 'empty-stdin-silent', argv: [], stdin: '' },
     { id: 'invalid-json-silent', argv: [], stdin: '{not valid json' },
-    // Ticket 59 (ADR-0008): PostToolUse is the post-tool event now. With no
-    // `tool_response` there is nothing to rewrite (this case's former id,
-    // `posttooluse-event-silent`, pinned the event as unjudged). The four
-    // after it are source-only until the release that ships ADR-0008.
+    // A successful post-tool event with no response has nothing to rewrite.
+    // It stays silent; failed tool errors use the separate failure event.
     {
       id: 'posttooluse-no-response-silent',
       argv: [],
@@ -254,6 +263,27 @@ function claudeCodeCases(): Case[] {
       id: 'posttooluse-shadow-silent',
       argv: ['--shadow'],
       stdin: postToolUse('Bash', { stdout: POST_TOOL_VALUE, stderr: '', interrupted: false, isImage: false, noOutputExpected: false }),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttoolusefailure-alert',
+      argv: [],
+      stdin: postToolFailure('Bash', `Exit code 3\n${POST_TOOL_VALUE}`),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttoolusefailure-clean-silent',
+      argv: [],
+      stdin: postToolFailure('Bash', 'Exit code 1\nordinary failure'),
+      env: POST_TOOL_ENV,
+      execOverride: SOURCE_EXEC,
+    },
+    {
+      id: 'posttoolusefailure-shadow-silent',
+      argv: ['--shadow'],
+      stdin: postToolFailure('Bash', `Exit code 3\n${POST_TOOL_VALUE}`),
       env: POST_TOOL_ENV,
       execOverride: SOURCE_EXEC,
     },

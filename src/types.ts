@@ -9,7 +9,7 @@
 // src/adapter/degrade.ts is the pure lookup):
 //   block    hard-stop the tool call
 //   confirm  surface an interactive prompt instead of a hard block
-//   flag     warn without blocking (prompt-injection signatures)
+//   flag     warn without blocking (prompt-injection signatures or a failed-tool alert)
 //   observe  allow, but worth a log entry with provenance (a conditional
 //            rule decided this, as opposed to an unconditional allow that
 //            never reaches this vocabulary at all — absence of a Verdict
@@ -33,8 +33,9 @@ export const VERDICT_SEVERITY: Readonly<Record<VerdictKind, number>> = {
 };
 
 // Total over VerdictKind, like VERDICT_SEVERITY: adding a verdict kind
-// requires deciding whether a pre-tool family may emit it. `flag` belongs to
-// UserPromptSubmit, `redact` to the post-tool event (ADR-0008).
+// requires deciding whether a pre-tool family may emit it. `flag` may be
+// emitted by UserPromptSubmit or PostToolUseFailure; `redact` is PostToolUse-only
+// (ADR-0008). Neither is a pre-tool verdict.
 const PRE_TOOL_VERDICTS = {
   block: true,
   confirm: true,

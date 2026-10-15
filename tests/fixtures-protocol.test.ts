@@ -77,8 +77,8 @@ interface HarnessReplayConfig {
   // Review round 1 S-6/P-6: the exact case ids this fixture file MUST
   // keep — a dropped case fails the meta-check by NAME, not by falling
   // under a length threshold a different added-and-dropped case could
-  // silently keep satisfying. claude-code: all 24 cases 15a recorded.
-  // codex: every case ticket 15b's acceptance box asks for, plus L-1's
+  // silently keep satisfying. claude-code: all 33 current cases. Codex keeps
+  // every captured case, including its
   // hooks.json-delete case — deliberately the full captured set (a
   // strict superset of "the twelve the ticket lists"), not a hand-picked
   // 12, so the shared-protocol cases (malformed/shadow/posttooluse) this
@@ -123,6 +123,9 @@ const HARNESS_REPLAY_CONFIG: Readonly<Record<string, HarnessReplayConfig>> = {
       'posttooluse-mcp-redact',
       'posttooluse-clean-silent',
       'posttooluse-shadow-silent',
+      'posttoolusefailure-alert',
+      'posttoolusefailure-clean-silent',
+      'posttoolusefailure-shadow-silent',
       'missing-hook-event-name-silent',
       'shadow-deny-silent',
       'shadow-typo-normal-enforce',

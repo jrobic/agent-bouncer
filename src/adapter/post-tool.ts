@@ -8,7 +8,7 @@
 // on the parsed envelope, so a value holding `"`, `\` or a newline is matched
 // as the environment holds it, never as JSON escapes it.
 
-import { MIN_ENV_VALUE_LENGTH, type RedactEnvValues } from '../env-value-rules.ts';
+import { type EnvValueFinding, MIN_ENV_VALUE_LENGTH, type RedactEnvValues } from '../env-value-rules.ts';
 
 /** The text that stands in for a string leaf of a response bouncer could not check (decision F5). */
 export const POST_TOOL_WITHHELD = 'bouncer: post-tool check failed — output withheld';
@@ -17,7 +17,7 @@ export interface RedactedResponse {
   /** The response in its own shape — rewritten when `found` is set, the received one otherwise. */
   readonly response: unknown;
   /** Present exactly when something was replaced: the variables (in the order first found) and the id of the env-value row that governs the redaction (decisions H3, H6). Never a value. */
-  readonly found?: { readonly names: readonly string[]; readonly ruleId: string; };
+  readonly found?: EnvValueFinding;
 }
 
 // The ONE walk both answers use. Rebuilds `node` in its own shape and passes

@@ -6,7 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **A failed Claude Code tool output carrying a protected environment value
+  raises a name-only alert** (ADR-0008 § 9). The new
+  `PostToolUseFailure` hook scans the complete error for the env-value row's
+  plain, base64 and hex forms, then adds `additionalContext` naming every
+  matching variable. The original failed output remains visible; this is an
+  alert, not a redaction. A `write-secret` `flag` audit entry records the
+  tool, fixed target, and variable names using the existing verdict field
+  set, with no alert-specific field; neither error nor value is logged.
+  `--shadow` logs the alert without sending context.
+  `disable` or `relax` of `env-value` silences it; `replace` still governs
+  writes only.
+- `bouncer doctor` requires the no-matcher `PostToolUseFailure` entry and
+  includes it in the SessionStart wiring notice. The optional protocol trio
+  `events.post_tool_failure`, `input.error`, and
+  `output.failure_context` is kept in lockstep by `rules lint`.
+
 ### Changed
+
+- **Upgrade (Claude Code):** add the `PostToolUseFailure` entry to every
+  `settings.json` already wired for Bouncer, with no matcher. Until then,
+  `bouncer doctor` reports `[fail] wiring:PostToolUseFailure` and
+  `SessionStart` announces the missing alert hook; the successful-output
+  `PostToolUse` entry remains unchanged. Re-run `bouncer doctor` until all
+  nine checks pass.
+
+- **Upgrade (harness overlays):** names in `[harness.protocol.events]` must
+  be unique across the whole table. An overlay assigning the same name to
+  `prompt` and `session_start` is now rejected.
 
 - **Upgrade:** a personal `ask_flags` overlay that replaces the baseline
   `branch` entry must add `-C` to keep force-copy protected. An overlay that

@@ -219,11 +219,10 @@ irrelevant here.
   withheld" }] }`. Empty stdout → `undefined` (nothing to redact). The handler
   catches everything: a throwing handler would leave the original in place
   (measured on both binaries).
-- **Claude Code** gives a command hook no way to fail closed after the tool. A
-  failed tool fires `PostToolUseFailure`, which cannot replace anything. Any
-  failure of the hook process leaves the original. Both are **documented
-  limits**, not bugs. A name-only `PostToolUseFailure` alert is ticket 64, not
-  this ADR.
+- **Claude Code** gives a command hook no way to replace a failed tool's output.
+  The original remains in the model context. Any failure of the hook process
+  also leaves the original and omits the notice. Both are documented limits,
+  not bugs; § 9 adds a name-only alert but does not redact the failed output.
 - **A withheld answer under Claude Code can still be ignored.** Measured
   with the real withheld answer (Claude Code 2.1.296, review round 1): Bash,
   Read (its `filePath` withheld) and Grep in `content` mode accept it — the
@@ -235,6 +234,11 @@ irrelevant here.
   measured for Grep only. Same residual as above.
 
 ### 7. All tools, one spawn per result (decisions F6 and F4, option A)
+
+There is no tool allow-list: any result can carry a protected value, including
+one from a future tool or MCP integration. Only a matcher intended to cover
+all tools is acceptable; enumerating today's tool names would leave later
+tools unredacted.
 
 - **Claude Code**: one `PostToolUse` entry with no matcher. `doctor` reports a
   missing entry, or a matcher that does not cover every tool, as `[fail]
@@ -280,8 +284,7 @@ Each post-tool redaction writes one verdict entry:
   no tool knowledge.
 - **Match on the raw stdin text.** Escapes in JSON hide values containing `"`,
   `\` or newlines. Rejected (§ 4).
-- **`decision: "block"` or `additionalContext` under Claude Code.** Both leave
-  the original output in front of the model (hooks reference). Rejected.
+- **Use `decision: "block"` or `additionalContext` as a substitute for rewriting a tool result under Claude Code.** Both leave the original output in front of the model (hooks reference). Rejected as redaction; § 9 uses `additionalContext` only as an advisory failure alert.
 - **Rewrite `details` too (omp / pi).** `details` never reaches the model; it
   doubles the payload (pi's bash `details.truncation` repeats the content) and
   its shape is per tool. Rejected; the on-disk residue is a limit (decision
@@ -302,8 +305,8 @@ Each post-tool redaction writes one verdict entry:
 ### Negative
 
 - One more process per tool call under Claude Code (`PreToolUse` and
-  `PostToolUse`), and one more blocking spawn per result under omp and pi (two
-  per omp `xd://` MCP call).
+  `PostToolUse`), and one more blocking spawn per result under omp and pi
+  (two per omp `xd://` MCP call).
 - Every install must act: add the `PostToolUse` entry to Claude Code's
   `settings.json`, and reprint the shim in the default omp/pi agent dir and in
   every omp profile (`wiring:shim` is `[fail]` until then).
@@ -347,3 +350,57 @@ Each post-tool redaction writes one verdict entry:
 | Date | Action | By |
 |---|---|---|
 | 2026-10-13 | Created, Accepted (ticket 59, decisions F2–F6 and H1–H6). | Jonathan Robic |
+| 2026-10-14 | Added the Claude Code `PostToolUseFailure` name-only alert and its `error`/`failure_context` protocol fields. | Jonathan Robic |
+
+## 9. Amendment — Claude Code failed-tool name-only alert (2026-10-14)
+
+### Decision
+
+Claude Code declares the optional `events.post_tool_failure =
+"PostToolUseFailure"`, `input.error = "error"` and
+`[harness.protocol.output.failure_context]` template. Lint requires the event,
+selector and template in lockstep, rejects a dead selector or template, and
+rejects an event name shared with another declared event. No other harness
+declares this event.
+
+The failure alert scans the complete `error` with the shared env-value
+scanner: plain, base64 and hex forms. `disable` and `relax` turn it off;
+`replace` remains write-only and cannot narrow the scan. A match is logged as
+a `write-secret` `flag` verdict with the effective env-value row id, tool
+name, fixed target `(failed tool output)`, and protected variable names only.
+The error text and every value spelling stay out of the log.
+
+The verdict chooses the action; the event chooses the rendering template.
+`output.flag = "silent"` records the hit but returns no context.
+`output.flag = "context"` renders `failure_context`, not the
+`UserPromptSubmit` context template. `--shadow` logs without rendering.
+A clean error is silent. With one matching variable, the notice is:
+
+> bouncer: the failed tool output above contains the value of NAME, a protected environment variable. Do not repeat, store or send it; reference the variable by name.
+
+With several matching variables, the notice is:
+
+> bouncer: the failed tool output above contains the values of A, B, protected environment variables. Do not repeat, store or send them; reference the variables by name.
+
+The failed output itself cannot be replaced: it already reaches the model and
+remains visible in Claude Code's context and transcript. An in-process scan or
+render failure therefore stays silent rather than pretending to withhold the
+output. The scan runs through `withPolicyLikeRun` and retries against the
+embedded baseline; audit entries use the effective loaded policy. Failure
+warnings are fixed strings documented in `docs/reference/audit-log.md`; no
+exception message is logged.
+
+`doctor` requires a `PostToolUseFailure` command hook with no matcher. A
+missing or partial entry is `[fail] wiring:PostToolUseFailure` and includes
+the entry to paste; `SessionStart` reports it through the existing wiring
+notice.
+
+### Consequences
+
+- The alert makes a failed-output value visible by variable name without
+  placing the value or the failed output in Bouncer's audit log.
+- The alert costs one additional Bouncer spawn per failed Claude Code tool
+  call. Measured live on 2026-10-14 with Claude Code 2.1.299: 80 failed-tool
+  calls, p95 24.71 ms nearest-rank.
+- The event is advisory. The tool already ran, and the original failure
+  output remains visible; a missing or failed hook cannot prevent that leak.

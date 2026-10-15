@@ -116,7 +116,7 @@ describe('runDoctorChecks: wiring', () => {
     const settingsPath = await scratchSettingsPath(HEALTHY_HOOKS);
     const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const wiring = report.checks.filter((c) => c.id.startsWith('wiring:'));
-    expect(wiring).toHaveLength(5);
+    expect(wiring).toHaveLength(6);
     expect(wiring.every((c) => c.ok)).toBe(true);
   });
 
@@ -159,6 +159,26 @@ describe('runDoctorChecks: wiring', () => {
     expect(postToolUse?.message).toEndWith(JSON.stringify({ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }));
     expect(report.checks.filter((c) => c.id.startsWith('wiring:') && !c.ok).map((c) => c.id)).toEqual(['wiring:PostToolUse']);
   });
+  test('removing PostToolUseFailure fails its wiring check and prints the no-matcher entry', async () => {
+    const { PostToolUseFailure: _omit, ...rest } = HEALTHY_HOOKS;
+    const settingsPath = await scratchSettingsPath(rest);
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
+    const failureEvent = report.checks.find((c) => c.id === 'wiring:PostToolUseFailure');
+    expect(failureEvent?.ok).toBe(false);
+    expect(failureEvent?.message).toContain('name-only alert');
+    expect(failureEvent?.message).toEndWith(JSON.stringify({ hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }));
+  });
+
+  test('a PostToolUseFailure matcher that misses any tool fails wiring', async () => {
+    const settingsPath = await scratchSettingsPath({
+      ...HEALTHY_HOOKS,
+      PostToolUseFailure: [{ matcher: FULL_MATCHER, hooks: [{ type: 'command', command: BOUNCER_COMMAND }] }],
+    });
+    const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
+    const failureEvent = report.checks.find((c) => c.id === 'wiring:PostToolUseFailure');
+    expect(failureEvent?.ok).toBe(false);
+    expect(failureEvent?.message).toContain('does not cover every tool');
+  });
 
   test('a PostToolUse matcher naming every declared tool still fails: an undeclared tool would go unredacted (decision F6)', async () => {
     const settingsPath = await scratchSettingsPath({
@@ -169,6 +189,9 @@ describe('runDoctorChecks: wiring', () => {
     const postToolUse = report.checks.find((c) => c.id === 'wiring:PostToolUse');
     expect(postToolUse?.ok).toBe(false);
     expect(postToolUse?.message).toContain('does not cover every tool');
+    expect(postToolUse?.message).toBe(
+      'PostToolUse hook is wired but its matcher does not cover every tool — some tool output reaches the model unredacted (wire it with no matcher)',
+    );
   });
 
   test('a PostToolUse matcher "*" passes like an absent one', async () => {
@@ -188,6 +211,9 @@ describe('runDoctorChecks: wiring', () => {
     const report = await runDoctorChecks(settingsPath, cleanLoadResult(), CLAUDE_CODE_HARNESS);
     const preToolUse = report.checks.find((c) => c.id === 'wiring:PreToolUse');
     expect(preToolUse?.ok).toBe(false);
+    expect(preToolUse?.message).toBe(
+      'PreToolUse hook is wired but its matcher does not cover every guarded tool declared by claude-code\'s protocol — some tool calls run unguarded',
+    );
   });
 
   test('a PreToolUse hook pointing at a DIFFERENT command (not bouncer) fails wiring', async () => {

@@ -4,7 +4,8 @@
 // copies into a file after a test or a script printed it, whatever printed it.
 // Its second use (ticket 59, ADR-0008, decision F2 / 1b): every tool's output,
 // before the model sees it — the same values, replaced by `[redacted: NAME]`.
-// Both uses are one guard (createEnvValueGuard, below: `check` and `redact`).
+// Its third use (ADR-0008 § 9): a failed Claude Code tool's error gets scanned
+// and, on a hit, adds a name-only alert without changing the output.
 // Pure — no Bun/Node APIs, no harness protocol shapes, and no environment of
 // its own: run() (src/adapter/run.ts) takes the record at the edge, once per
 // invocation, and every policy binding (the overlay-aware one, then the
@@ -44,18 +45,18 @@
 // `special = "env_value"`. The row is what makes the guard visible in `rules
 // list` and reachable by `[[override]]`. The regex scan (createScanSecrets)
 // never fires it: no handler for that `special` is bound there. The guard
-// (createEnvValueGuard, below) reads the row for its two uses differently:
+// (createEnvValueGuard, below) reads the row for its three uses differently:
 //   - `check` (writes, through the dispatcher, ahead of the regex table): the
 //     environment lookup comes first; when it finds a value, the row's
 //     `regex` / `except` gate which written texts the guard applies to (an
 //     `env_value` handler passed to firstMatch) — what an `[[override]]`
 //     replace narrows — and the verdict kind and id come from the row like
 //     any other (a relax override, the row's own `verdict`, then `block`).
-//   - `redact` (tool output, the post-tool event): the row's `regex`,
-//     `except` and verdict govern nothing here (decision H6) — every output
-//     text is scanned. Only the row's presence (`disable` removes it → off),
-//     a relax (any `verdict_override` → off, decision H3) and its id (the
-//     audit entry's `rule_id`) count.
+//   - `redact` (successful tool output): the row's `regex`, `except` and
+//     verdict do not restrict this scan — every output text is scanned.
+//   - `find` (failed Claude Code output): the same full-text scan adds an
+//     advisory name-only alert. Both output paths are off when the row is
+//     disabled or relaxed; otherwise only its `rule_id` matters to the log.
 
 import { type CompiledRule, compileRules, firstMatch, type SpecialHandlers } from './policy/match.ts';
 import type { RegexRule } from './policy/schema.ts';
@@ -215,7 +216,7 @@ export function createEnvValueScanner(env: EnvRecord): ScanEnvValues {
 export interface EnvValueRedaction {
   readonly text: string;
   /** Present exactly when something was replaced: the variables (in the order their markers appear) and the id of the `env_value` row that governs the redaction. */
-  readonly found?: { readonly names: readonly string[]; readonly ruleId: string; };
+  readonly found?: EnvValueFinding;
 }
 
 export type RedactEnvValues = (text: string) => EnvValueRedaction;
@@ -324,38 +325,44 @@ function redactorOver(all: readonly Needle[]): ReplaceEnvValues {
 
 export type CheckEnvValue = (text: string, target: string) => Verdict | null;
 
+export interface EnvValueFinding {
+  readonly names: readonly string[];
+  readonly ruleId: string;
+}
+
+/** Finds protected names without copying or rewriting the scanned text. */
+export type FindEnvValues = (text: string) => EnvValueFinding | undefined;
+
 // The row's own `regex` / `except` decide which WRITTEN texts the guard applies
-// to — the environment lookup has already found a value when this runs. The
-// redaction never consults them (decision H6).
+// to — the environment lookup has already found a value when this runs.
+// The write-only regex gate does not narrow either output scan.
 const GATE: SpecialHandlers = {
   [ENV_VALUE_SPECIAL]: (row: CompiledRule, text: string) => row.re.test(text) && !row.exceptRe?.test(text),
 };
 
-/** The env-value row's two uses, bound to one table and one environment. */
+/** The env-value row's uses, bound to one table and one environment. */
 export interface EnvValueGuard {
-  /** Ticket 58: a write that carries a value → a verdict naming the variables. */
+  /** Writes are checked for protected values; matching path names are withheld. */
   readonly check: CheckEnvValue;
   /** Ticket 59 (ADR-0008): a tool's output text → the same text, values replaced. */
   readonly redact: RedactEnvValues;
+  /** Finds protected names in failed-tool output without copying the text. */
+  readonly find: FindEnvValues;
 }
 
 /**
- * Binds the guard to the effective `write_secret` table and an environment.
- * The rows marked `special = "env_value"` are the policy side: none left (a
- * consumer disabled it) → both uses are off; a relaxed row (an `[[override]]`
- * relax) still checks writes with its softer verdict but redacts nothing
- * (decision H3, one switch). The row's `regex` / `except` — what an
- * `[[override]]` replace narrows — gate the write check only: the redaction
- * reads nothing of the row but its presence, its relax and its id, and scans
- * every output text (decision H6: an override written for the write guard
- * must not silently narrow what is hidden from the model). The environment is
- * read once, on first use, for both: a call that neither writes nor answers a
- * post-tool event never reads it, and a pre-tool call never builds the
- * redactor.
+ * Binds the env-value row's write check, post-tool redaction and failed-output
+ * alert to one table and environment. No row disables all three; a relaxed
+ * row still checks writes with its softer verdict but disables redaction and
+ * alerts. The row's `regex`/`except` gate writes only; both output scans ignore
+ * them: a write-specific override must not silently narrow what
+ * successful-output redaction hides or what failed-output alerts inspect.
+ * Values are read lazily once and shared across the three uses.
  *
- * `check`: the verdict names the variables in its reason and in `envVars`;
- * its `target` is the path, unless the path carries a protected value itself.
- * `redact`: the governing row's id names the redaction.
+ * `check` returns a verdict with variable names. Its target is the path, but a
+ * path carrying a protected value is replaced by `withheldNotice('path')` so
+ * the audit entry never records that value. `redact` returns rewritten text;
+ * `find` returns names and the governing row id without copying the error text.
  */
 export function createEnvValueGuard(rules: readonly RegexRule[], env: EnvRecord): EnvValueGuard {
   const rows = compileRules(rules.filter((rule) => rule.special === ENV_VALUE_SPECIAL));
@@ -380,6 +387,12 @@ export function createEnvValueGuard(rules: readonly RegexRule[], env: EnvRecord)
       envVars,
     };
   };
+  const find: FindEnvValues = (text) => {
+    if (redactRow === undefined || !text) return undefined;
+    scan ??= scannerOver(needles ??= needlesOf(env));
+    const names = namesOf(scan(text));
+    return names.length === 0 ? undefined : { names, ruleId: redactRow.id };
+  };
 
   const redact: RedactEnvValues = (text) => {
     if (redactRow === undefined || !text) return { text };
@@ -388,5 +401,5 @@ export function createEnvValueGuard(rules: readonly RegexRule[], env: EnvRecord)
     return names.length === 0 ? { text } : { text: redacted, found: { names, ruleId: redactRow.id } };
   };
 
-  return { check, redact };
+  return { check, redact, find };
 }
