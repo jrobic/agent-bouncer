@@ -139,8 +139,8 @@ export type CommandStartFamily = Readonly<{
   expected: readonly ExpectedVerdict[];
   // Forms where another reading answers instead, with the reason in a comment.
   exceptions?: Readonly<Record<string, readonly ExpectedVerdict[]>>;
-  // Whether the known limits are replayed on the family: a command that is
-  // allowed on its own has no limit to show.
+  // Whether known-limit fixtures are replayed; explicit exceptions remain
+  // fixtures even when this is false.
   limits: boolean;
 }>;
 
@@ -181,6 +181,30 @@ export const COMMAND_START_FAMILIES: readonly CommandStartFamily[] = [
       'env-unset-and-assignment': GIT_CONFIG_EXEC,
       'watch-unknown-option': GIT_PROTECTED,
     },
+    limits: false,
+  },
+  {
+    id: 'env-dump',
+    command: 'env',
+    expected: [{ verdict: 'block', ruleId: 'env-dump' }],
+    exceptions: {
+      // Environment commands inside a VM shell are outside the local process.
+      'limactl-shell': [],
+      // Container shells are reread by the environment row, not the Docker row.
+      'docker-exec': [{ verdict: 'block', ruleId: 'env-dump' }],
+    },
+    limits: false,
+  },
+  {
+    id: 'env-ref-display',
+    command: 'echo $GITHUB_TOKEN',
+    expected: [{ verdict: 'block', ruleId: 'env-ref-display' }],
+    limits: false,
+  },
+  {
+    id: 'env-command',
+    command: 'env FOO=1 make test',
+    expected: [],
     limits: false,
   },
 ];
@@ -277,9 +301,9 @@ export function commandStartCases(): FixtureCase[] {
     for (const form of COMMAND_START_FORMS) {
       cases.push(bashCase(`${family.id}-${form.id}`, form.wrap(family.command), family.exceptions?.[form.id] ?? family.expected));
     }
-    if (!family.limits) continue;
     for (const limit of COMMAND_START_LIMITS) {
       const exception = family.exceptions?.[limit.id];
+      if (exception === undefined && !family.limits) continue;
       const fixture = bashCase(`${family.id}-${limit.id}`, limit.wrap(family.command), exception ?? []);
       cases.push(exception === undefined ? { ...fixture, knownLimit: true, knownLimitReason: limit.reason } : fixture);
     }
