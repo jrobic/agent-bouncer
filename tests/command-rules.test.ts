@@ -1420,3 +1420,25 @@ describe('command-rules: flag-repetition rows stay linear under adversarial padd
     expect(elapsed).toBeLessThan(100);
   });
 });
+
+// The shared start of a command (tests/command-start-forms.ts holds the
+// forms and the malformed lines) reads a shell, eval, watch or env -S
+// argument again three levels below the line at most, and a substitution
+// body at the depth of its line: nesting far past either stays fast and
+// within the stack.
+describe('command-rules: the start of a command under deeply nested input', () => {
+  test.each([
+    ['20000 nested subshells', `${'('.repeat(20000)}git push${')'.repeat(20000)}`, 'git-protected'],
+    ['20000 keywords', `${'if '.repeat(20000)}git push`, 'git-protected'],
+    ['5000 wrappers', `${'timeout 5 '.repeat(5000)}git push`, 'git-protected'],
+    ['5000 nested process substitutions', `${'<('.repeat(5000)}git push${')'.repeat(5000)}`, 'git-protected'],
+    ['5000 nested process substitutions after cat', `${'cat <('.repeat(5000)}sudo ls${')'.repeat(5000)}`, 'sudo'],
+    ['5000 nested watch', `${'watch '.repeat(5000)}git push`, null],
+  ])('%s answers %s in under 100ms', (_name, cmd, ruleId) => {
+    const startedAt = performance.now();
+    const verdict = checkBash(cmd);
+    const elapsed = performance.now() - startedAt;
+    expect(verdict?.ruleId ?? null).toBe(ruleId);
+    expect(elapsed).toBeLessThan(100);
+  });
+});
